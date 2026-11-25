@@ -9,3 +9,4 @@ pnpm-*
 .gitignore
 .vscodeignore
 *.vsix
+dist/.dev-build
