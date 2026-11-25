@@ -21,6 +21,8 @@ The index includes installed Workshop items regardless of their Mod Manager sele
 
 ## Content folders
 
+To browse source definitions safely, run **Sea Power INI: Enable Read-Only Reference Previews in Workspace**. F12 opens a reusable preview tab. VS Code protects INIs inside the vanilla and Workshop folders from edits, even when you double-click to keep a tab open. Your mod source stays editable. The command sets `files.readonlyInclude` for the discovered paths and enables preview tabs for code navigation throughout this workspace. Run it again after moving a Steam library.
+
 The extension searches standard Steam locations and the libraries in `steamapps/libraryfolders.vdf`. For a custom install, set `seapowerIni.gameDirectory` to the folder containing `Sea Power_Data`. Extra local content roots go in `seapowerIni.localModDirectories`. Extra Workshop roots go in `seapowerIni.workshopDirectories`, with each root pointing to a `content/1286220` folder containing item directories.
 
 Workspace INI changes trigger a rebuild. After installing or updating content outside the workspace, run **Sea Power INI: Rebuild Content Index**. The **Sea Power INI** output channel reports the file and unit counts.
@@ -35,7 +37,20 @@ pnpm test
 pnpm run package
 ```
 
-This creates `seapower-ini-0.2.0.vsix`. The package includes both the client and the server. Game and Workshop data stay on the user's machine.
+This creates `seapower-ini-0.3.0.vsix`. The package includes the client, the server and the PSPad tool. Game and Workshop data stay on the user's machine.
+
+## PSPad
+
+PSPad can check a saved INI and list definitions for the references on the cursor line. After building, select the INI highlighter under **Settings → Highlighter Settings → Compiler** and enter:
+
+| Field | Value |
+| --- | --- |
+| Compiler | Full path to `node.exe` |
+| Parameters | `"C:\path\to\seapower-ini\dist\pspad.js" "%File%" %Line%` |
+| Capture Program Output Window | Enabled |
+| LOG parser | `%F\|%L\|%C\|` |
+
+Save the INI and run **Compile**. Double-click a definition or diagnostic in the log to open its file and line. The tool indexes the nearest enclosing mod folder with an `_info.ini`, plus the installed game and Workshop folders. You can pass an explicit mod folder as a final argument for source trees with another layout.
 
 ## Other editors
 
