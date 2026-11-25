@@ -89,8 +89,9 @@ class Materials {
     if (!entry || !/^(resourcesmaterial|material)$/i.test(entry.name)) return;
     const ctx = referenceContext(doc, uri, catalog);
     ctx.resources = entry.section.keys.find(k => /^resourcesmaterialfolder$/i.test(k.name))?.value || ctx.resources;
-    return reference(entry, /\.ini$/i.test(entry.value) ? entry.value : entry.value + '.ini', ctx).refs[0]?.file ||
-      (!/\.ini$/i.test(entry.value) && reference(entry,entry.value,ctx).refs.find(r=>/\.mat$/i.test(r.file?.rel))?.file);
+    if (/\.(ini|mat)$/i.test(entry.value)) return reference(entry,entry.value,ctx).refs[0]?.file;
+    const refs = [...reference(entry,entry.value+".ini",ctx).refs, ...reference(entry,entry.value,ctx).refs];
+    return catalog.ordered(refs.filter(r=>/\.(ini|mat)$/i.test(r.file.rel)))[0]?.file;
   }
 
   maps(file, catalog, doc) {
@@ -179,4 +180,4 @@ class Materials {
   }
 }
 
-export { Materials, diffusePreview, escape, imageMarkdown };
+export { Materials, diffusePreview, escape, imageMarkdown, resize };

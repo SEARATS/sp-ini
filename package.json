@@ -2,7 +2,7 @@
   "name": "seapower-ini",
   "displayName": "Sea Power INI",
   "description": "Autocomplete, error checking and Go to Definition for Sea Power INI files.",
-  "version": "0.7.2",
+  "version": "0.8.0",
   "publisher": "searats",
   "private": true,
   "repository": {
@@ -270,6 +270,99 @@
           "default": false,
           "scope": "resource",
           "description": "Open the OBJ source beside its 3D preview."
+        },
+        "seapowerIni.searchPaths.directory": {
+          "type": "string",
+          "default": "Assets",
+          "scope": "window",
+          "description": "Parent directory for the Resources and Data subdirectories. Relative paths start at each workspace folder. An absolute path uses one shared directory."
+        },
+        "seapowerIni.searchPaths.resourcesSubdirectory": {
+          "type": "string",
+          "default": "Resources",
+          "scope": "window",
+          "description": "Model, material and texture folder under the search directory."
+        },
+        "seapowerIni.searchPaths.dataSubdirectory": {
+          "type": "string",
+          "default": "StreamingAssets",
+          "scope": "window",
+          "description": "Sea Power content folder under the search directory."
+        },
+        "seapowerIni.search.order": {
+          "type": "array",
+          "order": 1,
+          "scope": "window",
+          "items": {
+            "type": "string",
+            "enum": ["projectRoot", "data", "resources", "mirror", "localMods", "installedMods", "userMods", "workshop", "game"]
+          },
+          "uniqueItems": true,
+          "default": ["projectRoot", "data", "resources", "mirror", "localMods", "installedMods", "userMods", "workshop", "game"],
+          "description": "Search enabled sources from top to bottom. Unlisted sources follow in their default order. Use the Search checkboxes to disable a source."
+        },
+        "seapowerIni.search.data": {
+          "order": 3,
+          "type": "boolean",
+          "default": true,
+          "scope": "window",
+          "description": "Search the data subdirectory for game content, including original and local mods."
+        },
+        "seapowerIni.search.resources": {
+          "order": 4,
+          "type": "boolean",
+          "default": true,
+          "scope": "window",
+          "description": "Resolve model, material and texture paths from the resources subdirectory."
+        },
+        "seapowerIni.search.projectRoot": {
+          "order": 2,
+          "type": "boolean",
+          "default": true,
+          "scope": "window",
+          "description": "Search loose files starting at each open project root. The Resources and Data subdirectories have separate switches."
+        },
+        "seapowerIni.search.localMods": {
+          "order": 6,
+          "type": "boolean",
+          "default": true,
+          "scope": "window",
+          "description": "Search folders listed in Local Mod Directories."
+        },
+        "seapowerIni.search.installedMods": {
+          "order": 7,
+          "type": "boolean",
+          "default": true,
+          "scope": "window",
+          "description": "Search mod folders beside original in the game’s StreamingAssets directory."
+        },
+        "seapowerIni.search.userMods": {
+          "order": 8,
+          "type": "boolean",
+          "default": true,
+          "scope": "window",
+          "description": "Search the Sea Power Mods folder in the Windows user profile."
+        },
+        "seapowerIni.search.workshop": {
+          "order": 9,
+          "type": "boolean",
+          "default": true,
+          "scope": "window",
+          "description": "Search Steam Workshop items in detected libraries and Workshop Directories."
+        },
+        "seapowerIni.search.game": {
+          "order": 10,
+          "type": "boolean",
+          "default": true,
+          "scope": "window",
+          "description": "Search the vanilla game INIs and packed Unity assets."
+        },
+        "seapowerIni.search.mirror": {
+          "order": 5,
+          "type": "boolean",
+          "default": true,
+          "scope": "window",
+          "description": "Use the model and texture manifest in generated Unity workspaces."
         },
         "seapowerIni.gameDirectory": {
           "type": "string",

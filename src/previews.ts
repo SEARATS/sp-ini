@@ -4,7 +4,7 @@ import { roots } from "./roots";
 
 async function referencePatterns(options) {
   const patterns = {};
-  for (const { dir, source } of await roots(options)) {
+  for (const { dir, source } of await roots({...options, search:{localMods:false,installedMods:false,userMods:false,resources:false,data:false}})) {
     if (source !== "Vanilla" && !source.startsWith("Workshop ")) continue;
     const workshop = source.startsWith("Workshop ");
     const base = workshop ? path.dirname(dir) : dir;

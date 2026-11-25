@@ -1,10 +1,11 @@
 // Run only in the disposable workspace created by test/preview.ps1.
 import assert from "node:assert/strict";
+import * as path from "node:path";
 import * as vscode from "vscode";
 
 async function waitFor(check) {
   for (let i = 0; i < 100; i++) {
-    if (check()) return;
+    if (await check()) return;
     await new Promise(resolve => setTimeout(resolve, 100));
   }
   assert.fail("Timed out waiting for OBJ editor tabs: " + JSON.stringify(vscode.window.tabGroups.all.map(g => g.tabs.map(t => [t.label, (t.input instanceof vscode.TabInputCustom && t.input.viewType)]))));
@@ -44,6 +45,46 @@ export const run = async () => {
   }
   const group = vscode.window.tabGroups.activeTabGroup;
   assert.equal(group.tabs.filter(t => t.input instanceof vscode.TabInputText && t.input.uri.path.endsWith("/stock_sample.ini")).length, 0);
+  const settings = vscode.workspace.getConfiguration("seapowerIni");
+  async function found(line: number) {
+    const refs = await vscode.commands.executeCommand<vscode.Location[]>("vscode.executeDefinitionProvider",local.uri,new vscode.Position(line,7));
+    return refs.length > 0;
+  }
+  for (const [key,line,other] of [["search.game",2,4],["search.workshop",4,2]] as const) {
+    await settings.update(key,false,vscode.ConfigurationTarget.Workspace);
+    await vscode.commands.executeCommand("seapower-ini.refresh");
+    assert.equal(await found(line),false,key);
+    assert.equal(await found(other),true,key);
+    await settings.update(key,true,vscode.ConfigurationTarget.Workspace);
+    await vscode.commands.executeCommand("seapower-ini.refresh");
+    assert.equal(await found(line),true,key);
+  }
+  const lookup = vscode.Uri.joinPath(root,"vessels/lookup.ini");
+  await vscode.workspace.openTextDocument(lookup);
+  const lookupPaths = async (line:number) => (await vscode.commands.executeCommand<vscode.Location[]>(
+    "vscode.executeDefinitionProvider",lookup,new vscode.Position(line,line===2 ? 20 : 8))).map(r=>path.relative(root.fsPath,r.uri.fsPath).split(path.sep).join("/"));
+  for (const tree of ["Assets","Export"]) {
+    // Another folder inside the workspace also contains example data. Isolate the two project search origins.
+    await settings.update("search.projectRoot",false,vscode.ConfigurationTarget.Workspace);
+    await settings.update("searchPaths.directory",tree,vscode.ConfigurationTarget.Workspace);
+    await vscode.commands.executeCommand("seapower-ini.refresh");
+    assert.deepEqual(await lookupPaths(2),[tree+"/Resources/ships/paint.mat"]);
+    assert.deepEqual(await lookupPaths(4),[tree+"/StreamingAssets/original/vessels/project_ship.ini"]);
+  }
+  for (const [key,line,other] of [["search.resources",2,4],["search.data",4,2]] as const) {
+    await settings.update(key,false,vscode.ConfigurationTarget.Workspace);
+    await vscode.commands.executeCommand("seapower-ini.refresh");
+    assert.deepEqual(await lookupPaths(line),[]);
+    assert.equal((await lookupPaths(other)).length,1);
+    await settings.update(key,true,vscode.ConfigurationTarget.Workspace);
+  }
+  await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(root,"ships"));
+  await vscode.workspace.fs.writeFile(vscode.Uri.joinPath(root,"ships/paint.mat"),Buffer.from("Material:"));
+  await settings.update("search.projectRoot",true,vscode.ConfigurationTarget.Workspace);
+  await waitFor(async()=>(await lookupPaths(2))[0] === "ships/paint.mat");
+  await settings.update("search.order",["resources","projectRoot"],vscode.ConfigurationTarget.Workspace);
+  await waitFor(async()=>(await lookupPaths(2))[0] === "Export/Resources/ships/paint.mat");
+  await vscode.commands.executeCommand("seapower-ini.refresh");
   await vscode.window.showTextDocument(local);
   await vscode.commands.executeCommand("default:type", { text: "x" });
   assert.ok(local.isDirty, "Local mod should accept typing");

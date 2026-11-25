@@ -2,12 +2,16 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 import { parse, sectionGroup } from "./ini";
-import { children } from "./roots";
+import { children, type ContentRoot } from "./roots";
 import { scalarType } from "./values";
 
 const unitFolders = { aircraft: ["aircraft", "helicopter"], vessels: ["vessel", "submarine"], land_units: ["landunit"], biologic: ["biologic"] };
 const excluded = new Set(["node_modules", "bin", "obj", "dist", "decompiled", "artifacts", "Library", "Packages"]);
 const normalize = value => value.replaceAll("\\", "/").toLowerCase();
+function within(root: string, full: string) {
+  const rel = path.relative(root,full);
+  return rel !== ".." && !rel.startsWith(".."+path.sep) && !path.isAbsolute(rel);
+}
 function uriKey(uri) {
   if (!uri.startsWith("file:")) return uri;
   const url = new URL(uri);
@@ -41,6 +45,21 @@ function getOrCreate(map, key, make) {
 }
 
 class Catalog {
+  sourceRanks = new Map<string,number>();
+  rank(source?: string) { return this.sourceRanks.get(source) ?? Number.MAX_SAFE_INTEGER; }
+  preferred(refs) {
+    if (refs.length < 2) return refs;
+    const first = refs.reduce((best,ref)=>Math.min(best,this.rank(ref.file?.source)),Infinity);
+    return refs.filter(ref=>this.rank(ref.file?.source) === first);
+  }
+  ordered(refs) {
+    const seen = new Set();
+    return refs.filter(r => !seen.has(r.file.uri) && seen.add(r.file.uri)).sort((a,b)=>this.rank(a.file.source)-this.rank(b.file.source));
+  }
+  async withPacked<T>(file: {source:string} | undefined, loose: () => Promise<T>, packed: () => Promise<T>): Promise<T> {
+    if (!file) return packed();
+    return this.rank("Vanilla") < this.rank(file.source) ? await packed() ?? loose() : await loose() ?? packed();
+  }
   mirrorModels = new Map();
   mirrorMeshes = new Map();
   mirrorTextures = new Map();
@@ -124,57 +143,104 @@ class Catalog {
   }
 }
 
-async function buildCatalog(roots) {
+async function buildCatalog(roots: ContentRoot[]) {
   const catalog = new Catalog(), seen = new Set();
-  const files = [];
-  async function walk(dir, base, source) {
+  const originRanks = new Map([...new Set(roots.map(r=>r.origin || r.source))].map((origin,i)=>[origin,i]));
+  const files = [], textureMeta = [];
+  const manifestGuids = new Map<string,string>();
+  const manifests = new Map();
+  for (const {dir,source} of roots) {
+    if (source !== "Unity mirror" && source !== "Workspace" || manifests.has(dir)) continue;
+    manifests.set(dir,await fs.readFile(path.join(dir,"sp-ini-models.json"),"utf8").then(JSON.parse).catch(()=>null));
+  }
+  for (const {dir,source} of roots) {
+    if (source !== "Unity mirror") continue;
+    for (const [guid,rel] of Object.entries(manifests.get(dir)?.textures || {})) {
+      if (typeof rel === "string" && rel.startsWith("Assets/") && !rel.split(/[\\/]/).includes(".."))
+        manifestGuids.set(path.join(dir,rel),guid);
+    }
+  }
+  async function walk(dir, base, source, omit: string[] = []) {
+    if (omit.some(root => within(root,dir))) return;
     const childrenHere = await children(dir);
-    if (childrenHere.some(e => e.name.toLowerCase() === "_info.ini") && source === "Workspace") base = dir;
+    const meta = source === "Resources" ? new Set(childrenHere.map(e=>e.name)) : undefined;
+    if ((source === "Workspace" || source === "Data") && childrenHere.some(e => e.name.toLowerCase() === "_info.ini")) base = dir;
     for (const entry of childrenHere.sort((a, b) => a.name.localeCompare(b.name))) {
       const full = path.join(dir, entry.name);
-      if (entry.isDirectory() && !entry.name.startsWith(".") && !excluded.has(entry.name)) await walk(full, base, source);
-      else if (entry.isFile() && /\.(ini|png|jpe?g|tga|dds|obj|mtl|fbx|mat|wav|ogg|xml|json|txt)$/i.test(entry.name) && !seen.has(full)) {
+      if (entry.isDirectory() && !entry.name.startsWith(".") && !excluded.has(entry.name)) await walk(full, base, source, omit);
+      else if (entry.isFile() && /\.(ini|png|jpe?g|tga|dds|obj|mtl|fbx|prefab|mat|wav|ogg|xml|json|txt)$/i.test(entry.name) && !seen.has(full)) {
         seen.add(full);
         const file = { full, rel: path.relative(base, full).replaceAll("\\", "/"), uri: pathToFileURL(full).href, source };
         if (entry.name.toLowerCase().endsWith(".ini")) files.push(file);
         else {
           catalog.filesByUri.set(uriKey(file.uri), file);
           getOrCreate(catalog.assets, normalize(file.rel), () => []).push({ file, name: file.rel, line: 0, start: 0 });
+          if (source === "Resources" && /\.(png|jpe?g)$/i.test(entry.name)) {
+            const guid = manifestGuids.get(full);
+            if (guid && !catalog.mirrorTextures.has(guid)) catalog.mirrorTextures.set(guid,file);
+            else if (meta.has(entry.name+".meta")) textureMeta.push(file);
+          }
         }
       }
     }
   }
-  for (const { dir, source } of roots) {
-    const manifest = source === "Workspace" && await fs.readFile(path.join(dir,"sp-ini-models.json"),"utf8").then(JSON.parse).catch(()=>null);
-    if (Array.isArray(manifest?.materials)) {
+  for (const { dir, source, origin, omit = [] } of roots) {
+    catalog.sourceRanks.set(source,originRanks.get(origin || source));
+    const mirrorOnly = source === "Unity mirror";
+    const manifest = manifests.get(dir);
+    if (mirrorOnly && !manifest) continue;
+    if (source === "Workspace" && Array.isArray(manifest?.materials)) {
+      await walk(dir,dir,source,[...omit,path.join(dir,"Assets")]);
+    } else if (mirrorOnly && Array.isArray(manifest?.materials)) {
       // Generated Unity projects contain thousands of prefab, shader and metadata files.
       // The manifest already names the loose assets that an INI can reference.
       for (const rel of new Set([...Object.keys(manifest.models || {}), ...Object.keys(manifest.standalone || {}),
           ...Object.values(manifest.textures || {}), ...manifest.materials])) {
         if (typeof rel !== "string" || !rel.startsWith("Assets/") || rel.split(/[\\/]/).includes("..") || rel.includes("\\")) continue;
         const full = path.join(dir,rel), file = {full,rel,uri:pathToFileURL(full).href,source};
+        if (omit.some(root => within(root,full))) continue;
         catalog.filesByUri.set(uriKey(file.uri),file);
         getOrCreate(catalog.assets, normalize(rel), ()=>[]).push({file,name:rel,line:0,start:0});
       }
-      const streaming = path.join(dir,"Assets","StreamingAssets");
-      for (const item of await children(streaming)) {
-        if (item.isDirectory()) await walk(path.join(streaming,item.name),path.join(streaming,item.name),source);
-      }
-    } else {
-      await walk(dir, dir, source);
+    } else if (source === "Data") {
+      const entries = await children(dir);
+      const original = entries.find(e => e.isDirectory() && e.name.toLowerCase() === "original");
+      if (original) {
+        const stockDir = path.join(dir,original.name);
+        const stockFolders = new Set((await children(stockDir)).filter(e=>e.isDirectory()).map(e=>e.name.toLowerCase()));
+        const packs = entries.filter(e=>e.isDirectory() && !e.name.startsWith(".") && !stockFolders.has(e.name.toLowerCase()))
+          .map(e=>path.join(dir,e.name)).filter(p=>p!==stockDir).sort();
+        await walk(dir,dir,source,[stockDir,...packs]);
+        for (const pack of packs) await walk(pack,pack,source);
+        await walk(stockDir,stockDir,source);
+      } else await walk(dir,dir,source);
+    } else if (!mirrorOnly) {
+      await walk(dir, dir, source, omit);
     }
-    if (!manifest) continue;
+    if (!mirrorOnly) continue;
     for (const [rel,name] of Object.entries(manifest.models || {})) {
-      const refs = catalog.assets.get(normalize(rel));
+      const refs = catalog.assets.get(normalize(rel))?.filter(r=>r.file.full===path.join(dir,rel));
       if (refs && typeof name === "string") getOrCreate(catalog.mirrorModels,normalize(name),()=>[]).push(...refs);
     }
     for (const [rel,mesh] of Object.entries<{name:string}>(manifest.standalone || {})) {
-      const refs = catalog.assets.get(normalize(rel));
+      const refs = catalog.assets.get(normalize(rel))?.filter(r=>r.file.full===path.join(dir,rel));
       if (refs && typeof mesh?.name==="string") getOrCreate(catalog.mirrorMeshes,normalize(mesh.name),()=>[]).push(...refs);
     }
     for (const [guid,rel] of Object.entries(manifest.textures || {})) {
-      if (typeof rel === "string") catalog.mirrorTextures.set(guid,catalog.assets.get(normalize(rel))?.[0]?.file);
+      if (typeof rel === "string" && rel.startsWith("Assets/") && !rel.split(/[\\/]/).includes("..")) {
+        const full = path.resolve(dir,rel);
+        const file = catalog.filesByUri.get(uriKey(pathToFileURL(full).href));
+        if (file && !catalog.mirrorTextures.has(guid)) catalog.mirrorTextures.set(guid,file);
+      }
     }
+  }
+  for (let pos = 0; pos < textureMeta.length; pos += 32) {
+    const batch = textureMeta.slice(pos,pos+32);
+    const metas = await Promise.all(batch.map(file=>fs.readFile(file.full+".meta","utf8").catch(()=>"")));
+    metas.forEach((text,i)=>{
+      const guid = /^guid:\s*([\da-f]+)\s*$/im.exec(text)?.[1];
+      if (guid && !catalog.mirrorTextures.has(guid)) catalog.mirrorTextures.set(guid,batch[i]);
+    });
   }
   for (let pos = 0; pos < files.length; pos += 24) {
     const batch = files.slice(pos, pos + 24);

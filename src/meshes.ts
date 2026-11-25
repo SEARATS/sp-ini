@@ -67,11 +67,12 @@ class MeshFiles {
       models?.keys.find(k => /^resourcesroot$/i.test(k.name));
     if (!root) return [];
     const resources = entry.section?.keys.find(k => /^resourcesmeshfolder$/i.test(k.name))?.value || ctx.resources;
-    let refs = reference(root, /\.(obj|fbx)$/i.test(root.value) ? root.value : root.value + '.obj', { ...ctx, resources }).refs;
-    if (!refs.length && !/\.(obj|fbx)$/i.test(root.value)) {
-      refs = catalog.mirrorModels?.get(root.value.toLowerCase()) || [];
-      if (!all) refs = [...refs,...(catalog.mirrorMeshes?.get(entry.value.toLowerCase()) || [])];
-    }
+    const context = { ...ctx, resources };
+    const explicit = /\.(obj|fbx)$/i.test(root.value);
+    const refs = explicit ? reference(root,root.value,context).refs : catalog.ordered([
+      ...reference(root,root.value+".obj",context).refs, ...reference(root,root.value+".fbx",context).refs,
+      ...catalog.mirrorModels.get(root.value.toLowerCase()) || [], ...(!all && catalog.mirrorMeshes.get(entry.value.toLowerCase()) || [])
+    ]);
     const result = [];
     for (const { file } of refs) {
       let loading = modelsByUri?.get(file.uri);

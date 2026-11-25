@@ -51,7 +51,8 @@ function registerObjFolding() {
 
 function options() {
   const config = vscode.workspace.getConfiguration("seapowerIni");
-  return { gameDirectory: config.get("gameDirectory"), localModDirectories: config.get("localModDirectories"),
+  return { search: config.get("search"), searchPaths: config.get("searchPaths"),
+    gameDirectory: config.get("gameDirectory"), localModDirectories: config.get("localModDirectories"),
     workshopDirectories: config.get("workshopDirectories") };
 }
 
@@ -64,7 +65,8 @@ async function activate(context) {
     context.subscriptions.push({ dispose: () => fs.unwatchFile(stamp, reload) });
   }
   registerHierarchy(context);
-  context.subscriptions.push(registerModIniLanguage(), registerObjPreview(context,(params,token)=>client.sendRequest("seapower/entityPreview",params,token)), registerIniActions());
+  const indexed = new vscode.EventEmitter<void>();
+  context.subscriptions.push(indexed, registerModIniLanguage(), registerObjPreview(context,(params,token)=>client.sendRequest("seapower/entityPreview",params,token),indexed.event), registerIniActions());
   client = new LanguageClient("seapower-ini", "Sea Power INI",
     { module: context.asAbsolutePath("dist/server.js"), transport: TransportKind.ipc },
     { documentSelector: [{ language: "seapower-ini", scheme: "file" }, { language: "seapower-ini", scheme: "untitled" },
@@ -93,8 +95,12 @@ async function activate(context) {
       } });
   await client.start();
   context.subscriptions.push(registerObjFolding());
-  const rebuild = () => client.sendRequest("seapower/rebuild", { options: options(),
-    folders: (vscode.workspace.workspaceFolders || []).map(f => ({ uri: f.uri.toString() })) });
+  const rebuild = async () => {
+    const result = await client.sendRequest("seapower/rebuild", { options: options(),
+      folders: (vscode.workspace.workspaceFolders || []).map(f => ({ uri: f.uri.toString() })) });
+    indexed.fire();
+    return result;
+  };
   const update = () => rebuild().catch(error => client.error("Rebuilding content index", error));
   const watcher = vscode.workspace.createFileSystemWatcher("**/*.[iI][nN][iI]");
   const models = vscode.workspace.createFileSystemWatcher("**/*.{[oO][bB][jJ],[fF][bB][xX]}", false, true, false);
@@ -119,7 +125,7 @@ async function activate(context) {
         await config.update(setting, true, vscode.ConfigurationTarget.Workspace);
       }
     }),
-    vscode.commands.registerCommand("seapower-ini.refresh", async () => vscode.window.showInformationMessage(await rebuild())),
+    vscode.commands.registerCommand("seapower-ini.refresh", async () => { void vscode.window.showInformationMessage(await rebuild()); }),
     vscode.workspace.onDidChangeConfiguration(event => { if (event.affectsConfiguration("seapowerIni")) update(); }),
     vscode.workspace.onDidChangeWorkspaceFolders(update)
   );

@@ -84,6 +84,11 @@ export async function stockDiffuse(stock: StockAssets, name: string, scope: stri
   if (m?.maps._MainTex) return diffusePreview(decode(m.maps._MainTex),materialDoc(m));
 }
 
+export function resolvedDiffuse(stock: StockAssets, materials: Materials, catalog, loose, name: string, scope: string) {
+  return catalog.withPacked(loose,()=>materials.diffuse(loose,catalog).catch(()=>undefined),
+    async()=>name && !/\.(ini|mat)$/i.test(name) ? stockDiffuse(stock,name,scope) : undefined);
+}
+
 export async function stockHover(stock: StockAssets, materials: Materials, doc: ReturnType<typeof parse>, uri: string,
     entry: IniEntry, catalog, images: boolean, mesh = false) {
   if (!entry?.value || /\.(ini|obj|fbx|png|jpe?g)$/i.test(entry.value)) return;
@@ -103,11 +108,8 @@ export async function stockHover(stock: StockAssets, materials: Materials, doc: 
     if (!images) return {contents:{kind:"plaintext" as const,value:obj.name + " · " + obj.faces.length + " faces"}};
     const textures = new Map();
     const loose = materials.materialFile(matEntry,doc,uri,catalog);
-    if (loose) textures.set("",await materials.diffuse(loose,catalog));
-    else if (matName && !/\.ini$/i.test(matName)) {
-      const image = await stockDiffuse(stock,matName,matScope);
-      if (image) textures.set("",image);
-    }
+    const image = await resolvedDiffuse(stock,materials,catalog,loose,matName,matScope);
+    if (image) textures.set("",image);
     return meshHover(model,obj,textures);
   }
   if (/^(resourcesmaterial|material)$/i.test(entry.name)) {

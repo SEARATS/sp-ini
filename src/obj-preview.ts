@@ -17,7 +17,7 @@ function openSourceBeside(document, column) {
   });
 }
 
-function registerObjPreview(context, entityRequest) {
+function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event<void>) {
   const dist = vscode.Uri.joinPath(context.extensionUri, "dist");
   const openSource = vscode.commands.registerCommand("seapower-ini.openObjSource", async (url, line, column) => {
     const uri = vscode.Uri.parse(url);
@@ -202,7 +202,8 @@ function registerObjPreview(context, entityRequest) {
         if (event.document !== document || !event.contentChanges.length) return;
         cancel(); timer = setTimeout(update,350);
       });
-      panel.onDidDispose(()=>{cancel();messages.dispose();edits.dispose();});
+      const indexed = onIndexChanged(()=>void update());
+      panel.onDidDispose(()=>{cancel();messages.dispose();edits.dispose();indexed.dispose();});
       showViewer(panel);
     }
   });

@@ -8,6 +8,34 @@ Install the VSIX using **Extensions: Install from VSIX...**. To select the langu
 
 The extension finds the game through Steam. For a custom installation, set `seapowerIni.gameDirectory` to the folder containing `Sea Power_Data`. Add other mod folders to `seapowerIni.localModDirectories` and other Workshop `content/1286220` folders to `seapowerIni.workshopDirectories`. After updating external content, run **Sea Power INI: Rebuild Content Index**.
 
+In VS Code Settings, filter by `@ext:searats.seapower-ini search`. Each source starts enabled. Changes rebuild the index and refresh open entity previews.
+
+Edit **Search: Order** to put preferred sources first. For example, `["workshop", "game"]` searches Workshop ahead of vanilla and then checks the remaining sources in their default order. The **Project Root** checkbox controls loose files under the workspace independently of the two subdirectories. Go to Definition opens the highest-priority match. It can list multiple definitions at the same priority.
+
+```json
+{
+  "seapowerIni.searchPaths.directory": "Assets",
+  "seapowerIni.searchPaths.resourcesSubdirectory": "Resources",
+  "seapowerIni.searchPaths.dataSubdirectory": "StreamingAssets"
+}
+```
+
+A relative parent starts at each workspace folder. Set the parent to an absolute path to share one asset tree across workspaces, or to `.` if you opened the Assets folder itself.
+
+| Setting under `seapowerIni.search` | Where it looks |
+| --- | --- |
+| `projectRoot` | Loose files and mod INIs under each open project root |
+| `resources` | The Resources subdirectory under the search directory |
+| `data` | The Data subdirectory, with content directly inside it or under `original` and mod folders |
+| `mirror` | The generated Unity project's model and texture manifest |
+| `localMods` | The folders listed in `seapowerIni.localModDirectories` |
+| `installedMods` | Mod folders beside `StreamingAssets/original` |
+| `userMods` | The Sea Power Mods folder in the Windows user profile |
+| `workshop` | Detected and configured Steam Workshop libraries |
+| `game` | Vanilla INIs and packed assets in the game installation |
+
+For example, `ResourcesMaterialFolder=ships/materials/` and `Material=usn_parts` can resolve to `Assets/Resources/ships/materials/usn_parts.mat`. Set `seapowerIni.search.resources` to `false` to skip that lookup while keeping the configured path.
+
 The VS Code FBX viewer opens binary and ASCII FBX models, including hierarchy transforms. Explicit FBX file paths in INIs open the model. Named mesh and collider definitions in OBJ files also support jumping to a source line.
 
 ## Generate submodels and colliders

@@ -4,6 +4,8 @@
 
 Autocomplete, error checking and Go to Definition for Sea Power INI files. Reads units and systems from the game, your mod and installed Workshop items.
 
+In VS Code Settings, **Search Paths** defaults to `Assets`, with `Resources` for models and materials and `StreamingAssets` for game data. Under **Search**, set **Order** to choose which source wins and use the checkboxes to enable individual sources, including **Project Root**.
+
 [![Wireframe and textured mesh][mesh-hover]][mesh-hover]
 
 Press **Ctrl+Space** for keys and values. Press **F12** on a unit, sensor, weapon, model or file path to open its definition. **Problems** lists errors as you type.

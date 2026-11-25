@@ -12,6 +12,12 @@ Set-Content -LiteralPath "$mod/missions/demo.ini" -Value @('[Mission]', '[Taskfo
 New-Item -ItemType Directory -Path "$mod/.vscode" | Out-Null
 New-Item -ItemType Directory -Path "$mod/vessels" | Out-Null
 Set-Content -LiteralPath "$mod/vessels/mesh.ini" -Value @('[Models]', 'ResourcesFolder=.', 'ResourcesRoot=mesh.obj', '[Part]', 'Mesh=Part', '[General]', 'ArmorType=Typo', '[HullPart]', 'Mesh=Hull')
+foreach ($tree in @('Assets','Export')) {
+    New-Item -ItemType Directory -Path "$mod/$tree/Resources/ships","$mod/$tree/StreamingAssets/original/vessels" | Out-Null
+    Set-Content -LiteralPath "$mod/$tree/Resources/ships/paint.mat" -Value 'Material:'
+    Set-Content -LiteralPath "$mod/$tree/StreamingAssets/original/vessels/project_ship.ini" -Value @('[General]','UnitType=Vessel')
+}
+Set-Content -LiteralPath "$mod/vessels/lookup.ini" -Value @('[Models]','ResourcesMaterialFolder=ships/','ResourcesMaterial=paint','[Taskforce1Vessel1]','Type=project_ship')
 Set-Content -LiteralPath "$mod/mesh.obj" -Value @('v 0 0 0', 'v 1 0 0', 'v 0 1 0', 'o Part', 'f 1 2 3','o Hull','f 1 2 3','o Hull_Col','f 1 2 3')
 New-Item -ItemType Directory -Path "$mod/nested-mod" | Out-Null
 Set-Content -LiteralPath "$mod/nested-mod/_info.ini" -Value '[General]'

@@ -1,14 +1,14 @@
 import { createConnection, TextDocuments, TextDocumentSyncKind } from "vscode-languageserver/node";
 import { TextDocument } from "vscode-languageserver-textdocument";
 import * as path from "node:path";
-import { StockAssets, stockHover } from "./stock-assets";
+import { StockAssets, resolvedDiffuse, stockHover } from "./stock-assets";
 import { roots } from "./roots";
 import { Catalog, buildCatalog, uriKey } from "./catalog";
 import { MeshFiles, objectHeader } from "./meshes";
 import { isMesh, meshColliderSections, referenceContext } from "./references";
 import { meshHover } from "./mesh-hover";
 import { isColliderName } from "./mesh-names";
-import { Materials } from "./materials";
+import { Materials, imageMarkdown, resize } from "./materials";
 import { colliderSection, primitiveHover } from "./colliders";
 import { parse } from "./ini";
 import { entityAssets } from "./entity-assets";
@@ -43,8 +43,9 @@ function refresh() {
       const content = await roots(options, folders);
       const next = await buildCatalog(content);
       const vanilla = content.find(r => r.source === "Vanilla");
-      stock.directory = vanilla && path.resolve(vanilla.dir, "../..");
       if (revision !== requested) continue;
+      const directory = vanilla && path.resolve(vanilla.dir, "../..");
+      if (stock.directory !== directory) { stock.close(); stock.directory = directory; }
       catalog = next;
       parsed.forEach((_, uri) => publish(uri));
       const total = [...next.counts.values()].reduce((sum, count) => sum + count, 0);
@@ -122,7 +123,10 @@ connection.onCompletion(async p => {
   }
   return completions(info, p.position);
 });
-connection.onDefinition(async p => (await meshAt(p) ?? exact(await context(p))).filter(ref => ref.file).map(location));
+connection.onDefinition(async p => {
+  const refs = await meshAt(p) ?? exact(await context(p));
+  return catalog.preferred(refs.filter(ref=>ref.file)).map(location);
+});
 connection.onFoldingRanges(p => {
   const obj = openModels.get(uriKey(p.textDocument.uri));
   if (!obj) return iniFolds(parsed.get(p.textDocument.uri)?.lines || []);
@@ -136,7 +140,7 @@ connection.onDocumentLinks(async p => {
   const links = documentLinks(doc, uri, catalog);
   const ctx = referenceContext(doc, uri, catalog), models = new Map();
   for (const entry of doc.entries.filter(e => isMesh(e, ctx.meshColliders))) {
-    const refs = await meshes.resolve(doc, uri, entry, catalog, ctx, models);
+    const refs = catalog.preferred(await meshes.resolve(doc, uri, entry, catalog, ctx, models));
     if (refs.length !== 1) continue;
     const ref = refs[0];
     links.push({ range: { start: { line: entry.line, character: entry.valueStart },
@@ -151,7 +155,10 @@ async function objectHover(file, model, object, doc?, uri?, entry?) {
   function assigned(document, id, mesh) {
     const key = /^resourcesmesh$/i.test(mesh.name) ? "resourcesmaterial" : "material";
     const field = mesh.section?.keys.find(e => e.name.toLowerCase() === key);
-    return materials.materialFile(field, document, id, catalog);
+    if (!field?.value) return;
+    const folder = mesh.section.keys.find(e=>/^resourcesmaterialfolder$/i.test(e.name))?.value ||
+      document.sections.find(s=>/^models$/i.test(s.name))?.keys.find(e=>/^resourcesfolder$/i.test(e.name))?.value || "";
+    return {file:materials.materialFile(field,document,id,catalog),name:field.value,scope:path.posix.join(folder,field.value)};
   }
   if (entry) material = assigned(doc, uri, entry);
   if (!material && file) {
@@ -168,9 +175,9 @@ async function objectHover(file, model, object, doc?, uri?, entry?) {
     }
   }
   const textures = new Map();
-  if (!material) return meshHover(model, object, await materials.objTextures(file, model, object, catalog));
-  const diffuse = await materials.diffuse(material, catalog);
-  if (diffuse) textures.set("", diffuse);
+  const diffuse = material && await resolvedDiffuse(stock,materials,catalog,material.file,material.name,material.scope);
+  if (!diffuse) return meshHover(model,object,await materials.objTextures(file,model,object,catalog));
+  textures.set("",diffuse);
   return meshHover(model, object, textures);
 }
 
@@ -190,10 +197,10 @@ connection.onHover(async p => {
   }
   const refsToMesh = await meshAt(p);
   const doc = parsed.get(uri), entry = doc?.entries.find(e => e.line === p.position.line);
+  const packedHover = (field,mesh=false)=>stockHover(stock,materials,doc,uri,field,catalog,options.imagePreviews !== false,mesh);
+  const meshPreview = (ref,field)=>catalog.withPacked(ref?.file,()=>objectHover(ref.file,ref.model,ref.object,doc,uri,field),()=>packedHover(field,true));
   if (refsToMesh) {
-    const ref = refsToMesh[0];
-    return ref ? objectHover(ref.file, ref.model, ref.object, doc, uri, entry) :
-      await stockHover(stock,materials,doc,uri,entry,catalog,options.imagePreviews !== false,true) ??
+    return await meshPreview(refsToMesh[0],entry) ??
       { contents: { kind: "plaintext" as const, value: "No OBJ object declaration was found for " + entry.value + "." } };
   }
   const collider = doc && colliderSection(doc, p.position, entry);
@@ -203,13 +210,20 @@ connection.onHover(async p => {
     const field = collider.keys.find(k => /^collider$/i.test(k.name));
     await building;
     const [ref] = await meshes.resolve(doc, uri, field, catalog);
-    if (ref) return objectHover(ref.file, ref.model, ref.object, doc, uri, field);
-    if (field) return await stockHover(stock,materials,doc,uri,field,catalog,options.imagePreviews !== false,true) ?? { contents: { kind: "plaintext" as const, value: "No OBJ geometry was found for collider " + field.value + "." } };
+    if (field) return await meshPreview(ref,field) ?? { contents: { kind: "plaintext" as const, value: "No OBJ geometry was found for collider " + field.value + "." } };
   }
   if (entry && p.position.character >= entry.valueStart && p.position.character <= entry.valueStart + entry.value.length) {
     await building;
     const file = materials.materialFile(entry, doc, uri, catalog);
-    if (file) return materials.hover(file, catalog, options.imagePreviews !== false);
+    if (file) return catalog.withPacked(file,()=>materials.hover(file,catalog,options.imagePreviews !== false),()=>packedHover(entry));
+    if (/^textures$/i.test(entry.section?.name || "")) {
+      const loose = exact(await context(p))[0]?.file;
+      if (loose) return catalog.withPacked(loose,async()=>{
+        const image = options.imagePreviews !== false && await materials.texture(loose);
+        return image ? {contents:{kind:"markdown",value:imageMarkdown("Texture",resize(image,256))}} :
+          {contents:{kind:"plaintext",value:loose.rel}};
+      },()=>packedHover(entry));
+    }
     const packed = await stockHover(stock,materials,doc,uri,entry,catalog,options.imagePreviews !== false);
     if (packed) return packed;
   }

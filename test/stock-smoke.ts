@@ -156,6 +156,14 @@ export const run = async () => {
     const defs = await vscode.commands.executeCommand<(vscode.Location|vscode.LocationLink)[]>("vscode.executeDefinitionProvider",nationDoc.uri,new vscode.Position(nationLine,9));
     assert.ok(defs.some(d=>/nations\.ini$/i.test(("uri" in d ? d.uri : d.targetUri).path)));
     outcomes.push("South_Africa links to the vanilla nations dictionary");
+    await vscode.commands.executeCommand("workbench.action.openSettings","@id:seapowerIni.search.order");
+    await renderedModel(port,()=>{
+      const list=document.querySelector<HTMLElement>(".settings-editor .settings-tree-container");
+      return list?.innerText.includes("projectRoot") && list.innerText.includes("workshop") ? "verified controls" : "waiting for search order list";
+    });
+    await vscode.commands.executeCommand("workbench.action.openSettings","@id:seapowerIni.search.projectRoot");
+    await renderedModel(port,()=>document.querySelector('.settings-editor .settings-tree-container [role="checkbox"]') ? "verified controls" : "waiting for project root checkbox");
+    outcomes.push("Search order list and project root checkbox displayed in VS Code Settings");
   }
   fs.writeFileSync(process.env.SP_INI_TEST_RESULT,outcomes.join("\n"));
 };

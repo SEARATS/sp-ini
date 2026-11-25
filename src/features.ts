@@ -179,13 +179,13 @@ function documentLinks(doc, uri, catalog) {
   for (const mod of doc.modifiers) {
     if (!/^(extend|prepend|alias|copy)$/.test(mod.name)) continue;
     for (const token of tokens(mod.args, mod.argsStart)) {
-      const refs = catalog.paths.get(normalize(token.name));
+      const refs = catalog.preferred(catalog.paths.get(normalize(token.name)) || []);
       if (refs?.length === 1) links.push({ range: span(mod.line, token.start, token.end), target: refs[0].file.uri });
     }
   }
   for (const entry of doc.entries) {
     for (const token of tokens(entry.value, entry.valueStart)) {
-      const refs = reference(entry, token.name, ctx).refs;
+      const refs = catalog.preferred(reference(entry, token.name, ctx).refs);
       if (refs.length !== 1) continue;
       const ref = refs[0];
       links.push({ range: span(entry.line, token.start, token.end), target: ref.file.uri + (ref.line ? "#L" + (ref.line + 1) : "") });

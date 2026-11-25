@@ -4,7 +4,7 @@ import { Catalog, normalize } from "./catalog";
 import { Materials } from "./materials";
 import { MeshFiles, parseObj } from "./meshes";
 import { referenceContext } from "./references";
-import { StockAssets, stockDiffuse } from "./stock-assets";
+import { StockAssets, resolvedDiffuse } from "./stock-assets";
 import { field, entityParts, type EntityScene } from "./entity-model";
 import { entityDocument, paintTexture, type Appearance } from "./entity-selection";
 
@@ -48,14 +48,14 @@ export async function entityAssets(text: string, uri: string, catalog: Catalog, 
     const key = JSON.stringify([scope,mesh.value]);
     if (!geometry.has(key)) {
       const [ref] = await meshes.resolve(doc,uri,{...mesh,name:part.collider ? "Collider" : "Mesh"},catalog,ctx,modelFiles);
-      let data = ref && triangles(ref.model,ref.object);
-      if (!data && !/\.(?:obj|fbx)$/i.test(root)) {
+      const data = await catalog.withPacked(ref?.file,async()=>triangles(ref.model,ref.object),async()=>{
+        if (/\.(?:obj|fbx)$/i.test(root)) return;
         const packed = await stock.read("Mesh",mesh.value,scope);
         if (packed) {
           const model = parseObj(packed.obj), object = model.objects.find(o=>o.faces.length);
-          if (object) data = triangles(model,object);
+          if (object) return triangles(model,object);
         }
-      }
+      });
       if (!data) warnings.add("Missing mesh "+mesh.value);
       geometry.set(key,data ? scene.geometry.push(data)-1 : undefined);
     }
@@ -70,16 +70,14 @@ export async function entityAssets(text: string, uri: string, catalog: Catalog, 
       let image;
       if (override) {
         const paths = /\.(png|jpe?g)$/i.test(override) ? [override] : [override+".png",override+".jpg",override+".jpeg"];
-        const loose = paths.flatMap(p=>[p,path.join("Assets/Resources",p)]).map(p=>catalog.assets.get(normalize(p))?.[0]?.file).find(Boolean);
-        image = await materials.texture(loose);
-        if (!image) {
+        const loose = catalog.ordered(paths.flatMap(p=>catalog.assets.get(normalize(p)) || []))[0]?.file;
+        image = await catalog.withPacked(loose,()=>materials.texture(loose),async()=>{
           const packed = await stock.read("Texture2D",path.parse(override).name,override.replace(/\.(png|jpe?g)$/i,""));
-          if (packed) image = PNG.sync.read(Buffer.from(packed.png,"base64"));
-        }
+          if (packed) return PNG.sync.read(Buffer.from(packed.png,"base64"));
+        });
         if (!image) warnings.add("Missing appearance texture "+override);
       }
-      if (!image && file) image = await materials.diffuse(file,catalog).catch(()=>undefined);
-      if (!image && !file && !/\.ini$/i.test(material.value)) image = await stockDiffuse(stock,material.value,matScope);
+      image ??= await resolvedDiffuse(stock,materials,catalog,file,material.value,matScope);
       if (!image) warnings.add("No diffuse texture for "+material.value);
       textures.set(textureKey,image ? scene.textures.push(previewTexture(image,!!override && usesHullMaterial))-1 : undefined);
     }

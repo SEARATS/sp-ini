@@ -2,7 +2,7 @@ import { posix as path } from "node:path";
 import { unitSection } from "./ini";
 import { normalize, submodelNames, uriKey } from "./catalog";
 
-const explicitFile = /\.(?:ini|png|jpe?g|tga|dds|obj|mtl|fbx|wav|ogg|xml|json|txt)$/i;
+const explicitFile = /\.(?:ini|png|jpe?g|tga|dds|obj|mtl|fbx|prefab|mat|wav|ogg|xml|json|txt)$/i;
 const unitDirs = { aircraft: "aircraft", helicopter: "aircraft", vessel: "vessels", submarine: "vessels", landunit: "land_units", biologic: "biologic" };
 
 function tokens(value, offset) {
@@ -73,21 +73,27 @@ function reference(entry, token, ctx) {
   if (/^collider$/i.test(key) && /^(box|sphere)$/i.test(token)) return { refs: [] };
   const unit = unitSection.exec(entry.section?.name || "");
   if (unit && /^type$/i.test(key)) return { refs: (ctx.catalog.units.get(value) || []).filter(ref => ref.kinds.includes(unit[1].toLowerCase())) };
+  const modelRoot = /^(resourcesroot|rootmesh)$/i.test(key);
+  const material = /^(resourcesmaterial|material)$/i.test(key);
+  const texture = /^textures$/i.test(entry.section?.name || "");
+  const folderKey = material ? "resourcesmaterialfolder" : modelRoot ? "resourcesmeshfolder" : "";
+  const folder = entry.section?.keys.find(k=>k.name.toLowerCase() === folderKey)?.value || ctx.resources;
   if (explicitFile.test(value)) {
     const candidates = [path.join(ctx.folder, value), path.normalize(value)];
-    if (ctx.resources) candidates.unshift(path.join(normalize(ctx.resources), value));
-    for (const candidate of new Set(candidates)) {
-      const refs = ctx.catalog.paths.get(candidate) || ctx.catalog.assets.get(candidate);
-      if (refs) return { refs };
-    }
+    if (folder) candidates.unshift(path.join(normalize(folder), value));
+    const refs = ctx.catalog.ordered(candidates.flatMap(candidate=>ctx.catalog.paths.get(candidate) || ctx.catalog.assets.get(candidate) || []));
+    if (refs.length) return { refs };
     const expectsPath = /file|path|material|texture|resourcesroot|image|^base$|mesh$/i.test(key) || /^textures$/i.test(entry.section?.name);
     return { refs: [], missing: expectsPath && ctx.catalog.paths.size && "File was not found in the indexed content folders." };
   }
-  if (/^(resourcesroot|rootmesh)$/i.test(key) && ctx.catalog.mirrorModels?.has(value)) return {refs:ctx.catalog.mirrorModels.get(value)};
-  if (/^(resourcesmaterial|material)$/i.test(key)) {
-    const folder = entry.section?.keys.find(k=>/^resourcesmaterialfolder$/i.test(k.name))?.value || ctx.resources || "";
-    const refs = ctx.catalog.assets.get(normalize(path.join("Assets/Resources",folder,value+".mat")));
-    if (refs) return {refs};
+  if (modelRoot || material || texture) {
+    const extensions = modelRoot ? [".obj",".fbx",".prefab"] : material ? [".ini",".mat"] : [".png",".jpg",".jpeg",".tga",".dds"];
+    const refs = extensions.flatMap(ext=>{
+      const candidate = path.join(normalize(folder || ""),value+ext);
+      return ctx.catalog.assets.get(candidate) || ctx.catalog.paths.get(candidate) || [];
+    });
+    if (modelRoot) refs.push(...ctx.catalog.mirrorModels.get(value) || []);
+    if (refs.length) return {refs:ctx.catalog.ordered(refs)};
   }
   const domain = domainFor(entry.section, key);
   if (domain) {
