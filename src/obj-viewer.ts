@@ -2,6 +2,7 @@ import { previewObj } from "./obj-geometry";
 import { objLayout, type OutlineNode, type PreviewPart } from "./model-outline";
 import { applyDisplay, type DisplaySettings } from "./preview-display";
 import { assembledEntity } from "./entity-viewer";
+import { inspectEntity } from "./entity-inspect";
 import { Texture, Box3, DirectionalLight, HemisphereLight, LoadingManager, PerspectiveCamera, Scene, Sphere, WebGLRenderer } from "three";
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
@@ -17,6 +18,7 @@ const scene = new Scene();
 const camera = new PerspectiveCamera(42, 1, 0.01, 10000);
 const bounds = new Sphere();
 let renderer, controls, model;
+const inspector = inspectEntity(canvas,camera,()=>model,id=>vscode.postMessage({type:"openEntityPart",id}));
 const saved = vscode.getState();
 let selectedEntity = saved?.entity, selectedAppearance = saved?.appearance;
 let initializedEntity = saved?.entity;
@@ -61,6 +63,7 @@ function showOutline(nodes: OutlineNode[], note: string, uri?: string) {
     const fullPath = path ? path + " / " + node.name : node.name;
     const label = document.createElement(node.children.length ? "summary" : "span");
     label.title = fullPath;
+    if (node.entityId) inspector.link(label,node.entityId);
     const content = document.createElement("span");
     content.className = "row";
     label.append(content);
@@ -110,7 +113,7 @@ function showOutline(nodes: OutlineNode[], note: string, uri?: string) {
   updateDisplay();
 }
 
-function draw() { renderer.render(scene, camera); }
+function draw() { inspector.hide(); renderer.render(scene, camera); }
 
 function frame() {
   const halfAngle = Math.atan(Math.tan(camera.fov * Math.PI / 360) * Math.min(1, camera.aspect));
@@ -218,6 +221,7 @@ try {
 let fbxUri: string;
 window.addEventListener("message", ({ data }) => {
   if (data.type === "entityLoading" || data.type === "entityError") {
+    inspector.setParts([]);
     canvas.setAttribute("aria-label","3D model");
     revision++;
     if (model) { scene.remove(model); dispose(model); model = undefined; draw(); }
@@ -241,6 +245,7 @@ window.addEventListener("message", ({ data }) => {
     return;
   }
   if (data.type === "entityScene") {
+    inspector.setParts(data.scene.parts);
     const notes: string[] = data.scene.warnings;
     warnings.hidden = !notes.length;
     warnings.querySelector("summary").textContent = "Preview notes ("+notes.length+")";

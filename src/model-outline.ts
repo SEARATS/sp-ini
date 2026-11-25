@@ -7,6 +7,7 @@ export interface OutlineNode {
   children: OutlineNode[];
   parts: PreviewPart[];
   modelId?: string;
+  entityId?: string;
 }
 
 export function fbxOutline(nodes: ModelNode[]): OutlineNode[] {

@@ -38,7 +38,7 @@ function checkPreviewControls() {
   const independentModes = onlyColliders === sameColliders && onlyColliders !== solidColliders && wireMesh === sameMesh && wireMesh !== shadedMesh;
   return filtered && remembered && !row.hidden && onlyColliders !== empty && independentModes ? "verified controls" : "display check failed";
 }
-async function renderedModel(port: number, check: () => string = checkPreviewControls) {
+async function renderedModel(port: number, check: () => string | Promise<string> = checkPreviewControls) {
   const seen = new Set<string>();
   for (let attempt=0; attempt<40; attempt++) {
     const targets = await (await fetch("http://127.0.0.1:"+port+"/json/list")).json();
@@ -55,7 +55,7 @@ async function renderedModel(port: number, check: () => string = checkPreviewCon
           if (msg.id===1) {
             if (!contexts.size) return finish();
             for (const id of contexts) ws.send(JSON.stringify({id:id+2,method:"Runtime.evaluate",params:{contextId:id,
-              returnByValue:true,expression:"("+check.toString()+")()"}}));
+              returnByValue:true,awaitPromise:true,expression:"("+check.toString()+")()"}}));
           } else if (msg.id>1) {
             values.push(msg.result?.result?.value || "empty");
             if (values.length>=contexts.size) finish();
@@ -117,6 +117,41 @@ export const run = async () => {
       return document.querySelector("[role=status]")?.textContent || "waiting";
     });
     outcomes.push("Assembled Spruance with nested and repeated submodels and variant selector");
+    await renderedModel(port,()=>{
+      const row=[...document.querySelectorAll<HTMLElement>("#outline [title]")].find(e=>e.title.startsWith("[VLS_Module_Fwd_L_1]\nMesh="));
+      if (!row || !row.title.includes("click to open INI")) return "waiting for mesh tooltip";
+      row.dispatchEvent(new MouseEvent("click",{ctrlKey:true,bubbles:true,cancelable:true}));
+      return "verified controls";
+    });
+    async function selectedSection(expected: RegExp) {
+      for (let i=0;i<60;i++) {
+        const editor=vscode.window.activeTextEditor;
+        if (editor?.document.uri.toString()===ini.toString() && expected.test(editor.document.getText(editor.selection))) return;
+        await new Promise(resolve=>setTimeout(resolve,50));
+      }
+      assert.fail("Did not navigate to "+expected);
+    }
+    await selectedSection(/^\[VLS_Module_Fwd_\{lr\}_\{rm\}\]$/i);
+    await renderedModel(port,async()=>{
+      if (!document.querySelector('canvas[aria-label*="spruance"]')) return "waiting for entity";
+      const canvas=document.querySelector("canvas"), tip=document.querySelector<HTMLElement>("#part-tip");
+      const meshes=document.querySelector<HTMLInputElement>("#meshes"), colliders=document.querySelector<HTMLInputElement>("#colliders");
+      if (meshes.checked) meshes.click();
+      if (!colliders.checked) colliders.click();
+      const box=canvas.getBoundingClientRect();
+      for (const y of [0.5,0.45,0.55,0.4,0.6]) for (const x of [0.5,0.4,0.6]) {
+        const pos={clientX:box.left+box.width*x,clientY:box.top+box.height*y,bubbles:true};
+        canvas.dispatchEvent(new PointerEvent("pointermove",pos));
+        await new Promise(requestAnimationFrame);
+        if (tip.hidden || !tip.textContent.includes("Collider=")) continue;
+        canvas.dispatchEvent(new PointerEvent("pointerdown",{...pos,ctrlKey:true}));
+        canvas.dispatchEvent(new MouseEvent("click",{...pos,ctrlKey:true}));
+        return "verified controls";
+      }
+      return "waiting for collider hover";
+    });
+    await selectedSection(/^\[coll_[^\]]+\]$/i);
+    outcomes.push("Opened repeated mesh source from hierarchy and collider source from viewport");
     const aircraft = vscode.Uri.joinPath(ini,"../../aircraft/usn_f-14a_squadrons.ini");
     await vscode.commands.executeCommand("seapower-ini.previewEntity",aircraft);
     await renderedModel(port,()=>{

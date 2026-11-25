@@ -1,10 +1,11 @@
-import { parse, type IniSection } from "./ini";
+import { parse, type IniSection, type IniSource } from "./ini";
 
 export type Vector = [number, number, number];
 export interface EntityPart {
   id: string; name: string; parent?: string; geometry?: number; texture?: number;
   collider: boolean; primitive?: "box" | "sphere"; visible: boolean;
   position: Vector; rotation: Vector; scale: Vector;
+  source?: IniSource; meshName?: string;
 }
 export interface EntityScene {
   parts: EntityPart[];
@@ -14,8 +15,13 @@ export interface EntityScene {
 }
 export const field = (section: IniSection | undefined, name: string) => section?.keys.find(k => k.name.toLowerCase() === name);
 
-export function expandEntityIni(text: string) {
+export function expandEntityIni(text: string, uri?: string) {
   const doc = parse(text), output: string[] = [];
+  const originalLines: number[] = [];
+  function emit(line: number, value = doc.lines[line]) {
+    output.push(value);
+    originalLines.push(line);
+  }
   let start = 0;
   for (const repeat of doc.modifiers.filter(m => m.name === "repeat")) {
     const end = doc.modifiers.find(m => m.line > repeat.line && m.name === "end");
@@ -25,13 +31,19 @@ export function expandEntityIni(text: string) {
     if (!count || [...vars.values()].some(v => v.length !== 1 && v.length !== count))
       throw Error("Mismatched #!repeat values at line " + (repeat.line + 1));
     if (output.length + count * (end.line-repeat.line) > 200000) throw Error("Entity preview repeat expansion is too large.");
-    for (; start < repeat.line; start++) output.push(doc.lines[start]);
+    for (; start < repeat.line; start++) emit(start);
     for (let i = 0; i < count; i++) for (let line = repeat.line+1; line < end.line; line++) {
-      output.push(doc.lines[line].replace(/\{(\w+)\}/g, (match,key) => vars.get(key)?.[i] ?? vars.get(key)?.[0] ?? match));
+      emit(line,doc.lines[line].replace(/\{(\w+)\}/g, (match,key) => vars.get(key)?.[i] ?? vars.get(key)?.[0] ?? match));
     }
     start = end.line+1;
   }
-  return start ? parse(output.concat(doc.lines.slice(start)).join("\n")) : doc;
+  const expanded = start ? parse(output.concat(doc.lines.slice(start)).join("\n")) : doc;
+  if (uri) for (const section of expanded.sections) {
+    const line = originalLines[section.line] ?? start + section.line - output.length;
+    const header = doc.lines[line].trimStart().split("]",1)[0].slice(1);
+    section.source = {uri,line,header};
+  }
+  return expanded;
 }
 
 export function entityParts(doc: ReturnType<typeof parse>, warnings: Set<string>) {
@@ -68,7 +80,7 @@ export function entityParts(doc: ReturnType<typeof parse>, warnings: Set<string>
     const part: EntityPart = {
       id: section.name.toLowerCase(), name: root ? hull?.value || "Model" : section.name,
       parent: root ? undefined : !parent || parent === "visibleparent" || parent === hull?.value.toLowerCase() ? "models" : parent,
-      collider, primitive: shape === "box" || shape === "sphere" ? shape : undefined,
+      collider, source:section.source, meshName:mesh?.value, primitive: shape === "box" || shape === "sphere" ? shape : undefined,
       position: vector("position",[0,0,0]), rotation: vector("rotation",[0,0,0]), scale: vector("scale",[1,1,1]),
       visible: !/^false$/i.test(field(section,"isvisible")?.value || "")
     };

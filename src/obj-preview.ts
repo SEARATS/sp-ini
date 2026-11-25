@@ -2,6 +2,8 @@ import { randomBytes } from "node:crypto";
 import * as vscode from "vscode";
 import { hierarchy } from "./hierarchy";
 import { fbxOutline } from "./model-outline";
+import type { IniSource } from "./ini";
+import type { EntityScene } from "./entity-model";
 const viewType = "seapower-ini.obj";
 
 function openSourceBeside(document, column) {
@@ -79,6 +81,10 @@ function registerObjPreview(context, entityRequest) {
       <style nonce="${nonce}">
       body { margin:0; overflow:hidden; background:var(--vscode-editor-background); color:var(--vscode-editor-foreground); }
       canvas { display:block; width:100vw; height:100vh; touch-action:none; }
+      canvas.source-link { cursor:pointer; }
+      #part-tip { position:fixed; pointer-events:none; white-space:pre-line; overflow-wrap:anywhere; max-width:min(32rem,95vw);
+        color:var(--vscode-editorHoverWidget-foreground); background:var(--vscode-editorHoverWidget-background);
+        border:1px solid var(--vscode-editorHoverWidget-border); padding:5px 8px; z-index:2; }
       aside { position:absolute; bottom:10px; left:12px; max-width:85%; background:var(--vscode-editor-background); }
       #outline { position:absolute; top:8px; left:8px; max-width:min(42vw,30rem); max-height:70vh; overflow:auto;
         padding:5px 8px; background:var(--vscode-sideBar-background,var(--vscode-editor-background)); border:1px solid var(--vscode-panel-border); }
@@ -99,6 +105,7 @@ function registerObjPreview(context, entityRequest) {
       button { color:var(--vscode-button-foreground); background:var(--vscode-button-background); border:0; padding:5px 10px; cursor:pointer; }
       </style></head><body>
       <canvas aria-label="3D model"></canvas><aside><button hidden>Fit model</button> <span role="status">Opening model…</span></aside>
+      <div id="part-tip" role="tooltip" hidden></div>
       <details id="outline" open><summary>Model hierarchy</summary>
       <div id="entity-pickers" hidden><label>Entity<select id="entity"></select></label><div hidden><label><span id="appearance-label">Appearance</span><select id="appearance"></select></label></div></div>
       <div id="filters"><label><input id="meshes" type="checkbox" checked>Meshes</label>
@@ -143,7 +150,26 @@ function registerObjPreview(context, entityRequest) {
     resolveCustomTextEditor(document,panel) {
       panel.webview.options = {enableScripts:true,localResourceRoots:[dist]};
       let pending: vscode.CancellationTokenSource, timer, entity: string, appearance: string;
-      function cancel() { pending?.cancel(); pending?.dispose(); pending = undefined; clearTimeout(timer); }
+      const sources = new Map<string,IniSource>();
+      function cancel() { sources.clear(); pending?.cancel(); pending?.dispose(); pending = undefined; clearTimeout(timer); }
+      async function reveal(id: string) {
+        const source=sources.get(id);
+        if (!source) return;
+        const uri=vscode.Uri.parse(source.uri);
+        const doc=await vscode.workspace.openTextDocument(uri);
+        const header="["+source.header+"]";
+        let line=source.line;
+        if (line >= doc.lineCount || !doc.lineAt(line).text.trimStart().startsWith(header)) {
+          const matches=doc.getText().split(/\r\n|\n|\r/).flatMap((s,i)=>s.trimStart().startsWith(header) ? [i] : []);
+          if (!matches.length) { void vscode.window.showInformationMessage(header+" is no longer in this file."); return; }
+          line=matches.reduce((a,b)=>Math.abs(a-source.line)<=Math.abs(b-source.line) ? a : b);
+        }
+        const start=doc.lineAt(line).firstNonWhitespaceCharacterIndex;
+        const selection=new vscode.Range(line,start,line,start+header.length);
+        const column=vscode.window.visibleTextEditors.find(e=>e.document.uri.toString()===uri.toString())?.viewColumn ||
+          vscode.window.tabGroups.all.find(g=>g.viewColumn!==panel.viewColumn)?.viewColumn || vscode.ViewColumn.Beside;
+        await vscode.window.showTextDocument(doc,{selection,viewColumn:column,preview:true});
+      }
       async function update() {
         cancel();
         const source = pending = new vscode.CancellationTokenSource();
@@ -155,13 +181,19 @@ function registerObjPreview(context, entityRequest) {
           if (token.isCancellationRequested) return;
           entity = choices.entity; appearance = choices.appearance;
           await panel.webview.postMessage({type:"entityChoices",...choices});
-          const scene = await entityRequest({...request,entity,appearance,render:true},token);
-          if (!token.isCancellationRequested) await panel.webview.postMessage({type:"entityScene",scene,entity});
+          const scene: EntityScene = await entityRequest({...request,entity,appearance,render:true},token);
+          if (token.isCancellationRequested) return;
+          for (const part of scene.parts) if (part.source) sources.set(part.id,part.source);
+          await panel.webview.postMessage({type:"entityScene",scene,entity});
         } catch (error) {
           if (!token.isCancellationRequested) await panel.webview.postMessage({type:"entityError",message:error.message});
         }
       }
       const messages = panel.webview.onDidReceiveMessage(message => {
+        if (message.type === "openEntityPart") {
+          void reveal(message.id).catch(e=>vscode.window.showErrorMessage(e.message));
+          return;
+        }
         if (message.type !== "ready" && message.type !== "selectEntity") return;
         entity = message.entity; appearance = message.appearance;
         void update();

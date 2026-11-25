@@ -9,7 +9,7 @@ export interface Appearance { general?: IniSection; defaults?: IniSection; selec
 export interface PreviewRequest {uri: string; text: string; entity?: string; appearance?: string; render?: boolean}
 
 export async function entityDocument(text: string, uri: string, catalog: Catalog, materials: Materials, ancestors = new Set<string>()) {
-  const doc = expandEntityIni(text);
+  const doc = expandEntityIni(text, uri);
   const base = doc.modifiers.find(m => /^(alias|copy|extend|prepend)$/.test(m.name));
   if (!base) return doc;
   const key = normalize(base.args.trim());

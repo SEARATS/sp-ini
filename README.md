@@ -12,6 +12,8 @@ Entity and scenario INIs open as text. Choose **Sea Power INI: Preview Entity** 
 
 The preview uses the intact model, declared submodels, parent transforms, and diffuse textures. Enable **Colliders** to inspect collision shapes. **Preview notes** lists missing assets. The preview updates as you edit the open INI.
 
+Hover over a mesh or collider in the viewport or hierarchy to see its name and source. Ctrl+click (⌘+click on macOS) opens its INI section. Sphere colliders use fewer triangles at smaller in-game sizes and keep the same detail as you zoom.
+
 Open an OBJ or FBX to see its 3D preview. Drag to rotate and scroll to zoom. To change the default, run **Reopen Editor With…** and choose **Configure default editor for '*.obj'…**. Enable `seapowerIni.obj.openSourceBeside` to see the source alongside the preview.
 
 OBJ source opens with each object (`o`) collapsed. Click the arrow beside a name to expand it. Fold arrows also work for OBJ groups (`g`) and INI sections.

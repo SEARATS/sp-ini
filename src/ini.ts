@@ -14,7 +14,8 @@ function sectionGroup(name) {
     .replace(/\d+/g, "#");
 }
 
-export interface IniSection { name: string; line: number; start: number; keys: IniEntry[] }
+export interface IniSource { uri: string; line: number; header: string }
+export interface IniSection { name: string; line: number; start: number; keys: IniEntry[]; source?: IniSource }
 export interface IniEntry { name: string; value: string; valueStart: number; line: number; start: number; section?: IniSection; repeated: boolean }
 
 function parse(text: string) {
