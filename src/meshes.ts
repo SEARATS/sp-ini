@@ -1,5 +1,6 @@
-const fs = require("node:fs/promises");
-const { reference, referenceContext, isMesh } = require("./references");
+import { fbxGeometry } from "./fbx-geometry";
+import * as fs from "node:fs/promises";
+import { reference, referenceContext, isMesh } from "./references";
 
 const objectHeader = /^\s*o\s+([^#]+?)(?:\s*#.*)?$/;
 
@@ -38,33 +39,36 @@ function parseObj(text) {
 }
 
 class MeshFiles {
-  constructor(openDocument = () => undefined) { this.openDocument = openDocument; }
+  constructor(private readonly openDocument: (uri: string) => import('vscode-languageserver-textdocument').TextDocument = () => undefined) {}
   cache = new Map();
 
   async model(file) {
     const doc = this.openDocument(file.uri);
-    const stamp = doc || await fs.stat(file.full).catch(() => null);
-    if (!stamp) return;
+    const stamp = doc ? undefined : await fs.stat(file.full).catch(() => null);
+    if (!stamp && !doc) return;
     const version = doc ? "open:" + doc.version : stamp.mtimeMs + ":" + stamp.size;
     const cached = this.cache.get(file.uri);
     if (cached?.version === version && cached.doc === doc) return cached.model;
-    const text = doc ? doc.getText() : await fs.readFile(file.full, "utf8").catch(() => null);
-    if (text === null) return;
-    const model = parseObj(text);
+    let model;
+    try {
+      model = doc ? parseObj(doc.getText()) : /\.fbx$/i.test(file.full) ? fbxGeometry(await fs.readFile(file.full)) :
+        parseObj(await fs.readFile(file.full, "utf8"));
+    } catch { return; }
     if (this.cache.size >= 3) this.cache.delete(this.cache.keys().next().value);
     this.cache.set(file.uri, { version, doc, model });
     return model;
   }
 
-  async resolve(doc, uri, entry, catalog, ctx = referenceContext(doc, uri, catalog), modelsByUri) {
+  async resolve(doc, uri, entry, catalog, ctx = referenceContext(doc, uri, catalog), modelsByUri?: Map<string, Promise<ReturnType<typeof parseObj>>>, all = false) {
     if (!entry) return [];
     if (!isMesh(entry, ctx.meshColliders)) return [];
     const models = doc.sections.find(s => /^models$/i.test(s.name));
     const root = entry.section?.keys.find(k => /^rootmesh$/i.test(k.name) && k.value) ||
       models?.keys.find(k => /^resourcesroot$/i.test(k.name));
-    if (!root || !/\.obj$/i.test(root.value)) return [];
+    if (!root) return [];
     const resources = entry.section?.keys.find(k => /^resourcesmeshfolder$/i.test(k.name))?.value || ctx.resources;
-    const refs = reference(root, root.value, { ...ctx, resources }).refs;
+    let refs = reference(root, /\.(obj|fbx)$/i.test(root.value) ? root.value : root.value + '.obj', { ...ctx, resources }).refs;
+    if (!refs.length && !/\.(obj|fbx)$/i.test(root.value)) refs = catalog.mirrorModels?.get(root.value.toLowerCase()) || [];
     const result = [];
     for (const { file } of refs) {
       let loading = modelsByUri?.get(file.uri);
@@ -74,11 +78,11 @@ class MeshFiles {
       }
       const model = await loading;
       for (const object of model?.objects || []) {
-        if (object.name === entry.value) result.push({ file, model, object, name: object.name, line: object.line, start: object.start });
+        if (all || object.name === entry.value) result.push({ file, model, object, name: object.name, line: object.line, start: object.start });
       }
     }
     return result;
   }
 }
 
-module.exports = { MeshFiles, objectHeader, parseObj };
+export { MeshFiles, objectHeader, parseObj };

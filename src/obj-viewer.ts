@@ -1,8 +1,10 @@
-import { Box3, DirectionalLight, HemisphereLight, LoadingManager, PerspectiveCamera, Scene, Sphere, WebGLRenderer } from "three";
+import { isColliderName } from './mesh-names';
+import { Texture, Box3, DirectionalLight, HemisphereLight, LoadingManager, PerspectiveCamera, Scene, Sphere, WebGLRenderer } from "three";
 import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
+declare function acquireVsCodeApi(): { postMessage(message: unknown): void };
 const vscode = acquireVsCodeApi();
 const status = document.querySelector("[role=status]");
 const fit = document.querySelector("button");
@@ -39,7 +41,7 @@ function dispose(group) {
   group.traverse(child => {
     child.geometry?.dispose();
     if (child.material) [child.material].flat().forEach(material => {
-      for (const value of Object.values(material)) if (value?.isTexture) value.dispose();
+      for (const value of Object.values(material)) if (value instanceof Texture) value.dispose();
       material.dispose();
     });
   });
@@ -61,6 +63,15 @@ async function load(data) {
       next = new FBXLoader(manager).parse(buffer, new URL(".", data.url).href);
     } else {
       next = new OBJLoader().parse(data.text);
+      next.traverse(child => {
+        if (!child.isMesh || !isColliderName(child.name)) return;
+        const tint = material => {
+          const copy = material.clone();
+          copy.color.setHex(0xff833d);
+          return copy;
+        };
+        child.material = Array.isArray(child.material) ? child.material.map(tint) : tint(child.material);
+      });
     }
     model = next;
     new Box3().setFromObject(model).getBoundingSphere(bounds);

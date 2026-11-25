@@ -13,6 +13,14 @@ async function waitFor(check) {
 exports.run = async () => {
   const root = vscode.workspace.workspaceFolders[0].uri;
   assert.ok(root.path.endsWith("/preview-fixture"));
+  const sonar = vscode.Uri.joinPath(root, "nested-mod/sonar.ini");
+  await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(sonar));
+  await waitFor(() => vscode.window.activeTextEditor?.document.languageId === "seapower-ini");
+  await waitFor(() => vscode.extensions.getExtension("searats.seapower-ini").isActive);
+  const outline = await vscode.commands.executeCommand("vscode.executeDocumentSymbolProvider", sonar);
+  assert.deepEqual(outline[0].children.map(key => key.name), ["BladesCount", "MinNoiseClassificationTreshold"]);
+  const unrelated = await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(vscode.Uri.joinPath(root, "unrelated.ini")));
+  assert.equal(unrelated.document.languageId, "ini");
   const first = vscode.Uri.joinPath(root, "first.obj");
   await vscode.workspace.fs.writeFile(first, Buffer.from("# sample\no Mesh\nv 0 0 0\n"));
   await vscode.commands.executeCommand("vscode.openWith", first, "default");

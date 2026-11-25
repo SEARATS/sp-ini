@@ -10,9 +10,35 @@ The extension finds the game through Steam. For a custom installation, set `seap
 
 The VS Code FBX viewer opens binary and ASCII FBX models, including hierarchy transforms. Explicit FBX file paths in INIs open the model. Named mesh and collider definitions in OBJ files also support jumping to a source line.
 
+## Generate submodels and colliders
+
+Start from the FBX hierarchy, a model reference in an INI, or **Sea Power INI: Generate Submodels and Colliders…** in the Command Palette. Pick a parent, then choose **INI file** or **Clipboard**. Change each object's role if needed. File mode previews a diff and applies it as an undoable edit. Clipboard mode previews plain INI text for manual pasting. When pasting into existing lists, continue their numbering.
+
+The generator download runs with Node.js 18 or newer.
+
+```powershell
+node generate.js --model ship.fbx --parent /Hull --ini ship.ini --dry-run
+node generate.js --model ship.fbx --parent /Hull --clipboard
+```
+
+Omit `--dry-run` to update the INI. Use `--stdout` for a pipeline or `--roles roles.json` to override defaults with a JSON object keyed by hierarchy path. Accepted roles are `Submodel`, `Collider` and `Skip`. Regeneration uses the FBX filename and parent path to identify its entries.
+
+## Mirror the vanilla project
+
+On Windows, install Python 3.12 with UnityPy 1.25.4. Download [AssetRipper](https://github.com/AssetRipper/AssetRipper/releases) and [AssetStudioModCLI](https://github.com/aelurum/AssetStudioMod/releases). Use an empty output directory on a drive with room for the extracted game.
+
+```powershell
+python scripts/export_vanilla_project.py "C:\Games\Sea Power" "D:\SeaPowerMirror" --ripper "C:\Tools\AssetRipper.GUI.Free.exe" --studio "C:\Tools\AssetStudioModCLI.exe"
+code "D:\SeaPowerMirror\Sea Power.code-workspace"
+```
+
+AssetRipper restores Unity resources and prefabs. AssetStudio exports FBX hierarchies. The script copies the stock INIs, exports remaining meshes individually and records inferred FBX paths, texture GUIDs and unreadable meshes in `sp-ini-models.json`. Keep the generated project local.
+
 ## Build
 
 With Node.js 22.13 or newer and pnpm, run `pnpm install --frozen-lockfile`, `pnpm test` and `pnpm run package`. Other LSP editors can run `node dist/server.js --stdio` with language ID `seapower-ini`. The PSPad download includes its setup instructions.
+
+To bundle Windows stock previews when packaging locally, install `UnityPy==1.25.4` and `pyinstaller==6.16.0` with Python 3.12 and run `./scripts/build-reader.ps1` before packaging. CI builds the reader for releases.
 
 On Windows, run `./scripts/dev-window.ps1 <mod-folder>` from the checkout to test local changes. The development window reloads after each successful rebuild.
 

@@ -1,7 +1,7 @@
-const fs = require("node:fs/promises");
-const path = require("node:path");
-const os = require("node:os");
-const { fileURLToPath } = require("node:url");
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
+import * as os from "node:os";
+import { fileURLToPath } from "node:url";
 
 async function children(dir) {
   try { return await fs.readdir(dir, { withFileTypes: true }); }
@@ -11,12 +11,12 @@ async function children(dir) {
   }
 }
 
-async function roots(options = {}, folders = []) {
+async function roots(options: { localModDirectories?: string[], workshopDirectories?: string[], gameDirectory?: string } = {}, folders: {uri:string}[] = []) {
   const result = [];
   const add = (dir, source) => {
     if (dir && path.isAbsolute(dir)) result.push({ dir: path.resolve(dir), source });
   };
-  const addChildren = async (dir, label, accept = () => true) => {
+  const addChildren = async (dir, label, accept: (name:string) => boolean = () => true) => {
     for (const item of await children(dir)) {
       if (item.isDirectory() && accept(item.name)) add(path.join(dir, item.name), label + " " + item.name);
     }
@@ -51,4 +51,4 @@ async function roots(options = {}, folders = []) {
   return result;
 }
 
-module.exports = { children, roots };
+export { children, roots };

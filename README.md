@@ -14,13 +14,17 @@ OBJ source opens with each object (`o`) collapsed. Click the arrow beside a name
 
 Ctrl+click an underlined mesh or mesh collider to open its OBJ declaration. Hover over the INI value or OBJ name to see the wireframe and, when UVs and a diffuse map are available, the textured mesh. Material hovers show a lit plane covering the full texture, followed by each texture. The swatch approximates lighting and supports PNG and JPEG textures.
 
+The Windows x64 extension reads stock meshes and materials directly from your installed game. Loose overrides take priority. Objects tagged `_col` appear orange in the OBJ viewer and rank first among matching mesh suggestions.
+
+Right-click a parent in **FBX hierarchy** and choose **Generate Submodels and Colliders…**. Review object roles, then apply the diff to an INI or copy the generated text to your clipboard.
+
 Hover over a collider reference to see its shape. `ContainerBase` and numbered `Gun` references link to the unit's declared model parts.
 
 Right-click an INI line and choose **Suppress Diagnostic on This Line** to append a comment such as `; sp-ini-ignore invalid-value`. **Comment or Uncomment INI Section** toggles the entire section, including its header.
 
 Repeating a key in the same section gives a warning for the same value and an error for conflicting values.
 
-Open a mod folder in VS Code and select **Sea Power INI** in the language picker. To protect game and Workshop files while browsing, run **Sea Power INI: Enable Read-Only Reference Previews in Workspace**.
+VS Code selects **Sea Power INI** for files inside a mod with an `_info.ini`, including mods nested in the open folder. For other folders, use the language picker. To protect game and Workshop files while browsing, run **Sea Power INI: Enable Read-Only Reference Previews in Workspace**.
 
 ## Screenshots
 

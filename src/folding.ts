@@ -37,4 +37,4 @@ function objFolds(document) {
   return ranges.sort((a, b) => a.startLine - b.startLine);
 }
 
-module.exports = { iniFolds, objFolds };
+export { iniFolds, objFolds };

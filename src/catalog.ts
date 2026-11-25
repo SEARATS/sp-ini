@@ -1,9 +1,9 @@
-const fs = require("node:fs/promises");
-const path = require("node:path");
-const { pathToFileURL } = require("node:url");
-const { parse, sectionGroup } = require("./ini");
-const { children } = require("./roots");
-const { scalarType } = require("./values");
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
+import { pathToFileURL } from "node:url";
+import { parse, sectionGroup } from "./ini";
+import { children } from "./roots";
+import { scalarType } from "./values";
 
 const unitFolders = { aircraft: ["aircraft", "helicopter"], vessels: ["vessel", "submarine"], land_units: ["landunit"], biologic: ["biologic"] };
 const excluded = new Set(["node_modules", "bin", "obj", "dist", "decompiled", "artifacts", "Library", "Packages"]);
@@ -41,6 +41,8 @@ function getOrCreate(map, key, make) {
 }
 
 class Catalog {
+  mirrorModels = new Map();
+  mirrorTextures = new Map();
   modelParts = new Map();
   objOwners = new Map();
   sections = new Map();
@@ -127,7 +129,7 @@ async function buildCatalog(roots) {
     for (const entry of childrenHere.sort((a, b) => a.name.localeCompare(b.name))) {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory() && !entry.name.startsWith(".") && !excluded.has(entry.name)) await walk(full, base, source);
-      else if (entry.isFile() && /\.(ini|png|jpe?g|tga|dds|obj|mtl|fbx|wav|ogg|xml|json|txt)$/i.test(entry.name) && !seen.has(full)) {
+      else if (entry.isFile() && /\.(ini|png|jpe?g|tga|dds|obj|mtl|fbx|mat|wav|ogg|xml|json|txt)$/i.test(entry.name) && !seen.has(full)) {
         seen.add(full);
         const file = { full, rel: path.relative(base, full).replaceAll("\\", "/"), uri: pathToFileURL(full).href, source };
         if (entry.name.toLowerCase().endsWith(".ini")) files.push(file);
@@ -138,7 +140,19 @@ async function buildCatalog(roots) {
       }
     }
   }
-  for (const { dir, source } of roots) await walk(dir, dir, source);
+  for (const { dir, source } of roots) {
+    await walk(dir, dir, source);
+    if (source !== "Workspace") continue;
+    const manifest = await fs.readFile(path.join(dir,"sp-ini-models.json"),"utf8").then(JSON.parse,()=>null);
+    if (!manifest) continue;
+    for (const [rel,name] of Object.entries(manifest.models || {})) {
+      const refs = catalog.assets.get(normalize(rel));
+      if (refs && typeof name === "string") getOrCreate(catalog.mirrorModels,normalize(name),()=>[]).push(...refs);
+    }
+    for (const [guid,rel] of Object.entries(manifest.textures || {})) {
+      if (typeof rel === "string") catalog.mirrorTextures.set(guid,catalog.assets.get(normalize(rel))?.[0]?.file);
+    }
+  }
   for (let pos = 0; pos < files.length; pos += 24) {
     const batch = files.slice(pos, pos + 24);
     const texts = await Promise.all(batch.map(file => fs.readFile(file.full, "utf8").catch(() => null)));
@@ -156,4 +170,4 @@ function submodelNames(doc) {
   return new Set((entries || []).map(k => k.value.toLowerCase()));
 }
 
-module.exports = { Catalog, buildCatalog, family, normalize, submodelNames, uriKey };
+export { Catalog, buildCatalog, family, normalize, submodelNames, uriKey };

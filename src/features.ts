@@ -1,9 +1,9 @@
-const { CompletionItemKind, DiagnosticSeverity, Range, SymbolKind } = require("vscode-languageserver/node");
-const { family, normalize } = require("./catalog");
-const { directives, sectionGroup, unitSection } = require("./ini");
-const { choices, expected, validValue, valueRule } = require("./values");
-const { tokens, referenceContext, domainFor, reference } = require("./references");
-const { ignoredRules } = require("./ini-edits");
+import { CompletionItemKind, DiagnosticSeverity, Range, SymbolKind } from "vscode-languageserver/node";
+import { family, normalize } from "./catalog";
+import { directives, sectionGroup, unitSection } from "./ini";
+import { choices, expected, validValue, valueRule } from "./values";
+import { tokens, referenceContext, domainFor, reference } from "./references";
+import { ignoredRules } from "./ini-edits";
 
 const span = (line, start, end) => Range.create(line, start, line, end);
 const location = ref => ({ uri: ref.file.uri, range: span(ref.line, ref.start, ref.start + ref.name.length) });
@@ -87,7 +87,7 @@ function completions(context, pos) {
     const name = normalize(ref.name);
     if (!name.startsWith(typed) || seen.has(name)) continue;
     seen.add(name);
-    matches.push({ label: ref.name, kind, detail: ref.detail || source(ref),
+    matches.push({ label: ref.name, kind, sortText: ref.sortText, detail: ref.detail || source(ref),
       textEdit: { range: span(pos.line, start, Math.max(start, end)), newText: ref.name + suffix } });
     if (matches.length === 250) return { isIncomplete: true, items: matches };
   }
@@ -113,7 +113,7 @@ function diagnostics(doc, catalog, uri = "") {
       if (key.repeated || key.name.includes("{")) continue;
       const name = key.name.toLowerCase();
       const prior = seen.get(name);
-      let message, code, relatedInformation, severity = DiagnosticSeverity.Warning;
+      let message, code, relatedInformation, severity: DiagnosticSeverity = DiagnosticSeverity.Warning;
       if (prior) {
         const conflict = prior.first.value !== key.value ? prior.first : prior.different;
         if (conflict) {
@@ -206,4 +206,4 @@ function symbols(doc) {
   });
 }
 
-module.exports = { completions, diagnostics, documentLinks, exact, inspect, location, source, symbols };
+export { completions, diagnostics, documentLinks, exact, inspect, location, source, symbols };

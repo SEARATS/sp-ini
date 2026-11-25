@@ -1,5 +1,5 @@
-const vscode = require("vscode");
-const { suppression, sectionEdit } = require("./ini-edits");
+import * as vscode from "vscode";
+import { suppression, sectionEdit } from "./ini-edits";
 
 function workspaceEdit(document, edits) {
   const edit = new vscode.WorkspaceEdit();
@@ -48,4 +48,4 @@ function registerIniActions() {
   return vscode.Disposable.from(suppress, toggle, provider);
 }
 
-module.exports = { registerIniActions };
+export { registerIniActions };

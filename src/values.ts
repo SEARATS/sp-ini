@@ -1,5 +1,5 @@
-const fields = require("./unit-fields.json");
-const { sectionGroup } = require("./ini");
+import fields from "./unit-fields.json";
+import { sectionGroup } from "./ini";
 
 const unitFamilies = new Set(["vessels", "aircraft", "land_units", "biologic"]);
 const rules = new Map();
@@ -55,4 +55,4 @@ function validValue(type, value) {
 }
 
 const expected = type => descriptions[type] || type.slice(-1) + " comma-separated numbers";
-module.exports = { scalarType, valueRule, validValue, choices, expected };
+export { scalarType, valueRule, validValue, choices, expected };

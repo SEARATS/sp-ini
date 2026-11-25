@@ -1,6 +1,6 @@
-const { tokens } = require("./references");
-const { thumbnail } = require("./mesh-hover");
-const { escape, imageMarkdown } = require("./materials");
+import { tokens } from "./references";
+import { thumbnail } from "./mesh-hover";
+import { escape, imageMarkdown } from "./materials";
 
 function colliderSection(doc, pos, entry) {
   const list = doc.sections.find(s => /^colliders$/i.test(s.name));
@@ -22,8 +22,8 @@ function primitiveHover(section, images = true) {
   const scale = vector("scale"), rotation = vector("rotation");
   const text = "**" + escape(section.name) + "** · " + type + "\n\nScale: " + scale.join(" × ") +
     "  \nPosition: " + vector("position").join(", ") + "  \nRotation: " + rotation.join(", ");
-  if (!images) return { contents: { kind: "plaintext", value: text.replaceAll("**", "") } };
-  if (![scale, rotation].every(v => v.length === 3 && v.every(Number.isFinite))) return { contents: { kind: "markdown", value: text } };
+  if (!images) return { contents: { kind: "plaintext" as const, value: text.replaceAll("**", "") } };
+  if (![scale, rotation].every(v => v.length === 3 && v.every(Number.isFinite))) return { contents: { kind: "markdown" as const, value: text } };
   const vertices = [], faces = [];
   function loop(points) {
     const indices = points.map(p => {
@@ -48,7 +48,7 @@ function primitiveHover(section, images = true) {
     }
   }
   const { image } = thumbnail({ vertices }, { faces }, new Map());
-  return { contents: { kind: "markdown", value: text + "\n\n" + imageMarkdown("Collider shape", image) } };
+  return { contents: { kind: "markdown" as const, value: text + "\n\n" + imageMarkdown("Collider shape", image) } };
 }
 
-module.exports = { colliderSection, primitiveHover };
+export { colliderSection, primitiveHover };

@@ -2,92 +2,248 @@
   "name": "seapower-ini",
   "displayName": "Sea Power INI",
   "description": "Autocomplete, error checking and Go to Definition for Sea Power INI files.",
-  "version": "0.5.3",
+  "version": "0.6.0",
   "publisher": "searats",
   "private": true,
-  "repository": { "type": "git", "url": "https://github.com/SEARATS/sp-ini.git" },
-  "engines": { "vscode": "^1.82.0" },
-  "categories": ["Programming Languages"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SEARATS/sp-ini.git"
+  },
+  "engines": {
+    "vscode": "^1.82.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
   "main": "./dist/extension.js",
-  "activationEvents": ["onLanguage:wavefront-obj"],
+  "activationEvents": [
+    "onLanguage:wavefront-obj",
+    "workspaceContains:**/_info.ini"
+  ],
   "contributes": {
-    "languages": [{
-      "id": "seapower-ini",
-      "aliases": ["Sea Power INI"],
-      "filenamePatterns": ["**/Sea Power_Data/StreamingAssets/**/*.ini", "**/workshop/content/1286220/**/*.ini"],
-      "firstLine": "^\\s*#!(?:extend|prepend|alias|copy)\\b",
-      "configuration": "./language.json"
-    }, {
-      "id": "wavefront-obj", "aliases": ["Wavefront OBJ"], "extensions": [".obj"]
-    }],
-    "grammars": [{ "language": "seapower-ini", "scopeName": "source.seapower-ini", "path": "./syntax.json" }],
+    "languages": [
+      {
+        "id": "seapower-ini",
+        "aliases": [
+          "Sea Power INI"
+        ],
+        "filenamePatterns": [
+          "**/Sea Power_Data/StreamingAssets/**/*.ini",
+          "**/workshop/content/1286220/**/*.ini"
+        ],
+        "firstLine": "^\\s*#!(?:extend|prepend|alias|copy)\\b",
+        "configuration": "./language.json"
+      },
+      {
+        "id": "wavefront-obj",
+        "aliases": [
+          "Wavefront OBJ"
+        ],
+        "extensions": [
+          ".obj"
+        ]
+      }
+    ],
+    "grammars": [
+      {
+        "language": "seapower-ini",
+        "scopeName": "source.seapower-ini",
+        "path": "./syntax.json"
+      }
+    ],
     "configurationDefaults": {
-      "[wavefront-obj]": { "editor.showFoldingControls": "always" }
+      "[wavefront-obj]": {
+        "editor.showFoldingControls": "always"
+      }
     },
-    "customEditors": [{
-      "viewType": "seapower-ini.obj",
-      "displayName": "OBJ Preview",
-      "selector": [{ "filenamePattern": "*.[oO][bB][jJ]" }],
-      "priority": "default"
-    }, {
-      "viewType": "seapower-ini.fbx",
-      "displayName": "FBX Preview",
-      "selector": [{ "filenamePattern": "*.[fF][bB][xX]" }],
-      "priority": "default"
-    }],
+    "customEditors": [
+      {
+        "viewType": "seapower-ini.obj",
+        "displayName": "OBJ Preview",
+        "selector": [
+          {
+            "filenamePattern": "*.[oO][bB][jJ]"
+          }
+        ],
+        "priority": "default"
+      },
+      {
+        "viewType": "seapower-ini.fbx",
+        "displayName": "FBX Preview",
+        "selector": [
+          {
+            "filenamePattern": "*.[fF][bB][xX]"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
     "commands": [
-      { "command": "seapower-ini.previewObj", "title": "Preview OBJ", "category": "Sea Power INI", "icon": "$(preview)" },
-      { "command": "seapower-ini.suppress", "title": "Suppress Diagnostic on This Line", "category": "Sea Power INI", "enablement": "editorLangId == seapower-ini && !editorReadonly" },
-      { "command": "seapower-ini.toggleSection", "title": "Comment or Uncomment INI Section", "category": "Sea Power INI", "enablement": "editorLangId == seapower-ini && !editorReadonly" },
-      { "command": "seapower-ini.refresh", "title": "Sea Power INI: Rebuild Content Index" },
-      { "command": "seapower-ini.referencePreviews", "title": "Sea Power INI: Enable Read-Only Reference Previews in Workspace" }
+      {
+        "command": "seapower-ini.previewObj",
+        "title": "Preview OBJ",
+        "category": "Sea Power INI",
+        "icon": "$(preview)"
+      },
+      {
+        "command": "seapower-ini.suppress",
+        "title": "Suppress Diagnostic on This Line",
+        "category": "Sea Power INI",
+        "enablement": "editorLangId == seapower-ini && !editorReadonly"
+      },
+      {
+        "command": "seapower-ini.toggleSection",
+        "title": "Comment or Uncomment INI Section",
+        "category": "Sea Power INI",
+        "enablement": "editorLangId == seapower-ini && !editorReadonly"
+      },
+      {
+        "command": "seapower-ini.refresh",
+        "title": "Sea Power INI: Rebuild Content Index"
+      },
+      {
+        "command": "seapower-ini.referencePreviews",
+        "title": "Sea Power INI: Enable Read-Only Reference Previews in Workspace"
+      },
+      {
+        "command": "seapower-ini.generate",
+        "title": "Generate Submodels and Colliders…",
+        "category": "Sea Power INI"
+      },
+      {
+        "command": "seapower-ini.generateFromModel",
+        "title": "Generate Submodels and Colliders…",
+        "category": "Sea Power INI"
+      },
+      {
+        "command": "seapower-ini.generateFromIni",
+        "title": "Generate from Model Hierarchy…",
+        "category": "Sea Power INI"
+      }
     ],
     "menus": {
       "editor/context": [
-        { "command": "seapower-ini.suppress", "when": "editorLangId == seapower-ini && !editorReadonly", "group": "seapower@1" },
-        { "command": "seapower-ini.toggleSection", "when": "editorLangId == seapower-ini && !editorReadonly", "group": "seapower@2" }
+        {
+          "command": "seapower-ini.suppress",
+          "when": "editorLangId == seapower-ini && !editorReadonly",
+          "group": "seapower@1"
+        },
+        {
+          "command": "seapower-ini.toggleSection",
+          "when": "editorLangId == seapower-ini && !editorReadonly",
+          "group": "seapower@2"
+        },
+        {
+          "command": "seapower-ini.generateFromIni",
+          "when": "editorLangId == seapower-ini && !editorReadonly",
+          "group": "seapower@3"
+        }
       ],
-      "editor/title": [{ "command": "seapower-ini.previewObj", "when": "resourceExtname =~ /[.]obj$/i && activeCustomEditorId != seapower-ini.obj", "group": "navigation" }],
-      "explorer/context": [{ "command": "seapower-ini.previewObj", "when": "resourceExtname =~ /[.]obj$/i && !explorerResourceIsFolder" }],
-      "commandPalette": [{ "command": "seapower-ini.previewObj", "when": "resourceExtname =~ /[.]obj$/i" }]
+      "editor/title": [
+        {
+          "command": "seapower-ini.previewObj",
+          "when": "resourceExtname =~ /[.]obj$/i && activeCustomEditorId != seapower-ini.obj",
+          "group": "navigation"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "seapower-ini.previewObj",
+          "when": "resourceExtname =~ /[.]obj$/i && !explorerResourceIsFolder"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "seapower-ini.previewObj",
+          "when": "resourceExtname =~ /[.]obj$/i"
+        },
+        {
+          "command": "seapower-ini.generateFromModel",
+          "when": "false"
+        },
+        {
+          "command": "seapower-ini.generateFromIni",
+          "when": "false"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "seapower-ini.generateFromModel",
+          "when": "view == seapower-ini.hierarchy && viewItem == spIniParent"
+        }
+      ]
     },
     "configuration": {
       "title": "Sea Power INI",
       "properties": {
         "seapowerIni.obj.collapseObjectsOnOpen": {
-          "type": "boolean", "default": true, "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "scope": "resource",
           "description": "Collapse object blocks when opening OBJ source."
         },
         "seapowerIni.obj.openSourceBeside": {
-          "type": "boolean", "default": false, "scope": "resource",
+          "type": "boolean",
+          "default": false,
+          "scope": "resource",
           "description": "Open the OBJ source beside its 3D preview."
         },
         "seapowerIni.gameDirectory": {
-          "type": "string", "default": "", "scope": "machine",
+          "type": "string",
+          "default": "",
+          "scope": "machine",
           "description": "Sea Power installation folder containing Sea Power_Data. Leave empty to search Steam libraries."
         },
         "seapowerIni.localModDirectories": {
-          "type": "array", "items": { "type": "string" }, "default": [], "scope": "machine",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "scope": "machine",
           "description": "Additional absolute paths to local mod content folders."
         },
         "seapowerIni.workshopDirectories": {
-          "type": "array", "items": { "type": "string" }, "default": [], "scope": "machine",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "scope": "machine",
           "description": "Additional absolute paths to Steam Workshop content/1286220 folders."
         }
       }
+    },
+    "views": {
+      "explorer": [
+        {
+          "id": "seapower-ini.hierarchy",
+          "name": "FBX hierarchy",
+          "when": "activeCustomEditorId == seapower-ini.fbx || resourceExtname =~ /[.]fbx$/i"
+        }
+      ]
     }
   },
   "scripts": {
     "build": "node scripts/build.js",
-    "test": "node --test test/*.test.js",
-    "package": "pnpm run build && vsce package --no-dependencies --skip-license"
+    "test": "pnpm run typecheck && tsx --test test/*.test.js",
+    "package": "pnpm run build && vsce package --no-dependencies --skip-license",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/pngjs": "^6.0.5",
+    "@types/three": "0.183.1",
+    "@types/vscode": "1.82.0",
     "@vscode/vsce": "4.1.1",
+    "diff": "8.0.2",
+    "esbuild": "0.28.2",
+    "fbx-parser": "2.1.3",
     "jpeg-js": "0.4.4",
     "pngjs": "7.0.0",
     "three": "0.187.0",
-    "esbuild": "0.28.2",
+    "tsx": "4.20.6",
+    "typescript": "5.9.3",
     "vscode-languageclient": "9.0.1",
     "vscode-languageserver": "9.0.1",
     "vscode-languageserver-textdocument": "1.0.12"

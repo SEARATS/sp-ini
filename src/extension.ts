@@ -1,9 +1,35 @@
-const vscode = require("vscode");
-const { LanguageClient, TransportKind } = require("vscode-languageclient/node");
-const { referencePatterns } = require("./previews");
-const { registerIniActions } = require("./ini-actions");
-const { registerObjPreview } = require("./obj-preview");
+import { registerHierarchy } from "./hierarchy-ui";
+import * as vscode from "vscode";
+import { LanguageClient, TransportKind } from "vscode-languageclient/node";
+import { referencePatterns } from "./previews";
+import { registerIniActions } from "./ini-actions";
+import { registerObjPreview } from "./obj-preview";
 let client;
+
+function registerModIniLanguage() {
+  const checked = new WeakSet();
+  async function detect(editor) {
+    const doc = editor.document;
+    if (checked.has(editor) || doc.languageId !== "ini" || doc.uri.scheme !== "file" || !/\.ini$/i.test(doc.uri.path)) return;
+    checked.add(editor);
+    const workspace = vscode.workspace.getWorkspaceFolder(doc.uri);
+    if (!workspace) return;
+    const associations = vscode.workspace.getConfiguration("files", doc.uri).get("associations", {});
+    if (Object.keys(associations).some(pattern => vscode.languages.match({ pattern: pattern.includes("/") ? pattern : "**/" + pattern }, doc))) return;
+    for (let dir = vscode.Uri.joinPath(doc.uri, ".."); ; dir = vscode.Uri.joinPath(dir, "..")) {
+      const marker = await vscode.workspace.fs.stat(vscode.Uri.joinPath(dir, "_info.ini")).then(stat => stat.type, () => 0);
+      if (marker & vscode.FileType.File) {
+        if (!doc.isClosed && doc.languageId === "ini") await vscode.languages.setTextDocumentLanguage(doc, "seapower-ini");
+        return;
+      }
+      if (dir.path.toLowerCase() === workspace.uri.path.toLowerCase() || dir.path === vscode.Uri.joinPath(dir, "..").path) return;
+    }
+  }
+  const visible = editors => editors.forEach(editor => detect(editor).catch(error => console.warn("Sea Power INI language detection:", error.message)));
+  const subscription = vscode.window.onDidChangeVisibleTextEditors(visible);
+  visible(vscode.window.visibleTextEditors);
+  return subscription;
+}
 
 function registerObjFolding() {
   const seen = new WeakSet();
@@ -12,7 +38,7 @@ function registerObjFolding() {
     if (!doc || !/\.obj$/i.test(doc.uri.path) || seen.has(doc)) return;
     seen.add(doc);
     if (!vscode.workspace.getConfiguration("seapowerIni", doc.uri).get("obj.collapseObjectsOnOpen")) return;
-    const ranges = await vscode.commands.executeCommand("vscode.executeFoldingRangeProvider", doc.uri);
+    const ranges = await vscode.commands.executeCommand<vscode.FoldingRange[]>("vscode.executeFoldingRangeProvider", doc.uri);
     if (vscode.window.activeTextEditor !== editor) { seen.delete(doc); return; }
     const selectionLines = (ranges || []).map(range => range.start).filter(line => /^\s*o(?:\s|$)/.test(doc.lineAt(line).text));
     if (selectionLines.length) await vscode.commands.executeCommand("editor.fold", { selectionLines, levels: 1, direction: "down" });
@@ -37,7 +63,8 @@ async function activate(context) {
     fs.watchFile(stamp, { interval: 350 }, reload);
     context.subscriptions.push({ dispose: () => fs.unwatchFile(stamp, reload) });
   }
-  context.subscriptions.push(registerObjPreview(context), registerIniActions());
+  registerHierarchy(context);
+  context.subscriptions.push(registerModIniLanguage(), registerObjPreview(context), registerIniActions());
   client = new LanguageClient("seapower-ini", "Sea Power INI",
     { module: context.asAbsolutePath("dist/server.js"), transport: TransportKind.ipc },
     { documentSelector: [{ language: "seapower-ini", scheme: "file" }, { language: "seapower-ini", scheme: "untitled" },
@@ -57,7 +84,7 @@ async function activate(context) {
         async provideDefinition(doc, pos, token, next) {
           const result = await next(doc, pos, token);
           for (const location of Array.isArray(result) ? result : [result]) {
-            if (!location?.uri?.path.toLowerCase().endsWith(".obj")) continue;
+            if (!location || !('uri' in location) || !location.uri.path.toLowerCase().endsWith(".obj")) continue;
             const { start, end } = location.range;
             location.uri = location.uri.with({ fragment: "sp-ini-source=" + [start.line, start.character, end.character].join(",") });
           }
@@ -87,7 +114,7 @@ async function activate(context) {
       }
       const config = vscode.workspace.getConfiguration();
       const key = "files.readonlyInclude";
-      await config.update(key, { ...await referencePatterns(options()), ...config.inspect(key)?.workspaceValue }, vscode.ConfigurationTarget.Workspace);
+      await config.update(key, { ...await referencePatterns(options()), ...config.inspect<Record<string, boolean>>(key)?.workspaceValue }, vscode.ConfigurationTarget.Workspace);
       for (const setting of ["workbench.editor.enablePreview", "workbench.editor.enablePreviewFromCodeNavigation"]) {
         await config.update(setting, true, vscode.ConfigurationTarget.Workspace);
       }
@@ -98,4 +125,4 @@ async function activate(context) {
   );
 }
 async function deactivate() { await client?.stop(); }
-module.exports = { activate, deactivate };
+export { activate, deactivate };

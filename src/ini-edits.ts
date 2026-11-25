@@ -28,4 +28,4 @@ function sectionEdit(lines, line) {
   return { disabled, edits };
 }
 
-module.exports = { ignoreSuffix, ignoredRules, suppression, sectionEdit };
+export { ignoreSuffix, ignoredRules, suppression, sectionEdit };

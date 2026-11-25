@@ -7,10 +7,17 @@ process.chdir(root);
 
 async function compile() {
   await Promise.all([
-    build({ entryPoints: ["src/extension.js", "src/server.js", "src/pspad.js"], outdir: "dist",
+    build({ entryPoints: ["src/extension.ts", "src/server.ts", "src/pspad.ts", "src/generate.ts"], outdir: "dist",
       bundle: true, platform: "node", target: "node18", external: ["vscode"] }),
-    build({ entryPoints: ["src/obj-viewer.js"], outdir: "dist", bundle: true, minify: true, target: "chrome114" })
+    build({ entryPoints: ["src/obj-viewer.ts"], outdir: "dist", bundle: true, minify: true, target: "chrome114" })
   ]);
+  const licenses = [];
+  for (const name of ["fbx-parser","@picode/binary-reader","pako","diff","three"]) {
+    const root = name === "three" ? "node_modules/three" : path.dirname(require.resolve(name + "/package.json", { paths: [path.dirname(require.resolve("fbx-parser")), process.cwd()] }));
+    const file = (await fs.readdir(root)).find(f => /^licen[sc]e(?:$|[.-])/i.test(f));
+    if (file) licenses.push(name+"\n"+await fs.readFile(path.join(root,file),"utf8"));
+  }
+  await fs.writeFile("dist/third-party-licenses.txt",licenses.join("\n\n"));
   await fs.copyFile("node_modules/three/LICENSE", "dist/three-LICENSE.txt");
   await fs.copyFile("node_modules/pngjs/LICENSE", "dist/pngjs-LICENSE.txt");
   await fs.copyFile("node_modules/jpeg-js/LICENSE", "dist/jpeg-js-LICENSE.txt");

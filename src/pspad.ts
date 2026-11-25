@@ -1,12 +1,12 @@
-const fs = require("node:fs/promises");
-const path = require("node:path");
-const { fileURLToPath, pathToFileURL } = require("node:url");
-const { roots } = require("./roots");
-const { buildCatalog } = require("./catalog");
-const { parse } = require("./ini");
-const { diagnostics, exact, inspect } = require("./features");
-const { tokens, isMesh, meshColliderSections } = require("./references");
-const { MeshFiles } = require("./meshes");
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { roots } from "./roots";
+import { buildCatalog } from "./catalog";
+import { parse } from "./ini";
+import { diagnostics, exact, inspect } from "./features";
+import { tokens, isMesh, meshColliderSections } from "./references";
+import { MeshFiles } from "./meshes";
 
 async function modDirectory(file) {
   const parent = path.dirname(file);

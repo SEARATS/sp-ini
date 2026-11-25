@@ -13,7 +13,11 @@ New-Item -ItemType Directory -Path "$mod/.vscode" | Out-Null
 New-Item -ItemType Directory -Path "$mod/vessels" | Out-Null
 Set-Content -LiteralPath "$mod/vessels/mesh.ini" -Value @('[Models]', 'ResourcesFolder=.', 'ResourcesRoot=mesh.obj', '[Part]', 'Mesh=Part', '[General]', 'ArmorType=Typo')
 Set-Content -LiteralPath "$mod/mesh.obj" -Value @('v 0 0 0', 'v 1 0 0', 'v 0 1 0', 'o Part', 'f 1 2 3')
-Set-Content -LiteralPath "$mod/.vscode/settings.json" -Value '{"files.associations":{"*.ini":"seapower-ini"}}'
+New-Item -ItemType Directory -Path "$mod/nested-mod" | Out-Null
+Set-Content -LiteralPath "$mod/nested-mod/_info.ini" -Value '[General]'
+Set-Content -LiteralPath "$mod/nested-mod/sonar.ini" -Value @('[SensorData]', "BladesCount=5  //number of blades on vessel's propulsion systems", 'MinNoiseClassificationTreshold=5 //in dBs, the minimal value of noise on sonar system')
+Set-Content -LiteralPath "$mod/unrelated.ini" -Value '[General]'
+Set-Content -LiteralPath "$mod/.vscode/settings.json" -Value '{"files.associations":{"**/missions/*.ini":"seapower-ini","**/vessels/*.ini":"seapower-ini"}}'
 code --user-data-dir "$session/profile" --extensions-dir "$session/extensions" --extensionDevelopmentPath "$project" --extensionTestsPath "$PSScriptRoot/preview-smoke.js" --disable-gpu --skip-welcome --new-window --wait "$mod"
 $code = $LASTEXITCODE
 Get-ChildItem -Path "$session/profile/logs/*/window*/exthost/exthost.log" | Get-Content -Tail 3

@@ -1,5 +1,5 @@
-const { randomBytes } = require("node:crypto");
-const vscode = require("vscode");
+import { randomBytes } from "node:crypto";
+import * as vscode from "vscode";
 const viewType = "seapower-ini.obj";
 
 function openSourceBeside(document, column) {
@@ -22,7 +22,8 @@ function registerObjPreview(context) {
     await vscode.window.showTextDocument(document, { selection: new vscode.Range(line, column, line, column), preview: true });
   });
   const command = vscode.commands.registerCommand("seapower-ini.previewObj", resource => {
-    const uri = resource || vscode.window.tabGroups.activeTabGroup.activeTab?.input?.uri;
+    const input = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
+    const uri = resource || (input instanceof vscode.TabInputText || input instanceof vscode.TabInputCustom ? input.uri : undefined);
     if (uri && /\.obj$/i.test(uri.path)) return vscode.commands.executeCommand("vscode.openWith", uri, viewType, vscode.ViewColumn.Beside);
   });
   function resolveCustomTextEditor(document, panel) {
@@ -98,4 +99,4 @@ function registerObjPreview(context) {
   return vscode.Disposable.from(command, openSource, fbx, vscode.window.registerCustomEditorProvider(viewType, { resolveCustomTextEditor }));
 }
 
-module.exports = { registerObjPreview };
+export { registerObjPreview };

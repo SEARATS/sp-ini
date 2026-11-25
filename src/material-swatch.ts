@@ -1,4 +1,4 @@
-const { PNG } = require("pngjs");
+import { PNG } from "pngjs";
 
 function setting(props, name, fallback) {
   const value = props.get(name)?.split(",").at(-1).trim();
@@ -63,4 +63,4 @@ function materialSwatch(textures, props = new Map()) {
   return image;
 }
 
-module.exports = { materialSwatch };
+export { materialSwatch };

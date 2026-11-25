@@ -10,5 +10,9 @@ pnpm-*
 .vscodeignore
 *.vsix
 dist/.dev-build
+dist/pybuild/**
+dist/*.spec
+reader/**
+tsconfig.json
 notepadpp/**
 docs/screenshots/**

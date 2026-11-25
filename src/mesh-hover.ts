@@ -1,5 +1,5 @@
-const { PNG } = require("pngjs");
-const { escape, imageMarkdown } = require("./materials");
+import { PNG } from "pngjs";
+import { escape, imageMarkdown } from "./materials";
 
 // Use only the selected object's geometry; OBJ face indices are global to the file.
 function thumbnail(model, obj, textures) {
@@ -34,7 +34,7 @@ function thumbnail(model, obj, textures) {
   const depth = new Float64Array(width * height).fill(-Infinity);
   let sampled = false;
   const ink = (x, y) => image.data.writeUInt32BE(0x739cbfff, (y * width + x) * 4);
-  for (const p of points.values()) ink(...p);
+  for (const p of points.values()) ink(p[0], p[1]);
   for (const face of obj.faces) {
     const { indices, texcoords, material } = face;
     const texture = textures.get("") || textures.get(material);
@@ -58,7 +58,7 @@ function thumbnail(model, obj, textures) {
   return { image, textured: sampled && textured };
 }
 
-function paintTriangle(image, depth, [a, b, c], [ta, tb, tc], texture) {
+function paintTriangle(image, depth, [a, b, c]: number[][], [ta, tb, tc]: number[][], texture) {
   const area = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1]);
   // OBJ front faces are counterclockwise. Screen Y grows downwards.
   if (area >= 0) return;
@@ -89,7 +89,7 @@ function meshHover(model, object, textures = new Map()) {
   const wire = image ? imageMarkdown("Object wireframe", image) : "";
   const body = textured ? "| Wireframe | Textured |\n| --- | --- |\n| " + wire + " | " + imageMarkdown("Textured object", textured) + " |" :
     wire + "\n\nNo previewable diffuse texture or UV mapping.";
-  return { contents: { kind: "markdown", value: title + "\n\n" + body } };
+  return { contents: { kind: "markdown" as const, value: title + "\n\n" + body } };
 }
 
-module.exports = { meshHover, thumbnail };
+export { meshHover, thumbnail };

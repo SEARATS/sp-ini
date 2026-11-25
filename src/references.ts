@@ -1,6 +1,6 @@
-const path = require("node:path").posix;
-const { unitSection } = require("./ini");
-const { normalize, submodelNames, uriKey } = require("./catalog");
+import { posix as path } from "node:path";
+import { unitSection } from "./ini";
+import { normalize, submodelNames, uriKey } from "./catalog";
 
 const explicitFile = /\.(?:ini|png|jpe?g|tga|dds|obj|mtl|fbx|wav|ogg|xml|json|txt)$/i;
 const unitDirs = { aircraft: "aircraft", helicopter: "aircraft", vessel: "vessels", submarine: "vessels", landunit: "land_units", biologic: "biologic" };
@@ -83,6 +83,12 @@ function reference(entry, token, ctx) {
     const expectsPath = /file|path|material|texture|resourcesroot|image|^base$|mesh$/i.test(key) || /^textures$/i.test(entry.section?.name);
     return { refs: [], missing: expectsPath && ctx.catalog.paths.size && "File was not found in the indexed content folders." };
   }
+  if (/^(resourcesroot|rootmesh)$/i.test(key) && ctx.catalog.mirrorModels?.has(value)) return {refs:ctx.catalog.mirrorModels.get(value)};
+  if (/^(resourcesmaterial|material)$/i.test(key)) {
+    const folder = entry.section?.keys.find(k=>/^resourcesmaterialfolder$/i.test(k.name))?.value || ctx.resources || "";
+    const refs = ctx.catalog.assets.get(normalize(path.join("Assets/Resources",folder,value+".mat")));
+    if (refs) return {refs};
+  }
   const domain = domainFor(entry.section, key);
   if (domain) {
     const names = ctx.catalog.references.get(domain);
@@ -96,4 +102,4 @@ function reference(entry, token, ctx) {
     missing: local && !ctx.inherited && !/^(none|default|dummy)$/i.test(value) && "No section named [" + token + "] in this file." };
 }
 
-module.exports = { tokens, referenceContext, reference, domainFor, explicitFile, isMesh, meshColliderSections };
+export { tokens, referenceContext, reference, domainFor, explicitFile, isMesh, meshColliderSections };

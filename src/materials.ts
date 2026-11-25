@@ -1,11 +1,11 @@
-const fs = require("node:fs/promises");
-const path = require("node:path").posix;
-const { PNG } = require("pngjs");
-const jpeg = require("jpeg-js");
-const { parse } = require("./ini");
-const { normalize } = require("./catalog");
-const { reference, referenceContext } = require("./references");
-const { materialSwatch } = require("./material-swatch");
+import * as fs from "node:fs/promises";
+import { posix as path } from "node:path";
+import { PNG } from "pngjs";
+import * as jpeg from "jpeg-js";
+import { parse } from "./ini";
+import { normalize } from "./catalog";
+import { reference, referenceContext } from "./references";
+import { materialSwatch } from "./material-swatch";
 
 const escape = text => text.replace(/[^\p{L}\p{N} _-]/gu, ch => "\\" + ch);
 function imageMarkdown(name, image, budget = 42000) {
@@ -60,7 +60,7 @@ function diffusePreview(image, doc) {
 
 class Materials {
   cache = new Map();
-  constructor(openIni) { this.openIni = openIni; }
+  constructor(private readonly openIni: (uri: string) => ReturnType<typeof parse>) {}
 
   async readIni(file) {
     return this.openIni(file.uri) || await fs.readFile(file.full, "utf8").then(parse, () => null);
@@ -86,10 +86,11 @@ class Materials {
   }
 
   materialFile(entry, doc, uri, catalog) {
-    if (!entry || !/^(resourcesmaterial|material)$/i.test(entry.name) || !/\.ini$/i.test(entry.value)) return;
+    if (!entry || !/^(resourcesmaterial|material)$/i.test(entry.name)) return;
     const ctx = referenceContext(doc, uri, catalog);
     ctx.resources = entry.section.keys.find(k => /^resourcesmaterialfolder$/i.test(k.name))?.value || ctx.resources;
-    return reference(entry, entry.value, ctx).refs[0]?.file;
+    return reference(entry, /\.ini$/i.test(entry.value) ? entry.value : entry.value + '.ini', ctx).refs[0]?.file ||
+      (!/\.ini$/i.test(entry.value) && reference(entry,entry.value,ctx).refs.find(r=>/\.mat$/i.test(r.file?.rel))?.file);
   }
 
   maps(file, catalog, doc) {
@@ -100,13 +101,32 @@ class Materials {
     }));
   }
 
+  async materialData(file,catalog) {
+    if (!/\.mat$/i.test(file.rel)) {
+      const doc = await this.readIni(file);
+      return {doc,maps:this.maps(file,catalog,doc)};
+    }
+    const yaml = await fs.readFile(file.full,"utf8");
+    const props = yaml.split(/\bm_Floats:/)[1]?.split(/\bm_Colors:/)[0] || "";
+    const doc = parse("[Properties]\n"+[...props.matchAll(/^\s*(_\w+):\s*([\d.e+-]+)\s*$/gmi)].map(m=>m[1]+"="+m[2]).join("\n"));
+    const maps = [...yaml.matchAll(/^\s*(_\w+):\s*\r?\n\s*m_Texture:.*?guid: ([0-9a-f]+)/gmi)].map(m=>{
+      const file = catalog.mirrorTextures.get(m[2]);
+      return {key:{name:m[1],value:file?.rel || m[2]},file};
+    });
+    return {doc,maps};
+  }
+
   async hover(file, catalog, images = true) {
-    const parts = ["**" + escape(path.basename(file.rel)) + "**"];
-    const doc = await this.readIni(file);
-    const maps = this.maps(file, catalog, doc);
-    if (!images) return { contents: { kind: "plaintext", value: [file.rel, ...maps.map(m => m.key.name + "=" + m.key.value)].join("\n") } };
+
+    const {doc,maps} = await this.materialData(file,catalog);
+    if (!images) return { contents: { kind: "plaintext" as const, value: [file.rel, ...maps.map(m => m.key.name + "=" + m.key.value)].join("\n") } };
     const textures = new Map();
     for (const map of maps) textures.set(map.key.name.toLowerCase(), await this.texture(map.file));
+    return this.render(file.rel, doc, maps, textures);
+  }
+
+  render(name, doc, maps, textures) {
+    const parts = ["**" + escape(path.basename(name)) + "**"];
     const props = doc?.sections.find(s => /^properties$/i.test(s.name))?.keys || [];
     const swatch = materialSwatch(textures, new Map(props.map(k => [k.name.toLowerCase(), k.value])));
     const budget = Math.floor(84000 / (maps.length + 1));
@@ -126,13 +146,13 @@ class Materials {
       parts.push([labels, labels.map(() => "---"), previews]
         .map(row => "| " + row.join(" | ") + " |").join("\n"));
     }
-    if (maps.length) parts.push(maps.map(m => escape(m.key.name) + " · " + escape(path.basename(m.key.value))).join("  \n"));
-    return { contents: { kind: "markdown", value: parts.join("\n\n") } };
+    if (maps.length) parts.push(maps.map(m => escape(m.key.name) + " ï¿½ " + escape(path.basename(m.key.value))).join("  \n"));
+    return { contents: { kind: "markdown" as const, value: parts.join("\n\n") } };
   }
 
   async diffuse(file, catalog) {
-    const doc = await this.readIni(file);
-    const main = this.maps(file, catalog, doc).find(m => /^_maintex$/i.test(m.key.name));
+    const {doc,maps} = await this.materialData(file,catalog);
+    const main = maps.find(m => /^_maintex$/i.test(m.key.name));
     return diffusePreview(await this.texture(main?.file), doc);
   }
 
@@ -159,4 +179,4 @@ class Materials {
   }
 }
 
-module.exports = { Materials, diffusePreview, escape, imageMarkdown };
+export { Materials, diffusePreview, escape, imageMarkdown };

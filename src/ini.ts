@@ -1,4 +1,4 @@
-const { ignoreSuffix } = require("./ini-edits");
+import { ignoreSuffix } from "./ini-edits";
 const unitSection = /^(?:Taskforce\d+|Blue|Red|Neutral)(Vessel|Submarine|Aircraft|Helicopter|LandUnit|Biologic)\d+$/i;
 const directives = {
   extend: "Add entries to another INI file.",
@@ -14,10 +14,13 @@ function sectionGroup(name) {
     .replace(/\d+/g, "#");
 }
 
-function parse(text) {
+export interface IniSection { name: string; line: number; start: number; keys: IniEntry[] }
+export interface IniEntry { name: string; value: string; valueStart: number; line: number; start: number; section?: IniSection; repeated: boolean }
+
+function parse(text: string) {
   const lines = text.split(/\r\n|\n|\r/);
-  const sections = [], entries = [], issues = [], modifiers = [];
-  let section, repeat;
+  const sections: IniSection[] = [], entries: IniEntry[] = [], issues = [], modifiers = [];
+  let section: IniSection, repeat: number;
   for (const [line, raw] of lines.entries()) {
     const start = raw.search(/\S/);
     if (start < 0) continue;
@@ -65,4 +68,4 @@ function parse(text) {
   return { lines, sections, entries, modifiers, issues };
 }
 
-module.exports = { parse, sectionGroup, unitSection, directives };
+export { parse, sectionGroup, unitSection, directives };

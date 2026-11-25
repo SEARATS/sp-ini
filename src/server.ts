@@ -1,20 +1,26 @@
-const { createConnection, TextDocuments, TextDocumentSyncKind } = require("vscode-languageserver/node");
-const { TextDocument } = require("vscode-languageserver-textdocument");
-const { roots } = require("./roots");
-const { Catalog, buildCatalog, uriKey } = require("./catalog");
-const { MeshFiles, objectHeader } = require("./meshes");
-const { isMesh, meshColliderSections, referenceContext } = require("./references");
-const { meshHover } = require("./mesh-hover");
-const { Materials } = require("./materials");
-const { colliderSection, primitiveHover } = require("./colliders");
-const { parse } = require("./ini");
-const { iniFolds, objFolds } = require("./folding");
-const { completions, diagnostics, documentLinks, exact, inspect, location, source, symbols } = require("./features");
+import { createConnection, TextDocuments, TextDocumentSyncKind } from "vscode-languageserver/node";
+import { TextDocument } from "vscode-languageserver-textdocument";
+import * as path from "node:path";
+import { StockAssets, stockHover } from "./stock-assets";
+import { roots } from "./roots";
+import { Catalog, buildCatalog, uriKey } from "./catalog";
+import { MeshFiles, objectHeader } from "./meshes";
+import { isMesh, meshColliderSections, referenceContext } from "./references";
+import { meshHover } from "./mesh-hover";
+import { isColliderName } from "./mesh-names";
+import { Materials } from "./materials";
+import { colliderSection, primitiveHover } from "./colliders";
+import { parse } from "./ini";
+import { iniFolds, objFolds } from "./folding";
+import { completions, diagnostics, documentLinks, exact, inspect, location, source, symbols } from "./features";
 
 const connection = createConnection();
 const documents = new TextDocuments(TextDocument);
 const parsed = new Map();
 const openModels = new Map();
+const stock = new StockAssets();
+connection.onShutdown(() => stock.close());
+process.on('exit', () => stock.close());
 const meshes = new MeshFiles(uri => openModels.get(uriKey(uri)));
 const materials = new Materials(uri => {
   for (const [key, doc] of parsed) if (uriKey(key) === uriKey(uri)) return doc;
@@ -32,7 +38,10 @@ function refresh() {
     let summary;
     do {
       const revision = requested;
-      const next = await buildCatalog(await roots(options, folders));
+      const content = await roots(options, folders);
+      const next = await buildCatalog(content);
+      const vanilla = content.find(r => r.source === "Vanilla");
+      stock.directory = vanilla && path.resolve(vanilla.dir, "../..");
       if (revision !== requested) continue;
       catalog = next;
       parsed.forEach((_, uri) => publish(uri));
@@ -91,7 +100,19 @@ async function meshAt(params) {
   await building;
   return meshes.resolve(doc, uri, entry, catalog);
 }
-connection.onCompletion(async p => completions(await context(p), p.position));
+connection.onCompletion(async p => {
+  const info = await context(p), uri = p.textDocument.uri, doc = parsed.get(uri);
+  const entry = doc?.entries.find(e => e.line === p.position.line);
+  if (entry && isMesh(entry, meshColliderSections(doc)) && p.position.character >= entry.valueStart &&
+      p.position.character <= entry.valueStart + entry.value.length) {
+    const refs = await meshes.resolve(doc, uri, entry, catalog, undefined, undefined, true);
+    const items = refs.map(r => ({ ...r, sortText: (isColliderName(r.name) ? "0" : "1") + r.name.toLowerCase() }))
+      .sort((a,b) => a.sortText.localeCompare(b.sortText));
+    return completions({ raw: doc.lines[entry.line], start: entry.valueStart, end: entry.valueStart + entry.value.length,
+      kind: 18, suffix: "", items }, p.position);
+  }
+  return completions(info, p.position);
+});
 connection.onDefinition(async p => (await meshAt(p) ?? exact(await context(p))).filter(ref => ref.file).map(location));
 connection.onFoldingRanges(p => {
   const obj = openModels.get(uriKey(p.textDocument.uri));
@@ -111,12 +132,12 @@ connection.onDocumentLinks(async p => {
     const ref = refs[0];
     links.push({ range: { start: { line: entry.line, character: entry.valueStart },
       end: { line: entry.line, character: entry.valueStart + entry.value.length } },
-      target: ref.file.uri + "#L" + (ref.line + 1) + "," + (ref.start + 1), tooltip: "Open OBJ object " + ref.name });
+      target: /\.fbx$/i.test(ref.file.rel) ? ref.file.uri : ref.file.uri + "#L" + (ref.line + 1) + "," + (ref.start + 1), tooltip: "Open mesh " + ref.name });
   }
   return links;
 });
-async function objectHover(file, model, object, doc, uri, entry) {
-  if (options.imagePreviews === false) return { contents: { kind: "plaintext", value: object.name + " · " + object.faces.length + " faces" } };
+async function objectHover(file, model, object, doc?, uri?, entry?) {
+  if (options.imagePreviews === false) return { contents: { kind: "plaintext" as const, value: object.name + " ï¿½ " + object.faces.length + " faces" } };
   let material;
   function assigned(document, id, mesh) {
     const key = /^resourcesmesh$/i.test(mesh.name) ? "resourcesmaterial" : "material";
@@ -163,7 +184,8 @@ connection.onHover(async p => {
   if (refsToMesh) {
     const ref = refsToMesh[0];
     return ref ? objectHover(ref.file, ref.model, ref.object, doc, uri, entry) :
-      { contents: { kind: "plaintext", value: "No OBJ object declaration was found for " + entry.value + "." } };
+      await stockHover(stock,materials,doc,uri,entry,catalog,options.imagePreviews !== false,true) ??
+      { contents: { kind: "plaintext" as const, value: "No OBJ object declaration was found for " + entry.value + "." } };
   }
   const collider = doc && colliderSection(doc, p.position, entry);
   if (collider) {
@@ -173,18 +195,20 @@ connection.onHover(async p => {
     await building;
     const [ref] = await meshes.resolve(doc, uri, field, catalog);
     if (ref) return objectHover(ref.file, ref.model, ref.object, doc, uri, field);
-    if (field) return { contents: { kind: "plaintext", value: "No OBJ geometry was found for collider " + field.value + "." } };
+    if (field) return await stockHover(stock,materials,doc,uri,field,catalog,options.imagePreviews !== false,true) ?? { contents: { kind: "plaintext" as const, value: "No OBJ geometry was found for collider " + field.value + "." } };
   }
   if (entry && p.position.character >= entry.valueStart && p.position.character <= entry.valueStart + entry.value.length) {
     await building;
     const file = materials.materialFile(entry, doc, uri, catalog);
     if (file) return materials.hover(file, catalog, options.imagePreviews !== false);
+    const packed = await stockHover(stock,materials,doc,uri,entry,catalog,options.imagePreviews !== false);
+    if (packed) return packed;
   }
   const refs = exact(await context(p));
   if (!refs.length) return null;
   const first = refs[0];
   const lines = [first.name + (first.example ? "=" + first.example : ""), ...refs.map(ref => ref.detail || source(ref))];
-  return { contents: { kind: "plaintext", value: lines.join("\n") } };
+  return { contents: { kind: "plaintext" as const, value: lines.join("\n") } };
 });
 connection.onDocumentSymbol(p => {
   const doc = parsed.get(p.textDocument.uri);

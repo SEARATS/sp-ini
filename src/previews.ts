@@ -1,6 +1,6 @@
-const path = require("node:path");
-const fs = require("node:fs/promises");
-const { roots } = require("./roots");
+import * as path from "node:path";
+import * as fs from "node:fs/promises";
+import { roots } from "./roots";
 
 async function referencePatterns(options) {
   const patterns = {};
@@ -15,4 +15,4 @@ async function referencePatterns(options) {
   return patterns;
 }
 
-module.exports = { referencePatterns };
+export { referencePatterns };
