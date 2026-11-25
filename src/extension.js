@@ -1,6 +1,8 @@
 const vscode = require("vscode");
 const { LanguageClient, TransportKind } = require("vscode-languageclient/node");
 const { referencePatterns } = require("./previews");
+const { objFolds } = require("./folding");
+const { registerObjPreview } = require("./obj-preview");
 let client;
 
 function options() {
@@ -10,6 +12,17 @@ function options() {
 }
 
 async function activate(context) {
+  if (context.extensionMode === vscode.ExtensionMode.Development && process.env.SEAPOWER_DEV_RELOAD === "1") {
+    const fs = require("node:fs");
+    const stamp = context.asAbsolutePath("dist/.dev-build");
+    const reload = () => vscode.commands.executeCommand("workbench.action.reloadWindow");
+    fs.watchFile(stamp, { interval: 350 }, reload);
+    context.subscriptions.push({ dispose: () => fs.unwatchFile(stamp, reload) });
+  }
+  context.subscriptions.push(registerObjPreview(context),
+    vscode.languages.registerFoldingRangeProvider({ pattern: "**/*.[oO][bB][jJ]" }, {
+      provideFoldingRanges: document => objFolds(document).map(r => new vscode.FoldingRange(r.startLine, r.endLine))
+    }));
   client = new LanguageClient("seapower-ini", "Sea Power INI",
     { module: context.asAbsolutePath("dist/server.js"), transport: TransportKind.ipc },
     { documentSelector: [{ language: "seapower-ini", scheme: "file" }, { language: "seapower-ini", scheme: "untitled" }],

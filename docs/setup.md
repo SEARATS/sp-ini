@@ -12,6 +12,8 @@ The extension finds the game through Steam. For a custom installation, set `seap
 
 With Node.js 22.13 or newer and pnpm, run `pnpm install --frozen-lockfile`, `pnpm test` and `pnpm run package`. Other LSP editors can run `node dist/server.js --stdio` with language ID `seapower-ini`. The PSPad download includes its setup instructions.
 
+On Windows, run `./scripts/dev-window.ps1 <mod-folder>` from the checkout to test local changes. The development window reloads after each successful rebuild.
+
 ## Release
 
 Push a tag matching the version in `package.json`, for example `v0.3.0`. GitHub Actions tests the code and publishes the VSIX and PSPad ZIP to GitHub Releases. With the repository variable `PUBLISH_MARKETPLACE=true`, it also publishes the same VSIX under the SEARATS Marketplace publisher.

@@ -3,6 +3,7 @@ const { TextDocument } = require("vscode-languageserver-textdocument");
 const { roots } = require("./roots");
 const { Catalog, buildCatalog } = require("./catalog");
 const { parse } = require("./ini");
+const { iniFolds } = require("./folding");
 const { completions, diagnostics, documentLinks, exact, inspect, location, source, symbols } = require("./features");
 
 const connection = createConnection();
@@ -40,7 +41,7 @@ connection.onInitialize(params => {
   folders = params.workspaceFolders || (params.rootUri ? [{ uri: params.rootUri }] : []);
   return { capabilities: { textDocumentSync: TextDocumentSyncKind.Incremental,
     completionProvider: { triggerCharacters: ["[", "=", "/", "!"] }, hoverProvider: true,
-    definitionProvider: true, documentLinkProvider: {}, documentSymbolProvider: true } };
+    definitionProvider: true, documentLinkProvider: {}, documentSymbolProvider: true, foldingRangeProvider: true } };
 });
 connection.onInitialized(() => refresh().catch(error => connection.console.error(String(error))));
 connection.onRequest("seapower/rebuild", params => {
@@ -64,6 +65,7 @@ async function context(params) {
 }
 connection.onCompletion(async p => completions(await context(p), p.position));
 connection.onDefinition(async p => exact(await context(p)).filter(ref => ref.file).map(location));
+connection.onFoldingRanges(p => iniFolds(parsed.get(p.textDocument.uri)?.lines || []));
 connection.onDocumentLinks(async p => {
   await building;
   const uri = p.textDocument.uri, doc = parsed.get(uri);
