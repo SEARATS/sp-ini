@@ -8,7 +8,12 @@ const { scalarType } = require("./values");
 const unitFolders = { aircraft: ["aircraft", "helicopter"], vessels: ["vessel", "submarine"], land_units: ["landunit"], biologic: ["biologic"] };
 const excluded = new Set(["node_modules", "bin", "obj", "dist", "decompiled", "artifacts", "Library", "Packages"]);
 const normalize = value => value.replaceAll("\\", "/").toLowerCase();
-const uriKey = uri => process.platform === "win32" ? uri.toLowerCase().replace(/^(file:\/\/\/[a-z])%3a/, "$1:") : uri;
+function uriKey(uri) {
+  if (!uri.startsWith("file:")) return uri;
+  const url = new URL(uri);
+  const key = url.host + "/" + decodeURIComponent(url.pathname);
+  return process.platform === "win32" ? key.toLowerCase() : key;
+}
 const unitFolder = rel => normalize(rel).split("/").at(-2);
 
 function family(rel, doc) {
@@ -36,6 +41,8 @@ function getOrCreate(map, key, make) {
 }
 
 class Catalog {
+  modelParts = new Map();
+  objOwners = new Map();
   sections = new Map();
   units = new Map();
   paths = new Map();
@@ -48,6 +55,13 @@ class Catalog {
   add(file, doc) {
     const group = family(file.rel, doc);
     const ref = (name, line, start = 0) => ({ name, line, start, file });
+    const names = submodelNames(doc);
+    const models = doc.entries.filter(e => /^(resourcesroot|rootmesh)$/i.test(e.name) && /\.obj$/i.test(e.value));
+    for (const name of new Set(models.map(k => path.posix.basename(normalize(k.value))))) {
+      getOrCreate(this.objOwners, name, () => []).push(file);
+    }
+    if (names.size) getOrCreate(this.modelParts, normalize(file.rel), () => []).push(
+      ...doc.sections.filter(s => names.has(s.name.toLowerCase())).map(s => ref(s.name, s.line, s.start)));
     const addPath = rel => getOrCreate(this.paths, normalize(rel), () => []).push(ref(rel, 0));
     addPath(file.rel);
     this.filesByUri.set(uriKey(file.uri), file);
@@ -117,7 +131,10 @@ async function buildCatalog(roots) {
         seen.add(full);
         const file = { full, rel: path.relative(base, full).replaceAll("\\", "/"), uri: pathToFileURL(full).href, source };
         if (entry.name.toLowerCase().endsWith(".ini")) files.push(file);
-        else getOrCreate(catalog.assets, normalize(file.rel), () => []).push({ file, name: file.rel, line: 0, start: 0 });
+        else {
+          catalog.filesByUri.set(uriKey(file.uri), file);
+          getOrCreate(catalog.assets, normalize(file.rel), () => []).push({ file, name: file.rel, line: 0, start: 0 });
+        }
       }
     }
   }
@@ -133,4 +150,10 @@ async function buildCatalog(roots) {
   return catalog;
 }
 
-module.exports = { Catalog, buildCatalog, family, normalize, uriKey };
+function submodelNames(doc) {
+  const list = doc.sections.find(s => /^submodels$/i.test(s.name));
+  const entries = list?.keys ?? doc.sections.find(s => /^models$/i.test(s.name))?.keys.filter(k => /^submodel\d+$/i.test(k.name));
+  return new Set((entries || []).map(k => k.value.toLowerCase()));
+}
+
+module.exports = { Catalog, buildCatalog, family, normalize, submodelNames, uriKey };

@@ -12,6 +12,8 @@ async function compile() {
     build({ entryPoints: ["src/obj-viewer.js"], outdir: "dist", bundle: true, minify: true, target: "chrome114" })
   ]);
   await fs.copyFile("node_modules/three/LICENSE", "dist/three-LICENSE.txt");
+  await fs.copyFile("node_modules/pngjs/LICENSE", "dist/pngjs-LICENSE.txt");
+  await fs.copyFile("node_modules/jpeg-js/LICENSE", "dist/jpeg-js-LICENSE.txt");
 }
 
 async function main() {

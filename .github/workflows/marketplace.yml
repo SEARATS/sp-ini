@@ -25,7 +25,7 @@ jobs:
         with:
           name: editor-downloads
           path: release
-      - name: Publish both downloads
+      - name: Publish editor downloads
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}

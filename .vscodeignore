@@ -10,3 +10,5 @@ pnpm-*
 .vscodeignore
 *.vsix
 dist/.dev-build
+notepadpp/**
+docs/screenshots/**

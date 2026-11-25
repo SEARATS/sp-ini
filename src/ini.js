@@ -1,3 +1,4 @@
+const { ignoreSuffix } = require("./ini-edits");
 const unitSection = /^(?:Taskforce\d+|Blue|Red|Neutral)(Vessel|Submarine|Aircraft|Helicopter|LandUnit|Biologic)\d+$/i;
 const directives = {
   extend: "Add entries to another INI file.",
@@ -21,7 +22,7 @@ function parse(text) {
     const start = raw.search(/\S/);
     if (start < 0) continue;
     const value = raw.slice(start);
-    const directive = /^#!(\w+)\b\s*(.*)/.exec(value);
+    const directive = value.startsWith("#!") && /^#!(\w+)\b\s*(.*)/.exec(value.replace(ignoreSuffix, "").trimEnd());
     if (directive) {
       const [, name, args] = directive;
       modifiers.push({ name, args, line, argsStart: start + directive[0].length - args.length });

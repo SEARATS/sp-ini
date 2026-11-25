@@ -1,15 +1,12 @@
 const vscode = require("vscode");
 const { LanguageClient, TransportKind } = require("vscode-languageclient/node");
 const { referencePatterns } = require("./previews");
-const { objFolds } = require("./folding");
+const { registerIniActions } = require("./ini-actions");
 const { registerObjPreview } = require("./obj-preview");
 let client;
 
 function registerObjFolding() {
   const seen = new WeakSet();
-  const provider = vscode.languages.registerFoldingRangeProvider({ pattern: "**/*.[oO][bB][jJ]" }, {
-    provideFoldingRanges: document => objFolds(document).map(r => new vscode.FoldingRange(r.startLine, r.endLine))
-  });
   async function collapseObjects(editor) {
     const doc = editor?.document;
     if (!doc || !/\.obj$/i.test(doc.uri.path) || seen.has(doc)) return;
@@ -23,7 +20,7 @@ function registerObjFolding() {
   const onEditor = editor => collapseObjects(editor).catch(error => console.warn("OBJ folding:", error.message));
   const active = vscode.window.onDidChangeActiveTextEditor(onEditor);
   onEditor(vscode.window.activeTextEditor);
-  return vscode.Disposable.from(provider, active);
+  return active;
 }
 
 function options() {
@@ -40,16 +37,40 @@ async function activate(context) {
     fs.watchFile(stamp, { interval: 350 }, reload);
     context.subscriptions.push({ dispose: () => fs.unwatchFile(stamp, reload) });
   }
-  context.subscriptions.push(registerObjPreview(context), registerObjFolding());
+  context.subscriptions.push(registerObjPreview(context), registerIniActions());
   client = new LanguageClient("seapower-ini", "Sea Power INI",
     { module: context.asAbsolutePath("dist/server.js"), transport: TransportKind.ipc },
-    { documentSelector: [{ language: "seapower-ini", scheme: "file" }, { language: "seapower-ini", scheme: "untitled" }],
-      initializationOptions: options() });
+    { documentSelector: [{ language: "seapower-ini", scheme: "file" }, { language: "seapower-ini", scheme: "untitled" },
+        { language: "wavefront-obj", scheme: "file" }],
+      initializationOptions: options(), middleware: {
+        async provideDocumentLinks(doc, token, next) {
+          const links = await next(doc, token);
+          for (const link of links || []) {
+            const target = link.target;
+            const line = target?.path.toLowerCase().endsWith(".obj") && /^L(\d+),(\d+)$/.exec(target.fragment);
+            if (!line) continue;
+            const args = [target.with({ fragment: "" }).toString(), Number(line[1]) - 1, Number(line[2]) - 1];
+            link.target = vscode.Uri.parse("command:seapower-ini.openObjSource?" + encodeURIComponent(JSON.stringify(args)));
+          }
+          return links;
+        },
+        async provideDefinition(doc, pos, token, next) {
+          const result = await next(doc, pos, token);
+          for (const location of Array.isArray(result) ? result : [result]) {
+            if (!location?.uri?.path.toLowerCase().endsWith(".obj")) continue;
+            const { start, end } = location.range;
+            location.uri = location.uri.with({ fragment: "sp-ini-source=" + [start.line, start.character, end.character].join(",") });
+          }
+          return result;
+        }
+      } });
   await client.start();
+  context.subscriptions.push(registerObjFolding());
   const rebuild = () => client.sendRequest("seapower/rebuild", { options: options(),
     folders: (vscode.workspace.workspaceFolders || []).map(f => ({ uri: f.uri.toString() })) });
   const update = () => rebuild().catch(error => client.error("Rebuilding content index", error));
   const watcher = vscode.workspace.createFileSystemWatcher("**/*.[iI][nN][iI]");
+  const models = vscode.workspace.createFileSystemWatcher("**/*.{[oO][bB][jJ],[fF][bB][xX]}", false, true, false);
   let timer;
   const schedule = () => {
     clearTimeout(timer);
@@ -57,6 +78,7 @@ async function activate(context) {
   };
   context.subscriptions.push(
     watcher, watcher.onDidCreate(schedule), watcher.onDidChange(schedule), watcher.onDidDelete(schedule),
+    models, models.onDidCreate(schedule), models.onDidDelete(schedule),
     { dispose: () => clearTimeout(timer) },
     vscode.commands.registerCommand("seapower-ini.referencePreviews", async () => {
       if (!vscode.workspace.workspaceFolders?.length) {

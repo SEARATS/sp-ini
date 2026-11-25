@@ -3,6 +3,7 @@ const { family, normalize } = require("./catalog");
 const { directives, sectionGroup, unitSection } = require("./ini");
 const { choices, expected, validValue, valueRule } = require("./values");
 const { tokens, referenceContext, domainFor, reference } = require("./references");
+const { ignoredRules } = require("./ini-edits");
 
 const span = (line, start, end) => Range.create(line, start, line, end);
 const location = ref => ({ uri: ref.file.uri, range: span(ref.line, ref.start, ref.start + ref.name.length) });
@@ -101,7 +102,7 @@ function exact(context) {
 
 function diagnostics(doc, catalog, uri = "") {
   const result = doc.issues.map(({ line, message }) => ({
-    range: span(line, 0, doc.lines[line].length), severity: DiagnosticSeverity.Warning, source: "Sea Power INI", message
+    range: span(line, 0, doc.lines[line].length), severity: DiagnosticSeverity.Warning, source: "Sea Power INI", code: "syntax", message
   }));
   const group = family(uri, doc);
   const ctx = catalog && referenceContext(doc, uri, catalog);
@@ -111,50 +112,67 @@ function diagnostics(doc, catalog, uri = "") {
     for (const key of section.keys) {
       if (key.repeated || key.name.includes("{")) continue;
       const name = key.name.toLowerCase();
-      let message, severity = DiagnosticSeverity.Warning;
-      if (seen.has(name)) message = key.name + " already appears on line " + (seen.get(name) + 1) + " of this section.";
+      const prior = seen.get(name);
+      let message, code, relatedInformation, severity = DiagnosticSeverity.Warning;
+      if (prior) {
+        const conflict = prior.first.value !== key.value ? prior.first : prior.different;
+        if (conflict) {
+          code = "conflicting-duplicate-key";
+          severity = DiagnosticSeverity.Error;
+          message = key.name + " has a different value on line " + (conflict.line + 1) + " of this section.";
+          if (uri) relatedInformation = [{ location: { uri, range: span(conflict.line, conflict.start, conflict.start + conflict.name.length) },
+            message: "Earlier assignment to " + conflict.name }];
+          prior.different ??= key;
+        } else {
+          code = "duplicate-key";
+          message = key.name + " repeats the value on line " + (prior.first.line + 1) + " of this section.";
+        }
+      }
       else if (schema && /^[a-z]{5,}$/.test(name) && !schema.keys.get(name)?.stock) {
         const similar = [...schema.keys.values()].filter(k => k.stock && closeSpelling(name, k.name.toLowerCase()));
         if (similar.length === 1) {
           message = "Similar vanilla key in [" + section.name + "]: " + similar[0].name + ".";
           severity = DiagnosticSeverity.Hint;
+          code = "similar-key";
         }
       }
-      if (message) result.push({ range: span(key.line, key.start, key.start + key.name.length), severity, source: "Sea Power INI", message });
-      if (!seen.has(name)) seen.set(name, key.line);
+      if (message) result.push({ range: span(key.line, key.start, key.start + key.name.length), severity, source: "Sea Power INI",
+        code, message, relatedInformation });
+      if (!prior) seen.set(name, { first: key });
     }
   }
   for (const key of doc.entries) {
     if (/[{}]/.test(key.value)) continue;
-    const report = (severity, message, start = key.valueStart, end = start + key.value.length) =>
-      result.push({ range: span(key.line, start, end), severity, source: "Sea Power INI", message });
+    const report = (code, severity, message, start = key.valueStart, end = start + key.value.length) =>
+      result.push({ range: span(key.line, start, end), severity, source: "Sea Power INI", code, message });
     const rule = valueRule(group, key.section?.name, key.name, catalog);
     if (rule && !validValue(rule.type, key.value)) {
       const message = rule.inferred ? "Vanilla examples use " + expected(rule.type) + " for " + key.name + "."
         : "Invalid " + key.name + " '" + key.value + "'. Expected " + expected(rule.type) + ".";
-      report(rule.inferred ? DiagnosticSeverity.Warning : DiagnosticSeverity.Error, message);
+      report("invalid-value", rule.inferred ? DiagnosticSeverity.Warning : DiagnosticSeverity.Error, message);
     }
     const kind = unitSection.exec(key.section?.name || "")?.[1].toLowerCase();
     if (kind && /^type$/i.test(key.name) && catalog?.units.size && /^[\w.-]+$/.test(key.value)) {
       const units = catalog.units.get(key.value.toLowerCase());
-      if (!units) report(DiagnosticSeverity.Information, "Unit ID '" + key.value + "' was not found in the indexed content folders.");
-      else if (!units.some(u => u.kinds.includes(kind))) report(DiagnosticSeverity.Warning, "Unit '" + key.value + "' is not indexed as " + kind + ".");
+      if (!units) report("unknown-unit", DiagnosticSeverity.Information, "Unit ID '" + key.value + "' was not found in the indexed content folders.");
+      else if (!units.some(u => u.kinds.includes(kind))) report("unit-kind", DiagnosticSeverity.Warning, "Unit '" + key.value + "' is not indexed as " + kind + ".");
     }
     if (!ctx) continue;
     for (const token of tokens(key.value, key.valueStart)) {
       const { refs, missing } = reference(key, token.name, ctx);
-      if (missing && !refs.length) report(DiagnosticSeverity.Information, missing, token.start, token.end);
+      if (missing && !refs.length) report("missing-reference", DiagnosticSeverity.Information, missing, token.start, token.end);
     }
   }
   for (const mod of doc.modifiers) {
     if (!/^(extend|prepend|copy|alias)$/.test(mod.name) || !catalog?.paths.size) continue;
     for (const token of tokens(mod.args, mod.argsStart)) {
       if (!catalog.paths.has(normalize(token.name))) result.push({ range: span(mod.line, token.start, token.end),
-        severity: DiagnosticSeverity.Information, source: "Sea Power INI", message: "Directive target was not found in the indexed content folders." });
+        severity: DiagnosticSeverity.Information, source: "Sea Power INI", code: "missing-target", message: "Directive target was not found in the indexed content folders." });
     }
   }
-  return result;
+  return result.filter(d => !ignoredRules(doc.lines[d.range.start.line]).includes(d.code));
 }
+
 
 function documentLinks(doc, uri, catalog) {
   const ctx = referenceContext(doc, uri, catalog), links = [];

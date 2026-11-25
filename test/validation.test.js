@@ -5,6 +5,28 @@ const { parse } = require("../src/ini");
 const { diagnostics, inspect, exact, documentLinks, completions } = require("../src/features");
 const uri = "file:///mod/vessels/test.ini";
 
+test("mount part links use declared submodels and preserve ContainerBase sentinels", () => {
+  const c = new Catalog();
+  const body = "[Submodels]\nSubModel1=MountBase\nSubModel2=MovingPart\n[MountBase]\n[MovingPart]\n[WeaponSystem1]\nContainerBase=MountBase\nGun1=MovingPart\nGun2=Unrelated\n[Unrelated]\n[WeaponSystem2]\nContainerBase=Dummy";
+  const doc = parse(body);
+  const links = documentLinks(doc, uri, c);
+  assert.equal(links.find(l => l.range.start.line === 6).target, uri + "#L4");
+  assert.equal(links.find(l => l.range.start.line === 7).target, uri + "#L5");
+  assert.deepEqual(diagnostics(doc, c, uri).map(d => d.range.start.line), [8]);
+  c.add({ rel: "vessels/base.ini", uri: "file:///base.ini", source: "Vanilla" }, doc);
+  const patch = parse("#!extend vessels/base.ini\n[WeaponSystem1]\nGun1=MovingPart");
+  assert.equal(documentLinks(patch, uri, c).find(l => l.range.start.line === 2).target, "file:///base.ini#L5");
+});
+
+test("identical repeats warn, conflicting assignments point to the earlier different value", () => {
+  const doc = parse("[Paint]\nShade=Grey\nshade = Grey ; same\nShade=Blue\nShade=Grey\n[Next]\nShade=Blue");
+  const issues = diagnostics(doc, new Catalog(), uri);
+  assert.deepEqual(issues.map(d => [d.code, d.severity]), [
+    ["duplicate-key", 2], ["conflicting-duplicate-key", 1], ["conflicting-duplicate-key", 1]
+  ]);
+  assert.deepEqual(issues.slice(1).map(d => d.relatedInformation[0].location.range.start.line), [1, 3]);
+});
+
 test("checks unsaved armor edits before indexing and preserves the comment", () => {
   const catalog = new Catalog();
   const input = "[General]\r\n ArmorType = Heavyd   // test";

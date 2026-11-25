@@ -5,7 +5,8 @@ const { roots } = require("./roots");
 const { buildCatalog } = require("./catalog");
 const { parse } = require("./ini");
 const { diagnostics, exact, inspect } = require("./features");
-const { tokens } = require("./references");
+const { tokens, isMesh, meshColliderSections } = require("./references");
+const { MeshFiles } = require("./meshes");
 
 async function modDirectory(file) {
   const parent = path.dirname(file);
@@ -29,7 +30,9 @@ async function main(args) {
   const items = entry ? tokens(entry.value, entry.valueStart) : directive ? tokens(directive.args, directive.argsStart) : [];
   const emit = (name, row, col, message) => console.log(name + "|" + (row + 1) + "|" + (col + 1) + "| " + message);
   for (const token of items) {
-    for (const ref of exact(inspect(doc, uri, { line, character: token.start }, catalog))) {
+    const refs = entry && isMesh(entry, meshColliderSections(doc)) ? await new MeshFiles().resolve(doc, uri, entry, catalog) :
+      exact(inspect(doc, uri, { line, character: token.start }, catalog));
+    for (const ref of refs) {
       if (ref.file) emit(fileURLToPath(ref.file.uri), ref.line, ref.start, "Definition of " + token.name);
     }
   }

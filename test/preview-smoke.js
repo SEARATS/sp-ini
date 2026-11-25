@@ -26,6 +26,7 @@ exports.run = async () => {
     const editor = await vscode.window.showTextDocument(local);
     editor.selection = new vscode.Selection(line, 7, line, 7);
     await vscode.commands.executeCommand("editor.action.revealDefinition");
+    await waitFor(() => vscode.window.activeTextEditor?.document.uri.path.endsWith("/" + id + ".ini"));
     const target = vscode.window.activeTextEditor;
     assert.ok(target.document.uri.path.endsWith("/" + id + ".ini"), target.document.uri.path);
     assert.equal(vscode.window.tabGroups.activeTabGroup.activeTab.isPreview, true);
@@ -39,6 +40,34 @@ exports.run = async () => {
   await vscode.commands.executeCommand("default:type", { text: "x" });
   assert.ok(local.isDirty, "Local mod should accept typing");
   await vscode.commands.executeCommand("workbench.action.files.revert");
+  const meshIni = await vscode.workspace.openTextDocument(vscode.Uri.joinPath(root, "vessels/mesh.ini"));
+  const meshEditor = await vscode.window.showTextDocument(meshIni);
+  meshEditor.selection = new vscode.Selection(4, 6, 4, 6);
+  const definitions = await vscode.commands.executeCommand("vscode.executeDefinitionProvider", meshIni.uri, meshEditor.selection.active);
+  assert.ok(definitions.some(d => d.uri?.path.endsWith("/mesh.obj") && d.range.start.line === 3), JSON.stringify(definitions));
+  await vscode.commands.executeCommand("editor.action.revealDefinition");
+  await waitFor(() => vscode.window.activeTextEditor?.document.uri.path.endsWith("/mesh.obj"));
+  const meshSource = vscode.window.activeTextEditor;
+  assert.ok(meshSource?.document.uri.path.endsWith("/mesh.obj"), "Mesh definition opened " + JSON.stringify(vscode.window.tabGroups.activeTabGroup.activeTab?.input));
+  assert.equal(meshSource.selection.active.line, 3);
+  for (const [uri, line, char] of [[meshSource.document.uri, 3, 3], [meshIni.uri, 4, 6]]) {
+    const hovers = await vscode.commands.executeCommand("vscode.executeHoverProvider", uri, new vscode.Position(line, char));
+    assert.ok(hovers.some(h => h.contents.some(c => c.value?.includes("data:image/png;base64,"))), "Mesh hover should contain an image");
+  }
+  const editSource = await vscode.window.showTextDocument(meshIni);
+  await waitFor(() => vscode.languages.getDiagnostics(meshIni.uri).some(d => d.code === "invalid-value"));
+  const fixes = await vscode.commands.executeCommand("vscode.executeCodeActionProvider", meshIni.uri, meshIni.lineAt(6).range);
+  const suppress = fixes.find(f => f.title === "Suppress invalid-value on this line");
+  assert.ok(suppress?.edit);
+  await vscode.workspace.applyEdit(suppress.edit);
+  assert.equal(meshIni.lineAt(6).text, "ArmorType=Typo ; sp-ini-ignore invalid-value");
+  await waitFor(() => !vscode.languages.getDiagnostics(meshIni.uri).some(d => d.code === "invalid-value"));
+  editSource.selection = new vscode.Selection(4, 0, 4, 0);
+  await vscode.commands.executeCommand("seapower-ini.toggleSection");
+  await waitFor(() => meshIni.lineAt(4).text === "; Mesh=Part");
+  await vscode.commands.executeCommand("seapower-ini.toggleSection");
+  await waitFor(() => meshIni.lineAt(4).text === "Mesh=Part");
+  await meshIni.save();
   const iniRanges = await vscode.commands.executeCommand("vscode.executeFoldingRangeProvider", local.uri);
   assert.ok(iniRanges.some(range => range.start === 1 && range.end === 2));
   const obj = vscode.Uri.joinPath(root, "triangle.obj");

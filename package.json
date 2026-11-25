@@ -2,7 +2,7 @@
   "name": "seapower-ini",
   "displayName": "Sea Power INI",
   "description": "Autocomplete, error checking and Go to Definition for Sea Power INI files.",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "publisher": "searats",
   "private": true,
   "repository": { "type": "git", "url": "https://github.com/SEARATS/sp-ini.git" },
@@ -29,13 +29,24 @@
       "displayName": "OBJ Preview",
       "selector": [{ "filenamePattern": "*.[oO][bB][jJ]" }],
       "priority": "default"
+    }, {
+      "viewType": "seapower-ini.fbx",
+      "displayName": "FBX Preview",
+      "selector": [{ "filenamePattern": "*.[fF][bB][xX]" }],
+      "priority": "default"
     }],
     "commands": [
       { "command": "seapower-ini.previewObj", "title": "Preview OBJ", "category": "Sea Power INI", "icon": "$(preview)" },
+      { "command": "seapower-ini.suppress", "title": "Suppress Diagnostic on This Line", "category": "Sea Power INI", "enablement": "editorLangId == seapower-ini && !editorReadonly" },
+      { "command": "seapower-ini.toggleSection", "title": "Comment or Uncomment INI Section", "category": "Sea Power INI", "enablement": "editorLangId == seapower-ini && !editorReadonly" },
       { "command": "seapower-ini.refresh", "title": "Sea Power INI: Rebuild Content Index" },
       { "command": "seapower-ini.referencePreviews", "title": "Sea Power INI: Enable Read-Only Reference Previews in Workspace" }
     ],
     "menus": {
+      "editor/context": [
+        { "command": "seapower-ini.suppress", "when": "editorLangId == seapower-ini && !editorReadonly", "group": "seapower@1" },
+        { "command": "seapower-ini.toggleSection", "when": "editorLangId == seapower-ini && !editorReadonly", "group": "seapower@2" }
+      ],
       "editor/title": [{ "command": "seapower-ini.previewObj", "when": "resourceExtname =~ /[.]obj$/i && activeCustomEditorId != seapower-ini.obj", "group": "navigation" }],
       "explorer/context": [{ "command": "seapower-ini.previewObj", "when": "resourceExtname =~ /[.]obj$/i && !explorerResourceIsFolder" }],
       "commandPalette": [{ "command": "seapower-ini.previewObj", "when": "resourceExtname =~ /[.]obj$/i" }]
@@ -73,6 +84,8 @@
   },
   "devDependencies": {
     "@vscode/vsce": "4.1.1",
+    "jpeg-js": "0.4.4",
+    "pngjs": "7.0.0",
     "three": "0.187.0",
     "esbuild": "0.28.2",
     "vscode-languageclient": "9.0.1",

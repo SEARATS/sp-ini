@@ -1,5 +1,6 @@
-import { Box3, DirectionalLight, HemisphereLight, PerspectiveCamera, Scene, Sphere, WebGLRenderer } from "three";
+import { Box3, DirectionalLight, HemisphereLight, LoadingManager, PerspectiveCamera, Scene, Sphere, WebGLRenderer } from "three";
 import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
+import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
 const vscode = acquireVsCodeApi();
@@ -34,22 +35,36 @@ function resize() {
   draw();
 }
 
-function clearModel() {
-  if (!model) return;
-  scene.remove(model);
-  model.traverse(child => {
+function dispose(group) {
+  group.traverse(child => {
     child.geometry?.dispose();
-    if (child.material) [child.material].flat().forEach(material => material.dispose());
+    if (child.material) [child.material].flat().forEach(material => {
+      for (const value of Object.values(material)) if (value?.isTexture) value.dispose();
+      material.dispose();
+    });
   });
-  model = undefined;
 }
 
-function load(text) {
+let revision = 0;
+async function load(data) {
+  const current = ++revision;
+  if (model) { scene.remove(model); dispose(model); model = undefined; }
   try {
-    clearModel();
-    model = new OBJLoader().parse(text);
+    let next;
+    if (data.type === "fbx") {
+      const manager = new LoadingManager();
+      manager.onLoad = () => { if (current === revision) draw(); };
+      const response = await fetch(data.url, { cache: "no-store" });
+      if (!response.ok) throw Error("Could not read FBX (" + response.status + ").");
+      const buffer = await response.arrayBuffer();
+      if (current !== revision) return;
+      next = new FBXLoader(manager).parse(buffer, new URL(".", data.url).href);
+    } else {
+      next = new OBJLoader().parse(data.text);
+    }
+    model = next;
     new Box3().setFromObject(model).getBoundingSphere(bounds);
-    if (!Number.isFinite(bounds.radius) || bounds.isEmpty()) throw Error("No drawable geometry in this OBJ.");
+    if (!Number.isFinite(bounds.radius) || bounds.isEmpty()) throw Error("No drawable geometry in this model.");
     bounds.radius ||= 1;
     model.position.sub(bounds.center);
     scene.add(model);
@@ -57,7 +72,8 @@ function load(text) {
     fit.hidden = false;
     status.textContent = "Drag to orbit · Scroll to zoom";
   } catch (error) {
-    clearModel();
+    if (current !== revision) return;
+    if (model) { scene.remove(model); dispose(model); model = undefined; }
     draw();
     fit.hidden = true;
     status.textContent = error.message;
@@ -75,8 +91,8 @@ try {
   resize();
   window.addEventListener("resize", resize);
   fit.addEventListener("click", frame);
-  window.addEventListener("message", ({ data }) => { if (data.type === "model") load(data.text); });
+  window.addEventListener("message", ({ data }) => { if (data.type === "model" || data.type === "fbx") load(data); });
   vscode.postMessage({ type: "ready" });
 } catch {
-  status.textContent = "The OBJ preview needs WebGL 2. Check graphics acceleration in VS Code.";
+  status.textContent = "The model preview needs WebGL 2. Check graphics acceleration in VS Code.";
 }
