@@ -2,13 +2,12 @@ name: Publish editor releases
 
 on:
   push:
+    branches: [main]
     tags: ['v*']
   workflow_dispatch:
 
 permissions:
   contents: read
-
-concurrency: publish-${{ github.ref }}
 
 jobs:
   build:
@@ -17,32 +16,52 @@ jobs:
 
   github-release:
     needs: build
+    concurrency: github-release-${{ needs.build.outputs.tag }}
+    outputs:
+      publish: ${{ steps.release.outputs.publish }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - uses: actions/download-artifact@v4
         with:
           name: editor-downloads
           path: release
       - name: Publish editor downloads
+        id: release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.build.outputs.tag }}
         run: |
-          if gh release view "$GITHUB_REF_NAME" --json isDraft > release-state.json; then
-            if [ "$(jq -r .isDraft release-state.json)" = false ]; then exit 0; fi
-            gh release upload "$GITHUB_REF_NAME" release/* --clobber
-          else
-            gh release create "$GITHUB_REF_NAME" release/* --draft --verify-tag --generate-notes --title "Sea Power INI $GITHUB_REF_NAME"
+          commit=$(git rev-parse HEAD)
+          if git show-ref --verify --quiet "refs/tags/$RELEASE_TAG"; then
+            if [ "$(git rev-list -1 "$RELEASE_TAG")" != "$commit" ]; then
+              echo "$RELEASE_TAG already belongs to an earlier commit. Build passed."
+              exit 0
+            fi
           fi
-          gh release edit "$GITHUB_REF_NAME" --draft=false
+
+          if gh release view "$RELEASE_TAG" --json isDraft > release-state.json; then
+            if [ "$(jq -r .isDraft release-state.json)" = true ]; then
+              gh release upload "$RELEASE_TAG" release/* --clobber
+              gh release edit "$RELEASE_TAG" --draft=false
+            fi
+          else
+            gh release create "$RELEASE_TAG" release/* --target "$commit" --draft --generate-notes --title "Sea Power INI $RELEASE_TAG"
+            gh release edit "$RELEASE_TAG" --draft=false
+          fi
+          echo "publish=true" >> "$GITHUB_OUTPUT"
 
   marketplace:
-    needs: github-release
+    needs: [build, github-release]
+    concurrency: marketplace-${{ needs.build.outputs.tag || github.ref }}
     if: >-
       always() && vars.PUBLISH_MARKETPLACE == 'true' &&
-      (needs.github-release.result == 'success' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'))
+      (needs.github-release.outputs.publish == 'true' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'))
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -66,7 +85,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           version=$(node -p 'require("./package.json").version')
-          test "$GITHUB_REF_NAME" = "v$version"
           vsix="seapower-ini-$version.vsix"
-          gh release download "$GITHUB_REF_NAME" --pattern "$vsix" --dir "$RUNNER_TEMP"
-          pnpm exec vsce publish --oidc --packagePath "$RUNNER_TEMP/$vsix"
+          gh release download "v$version" --pattern "$vsix" --dir "$RUNNER_TEMP"
+          pnpm exec vsce publish --oidc --skip-duplicate --packagePath "$RUNNER_TEMP/$vsix"
