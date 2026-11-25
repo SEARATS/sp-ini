@@ -1,0 +1,10 @@
+{
+  "scopeName": "source.seapower-ini",
+  "patterns": [
+    { "match": "^\\s*(#!(?:extend|prepend|alias|copy|repeat|end))\\b", "captures": { "1": { "name": "keyword.control.directive.seapower-ini" } } },
+    { "match": "(?:;|#|(?<!:)//).*$", "name": "comment.line.seapower-ini" },
+    { "match": "^\\s*\\[[^\\]]+\\]", "name": "entity.name.section.seapower-ini" },
+    { "match": "^\\s*([^=;#]+?)\\s*(=)", "captures": { "1": { "name": "variable.other.property.seapower-ini" }, "2": { "name": "keyword.operator.assignment.seapower-ini" } } },
+    { "match": "(?i)\\b(true|false|yes|no)\\b", "name": "constant.language.seapower-ini" }
+  ]
+}

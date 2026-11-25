@@ -1,0 +1,103 @@
+const fs = require("node:fs/promises");
+const path = require("node:path");
+const { pathToFileURL } = require("node:url");
+const { parse, sectionGroup } = require("./ini");
+const { children } = require("./roots");
+
+const unitFolders = { aircraft: ["aircraft", "helicopter"], vessels: ["vessel", "submarine"], land_units: ["landunit"], biologic: ["biologic"] };
+const excluded = new Set(["node_modules", "bin", "obj", "dist", "decompiled", "artifacts", "Library", "Packages"]);
+const normalize = value => value.replaceAll("\\", "/").toLowerCase();
+const unitFolder = rel => normalize(rel).split("/").at(-2);
+
+function family(rel, doc) {
+  const target = doc.modifiers.find(m => ["extend", "prepend", "copy", "alias"].includes(m.name))?.args.split(",")[0].trim();
+  const parts = normalize(target || rel).split("/");
+  const name = parts.pop();
+  if (name === "_info.ini") return "mod metadata";
+  if (doc.sections.some(s => s.name.toLowerCase() === "mission") || parts.includes("missions")) return "mission";
+  if (name.endsWith("_variants.ini")) return "variants";
+  if (name.endsWith("_squadrons.ini")) return "squadrons";
+  const folder = parts.at(-1);
+  if (Object.hasOwn(unitFolders, folder) || folder === "ammunition") return folder;
+  const unitType = doc.sections.find(s => s.name.toLowerCase() === "general")?.keys.find(k => k.name.toLowerCase() === "unittype");
+  if (unitType) {
+    for (const [dir, types] of Object.entries(unitFolders)) {
+      if (types.includes(unitType.value.toLowerCase())) return dir;
+    }
+  }
+  return name;
+}
+
+function getOrCreate(map, key, make) {
+  if (!map.has(key)) map.set(key, make());
+  return map.get(key);
+}
+
+class Catalog {
+  sections = new Map();
+  units = new Map();
+  paths = new Map();
+  counts = new Map();
+  skipped = 0;
+
+  add(file, doc) {
+    const group = family(file.rel, doc);
+    const ref = (name, line, start = 0) => ({ name, line, start, file });
+    const addPath = rel => getOrCreate(this.paths, normalize(rel), () => []).push(ref(rel, 0));
+    addPath(file.rel);
+    const parent = unitFolder(file.rel);
+    const filename = path.basename(file.rel);
+    if (Object.hasOwn(unitFolders, parent) && !/_(?:variants|squadrons)\.ini$/i.test(filename) && filename.toLowerCase() !== "_info.ini" &&
+        !doc.modifiers.some(m => ["extend", "prepend"].includes(m.name))) {
+      const id = filename.slice(0, -4);
+      const type = doc.sections.find(s => s.name.toLowerCase() === "general")?.keys.find(k => k.name.toLowerCase() === "unittype");
+      const kind = type?.value.toLowerCase();
+      const kinds = kind === "vtol" ? ["aircraft"] : kind ? [kind] : unitFolders[parent];
+      getOrCreate(this.units, id.toLowerCase(), () => []).push({ ...ref(id, type?.line || 0), kinds });
+    }
+    for (const section of doc.sections) {
+      const groups = getOrCreate(this.sections, sectionGroup(section.name), () => new Map());
+      const schema = getOrCreate(groups, group, () => ({ ...ref(section.name, section.line, section.start), keys: new Map() }));
+      for (const key of section.keys) {
+        if (!schema.keys.has(key.name.toLowerCase())) schema.keys.set(key.name.toLowerCase(), {
+          ...ref(key.name, key.line, key.start), example: key.value.slice(0, 100)
+        });
+      }
+    }
+    this.counts.set(file.source, (this.counts.get(file.source) || 0) + 1);
+  }
+
+  schemas(name, group) {
+    const groups = this.sections.get(sectionGroup(name));
+    return groups?.has(group) ? [groups.get(group)] : [...(groups?.values() || [])];
+  }
+}
+
+async function buildCatalog(roots) {
+  const catalog = new Catalog(), seen = new Set();
+  const files = [];
+  async function walk(dir, base, source) {
+    const childrenHere = await children(dir);
+    if (childrenHere.some(e => e.name.toLowerCase() === "_info.ini") && source === "Workspace") base = dir;
+    for (const entry of childrenHere.sort((a, b) => a.name.localeCompare(b.name))) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory() && !entry.name.startsWith(".") && !excluded.has(entry.name)) await walk(full, base, source);
+      else if (entry.isFile() && entry.name.toLowerCase().endsWith(".ini") && !seen.has(full)) {
+        seen.add(full);
+        files.push({ full, rel: path.relative(base, full).replaceAll("\\", "/"), uri: pathToFileURL(full).href, source });
+      }
+    }
+  }
+  for (const { dir, source } of roots) await walk(dir, dir, source);
+  for (let pos = 0; pos < files.length; pos += 24) {
+    const batch = files.slice(pos, pos + 24);
+    const texts = await Promise.all(batch.map(file => fs.readFile(file.full, "utf8").catch(() => null)));
+    texts.forEach((text, i) => {
+      if (text === null) catalog.skipped++;
+      else catalog.add(batch[i], parse(text));
+    });
+  }
+  return catalog;
+}
+
+module.exports = { Catalog, buildCatalog, family, normalize };
