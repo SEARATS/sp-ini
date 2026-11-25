@@ -71,3 +71,30 @@ test("source order preserves unchecked positions and uses the first matching pac
   catalog.sourceRanks.set("Resources",0);
   assert.equal(await catalog.withPacked(loose,async()=>"loose",async()=>"stock"),"loose");
 });
+
+test("material folder completion uses existing Resources directories or content-relative mod paths", async t => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(),"sp-material-folders-"));
+  t.after(()=>fs.rm(temp,{recursive:true,force:true}));
+  const resources = {dir:path.join(temp,"CustomResources"),source:"Resources"};
+  const workspace = {dir:path.join(temp,"workspace"),source:"Workspace"};
+  const mod = path.join(workspace.dir,"nested-mod");
+  await fs.mkdir(path.join(mod,"ships","Loose Paint"),{recursive:true});
+  await fs.writeFile(path.join(mod,"_info.ini"),"[General]");
+  await fs.writeFile(path.join(mod,"ship.ini"),"[Part]\nResourcesMaterialFolder=ships/packed/");
+  const complete = (catalog, text: string, at=text.length) => catalog.materialFolders.complete(parse(text).entries[0],at);
+  const key = "ResourcesMaterialFolder=";
+  const missing = await buildCatalog([resources,workspace]);
+  assert.deepEqual(complete(missing,key+"ships/").map(i=>i.label).sort(),["ships/Loose Paint/","ships/packed/"]);
+  await fs.mkdir(resources.dir);
+  assert.deepEqual(complete(await buildCatalog([resources,workspace]),key),[]);
+  await fs.mkdir(path.join(resources.dir,"Ships","Materials","Grey"),{recursive:true});
+  const catalog = await buildCatalog([workspace,resources]);
+  assert.deepEqual(complete(catalog,key).map(i=>i.label),["Ships/"]);
+  const text = key+"  ships\\maTT/Grey/  // keep";
+  const [item] = complete(catalog,text,text.indexOf("TT"));
+  assert.equal(item.label,"Ships/Materials/");
+  assert.deepEqual(item.textEdit,{range:{start:{line:0,character:key.length+2},end:{line:0,character:text.indexOf("Grey")}},newText:"Ships/Materials/"});
+  assert.deepEqual(complete(catalog,text),[]);
+  assert.deepEqual(complete(catalog,key+"ships/Loose"),[]);
+  assert.deepEqual(complete(await buildCatalog([workspace]),key+"ships/lo").map(i=>i.label),["ships/Loose Paint/"]);
+});

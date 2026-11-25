@@ -36,6 +36,8 @@ A relative parent starts at each workspace folder. Set the parent to an absolute
 
 For example, `ResourcesMaterialFolder=ships/materials/` and `Material=usn_parts` can resolve to `Assets/Resources/ships/materials/usn_parts.mat`. Set `seapowerIni.search.resources` to `false` to skip that lookup while keeping the configured path.
 
+After `ResourcesMaterialFolder=`, use **Ctrl+Space** and accept a folder with **Tab**. Paths start at the configured Resources folder. When that folder is missing or its search is disabled, suggestions come from enabled mod and game content folders and the material paths declared in their INIs.
+
 The VS Code FBX viewer opens binary and ASCII FBX models, including hierarchy transforms. Explicit FBX file paths in INIs open the model. Named mesh and collider definitions in OBJ files also support jumping to a source line.
 
 ## Generate submodels and colliders

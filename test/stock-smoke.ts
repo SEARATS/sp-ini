@@ -49,6 +49,12 @@ export const run = async () => {
   const deck = lines.indexOf("[Deck]");
   assert.ok(deck>=0);
   const outcomes = [];
+  const folderLine = lines.findIndex(l=>/^ResourcesMaterialFolder=ships\/materials\//i.test(l));
+  assert.ok(folderLine>=0);
+  const folders = await vscode.commands.executeCommand<vscode.CompletionList>("vscode.executeCompletionItemProvider",
+    ini,new vscode.Position(folderLine,"ResourcesMaterialFolder=ships/ma".length));
+  assert.ok(folders.items.some(i=>String(i.label).toLowerCase()==="ships/materials/" && i.kind===vscode.CompletionItemKind.Folder));
+  outcomes.push("Completed ships/materials/ in the Spruance INI");
   for (const [key,labels] of [["Mesh",["303 faces","Wireframe","Textured"]],["Material",["Lit material","MainTex","SpecTex","BumpMap"]]] as const) {
     const line = lines.findIndex((s,i)=>i>deck && s.startsWith(key+"="));
     const pos = new vscode.Position(line,key.length+2);

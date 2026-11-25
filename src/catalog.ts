@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import { parse, sectionGroup } from "./ini";
 import { children, type ContentRoot } from "./roots";
 import { scalarType } from "./values";
+import { MaterialFolders } from "./material-folders";
 
 const unitFolders = { aircraft: ["aircraft", "helicopter"], vessels: ["vessel", "submarine"], land_units: ["landunit"], biologic: ["biologic"] };
 const excluded = new Set(["node_modules", "bin", "obj", "dist", "decompiled", "artifacts", "Library", "Packages"]);
@@ -45,6 +46,7 @@ function getOrCreate(map, key, make) {
 }
 
 class Catalog {
+  readonly materialFolders = new MaterialFolders();
   sourceRanks = new Map<string,number>();
   rank(source?: string) { return this.sourceRanks.get(source) ?? Number.MAX_SAFE_INTEGER; }
   preferred(refs) {
@@ -146,6 +148,8 @@ class Catalog {
 async function buildCatalog(roots: ContentRoot[]) {
   const catalog = new Catalog(), seen = new Set();
   const originRanks = new Map([...new Set(roots.map(r=>r.origin || r.source))].map((origin,i)=>[origin,i]));
+  const resourceRoots = roots.filter(r=>r.source === "Resources");
+  const useResources = (await Promise.all(resourceRoots.map(r=>fs.stat(r.dir).then(s=>s.isDirectory(),()=>false)))).some(Boolean);
   const files = [], textureMeta = [];
   const manifestGuids = new Map<string,string>();
   const manifests = new Map();
@@ -165,6 +169,8 @@ async function buildCatalog(roots: ContentRoot[]) {
     const childrenHere = await children(dir);
     const meta = source === "Resources" ? new Set(childrenHere.map(e=>e.name)) : undefined;
     if ((source === "Workspace" || source === "Data") && childrenHere.some(e => e.name.toLowerCase() === "_info.ini")) base = dir;
+    if (dir !== base && (!useResources || source === "Resources"))
+      catalog.materialFolders.add(path.relative(base,dir),source,catalog.rank(source));
     for (const entry of childrenHere.sort((a, b) => a.name.localeCompare(b.name))) {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory() && !entry.name.startsWith(".") && !excluded.has(entry.name)) await walk(full, base, source, omit);
@@ -247,7 +253,13 @@ async function buildCatalog(roots: ContentRoot[]) {
     const texts = await Promise.all(batch.map(file => fs.readFile(file.full, "utf8").catch(() => null)));
     texts.forEach((text, i) => {
       if (text === null) catalog.skipped++;
-      else catalog.add(batch[i], parse(text));
+      else {
+        const doc = parse(text), file = batch[i];
+        catalog.add(file,doc);
+        if (!useResources) for (const entry of doc.entries) {
+          if (/^resourcesmaterialfolder$/i.test(entry.name)) catalog.materialFolders.add(entry.value,file.source,catalog.rank(file.source));
+        }
+      }
     });
   }
   return catalog;

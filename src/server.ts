@@ -111,8 +111,13 @@ async function meshAt(params) {
   return meshes.resolve(doc, uri, entry, catalog);
 }
 connection.onCompletion(async p => {
-  const info = await context(p), uri = p.textDocument.uri, doc = parsed.get(uri);
+  const uri = p.textDocument.uri, doc = parsed.get(uri);
   const entry = doc?.entries.find(e => e.line === p.position.line);
+  if (entry && /^resourcesmaterialfolder$/i.test(entry.name) && p.position.character > doc.lines[entry.line].indexOf("=")) {
+    await building;
+    return catalog.materialFolders.complete(entry,p.position.character);
+  }
+  const info = await context(p);
   if (entry && isMesh(entry, meshColliderSections(doc)) && p.position.character >= entry.valueStart &&
       p.position.character <= entry.valueStart + entry.value.length) {
     const refs = await meshes.resolve(doc, uri, entry, catalog, undefined, undefined, true);
