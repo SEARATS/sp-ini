@@ -13,6 +13,12 @@ async function waitFor(check) {
 exports.run = async () => {
   const root = vscode.workspace.workspaceFolders[0].uri;
   assert.ok(root.path.endsWith("/preview-fixture"));
+  const first = vscode.Uri.joinPath(root, "first.obj");
+  await vscode.workspace.fs.writeFile(first, Buffer.from("# sample\no Mesh\nv 0 0 0\n"));
+  await vscode.commands.executeCommand("vscode.openWith", first, "default");
+  await waitFor(() => vscode.extensions.getExtension("searats.seapower-ini").isActive);
+  const firstRanges = await vscode.commands.executeCommand("vscode.executeFoldingRangeProvider", first);
+  assert.ok(firstRanges.some(range => range.start === 1 && range.end === 2), "OBJ source alone must activate folding");
   await vscode.commands.executeCommand("seapower-ini.referencePreviews");
   const local = await vscode.workspace.openTextDocument(vscode.Uri.joinPath(root, "missions/demo.ini"));
   await vscode.window.showTextDocument(local, { preview: false });
@@ -36,13 +42,36 @@ exports.run = async () => {
   const iniRanges = await vscode.commands.executeCommand("vscode.executeFoldingRangeProvider", local.uri);
   assert.ok(iniRanges.some(range => range.start === 1 && range.end === 2));
   const obj = vscode.Uri.joinPath(root, "triangle.obj");
-  await vscode.workspace.fs.writeFile(obj, Buffer.from("o Triangle\ng Face\nv 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n"));
-  await vscode.commands.executeCommand("vscode.open", obj);
+  await vscode.workspace.fs.writeFile(obj, Buffer.from("o Triangle\ng Face\nv 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\no Second\nf 3 2 1\n"));
   const groups = () => vscode.window.tabGroups.all.map(g => g.activeTab?.input);
+  await vscode.commands.executeCommand("vscode.open", obj);
+  await waitFor(() => groups().some(t => t?.viewType === "seapower-ini.obj" && t.uri.path === obj.path));
+  assert.equal(vscode.window.tabGroups.all.length, 1, "Opening an OBJ should keep a single group by default");
+  assert.ok(!vscode.window.tabGroups.all.flatMap(g => g.tabs).some(({ input }) =>
+    input instanceof vscode.TabInputText && input.uri.path === obj.path));
+  await vscode.commands.executeCommand("workbench.action.closeActiveEditor");
+  await vscode.workspace.getConfiguration("seapowerIni").update("obj.openSourceBeside", true, vscode.ConfigurationTarget.Workspace);
+  await vscode.commands.executeCommand("vscode.open", obj);
   await waitFor(() => groups().some(t => t?.viewType === "seapower-ini.obj" && t.uri.path === obj.path) &&
     groups().some(t => t instanceof vscode.TabInputText && t.uri.path === obj.path));
   const objRanges = await vscode.commands.executeCommand("vscode.executeFoldingRangeProvider", obj);
   assert.ok(objRanges.some(range => range.start === 0 && range.end === 5));
   assert.ok(objRanges.some(range => range.start === 1 && range.end === 5));
+  await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+  await vscode.workspace.getConfiguration("workbench").update("editorAssociations", { "*.obj": "default" }, vscode.ConfigurationTarget.Workspace);
+  await vscode.commands.executeCommand("vscode.open", obj);
+  await waitFor(() => vscode.window.activeTextEditor?.document.uri.path === obj.path);
+  assert.ok(!groups().some(t => t?.viewType === "seapower-ini.obj"));
+  const source = vscode.window.activeTextEditor;
+  await waitFor(() => source.visibleRanges.some(range => range.start.line === 6));
+  source.selection = new vscode.Selection(0, 0, 0, 0);
+  await vscode.commands.executeCommand("cursorDown");
+  assert.equal(source.selection.active.line, 6, "First object's body should be folded");
+  await vscode.commands.executeCommand("cursorDown");
+  assert.equal(source.selection.active.line, 8, "Second object's body should be folded");
+  await vscode.commands.executeCommand("editor.unfold", { selectionLines: [0], levels: 1 });
+  source.selection = new vscode.Selection(0, 0, 0, 0);
+  await vscode.commands.executeCommand("cursorDown");
+  assert.equal(source.selection.active.line, 1, "Individual objects can be expanded");
   await vscode.workspace.fs.writeFile(vscode.Uri.joinPath(root, "preview-test-passed"), Buffer.from("ok"));
 };
