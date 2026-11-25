@@ -1,0 +1,52 @@
+{
+  "name": "seapower-ini",
+  "displayName": "Sea Power INI",
+  "description": "INI editing for Sea Power with definitions from the game, local mods and Steam Workshop.",
+  "version": "0.1.0",
+  "publisher": "searats",
+  "private": true,
+  "repository": { "type": "git", "url": "https://github.com/SEARATS/seapower-ini.git" },
+  "engines": { "vscode": "^1.82.0" },
+  "categories": ["Programming Languages"],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "languages": [{
+      "id": "seapower-ini",
+      "aliases": ["Sea Power INI"],
+      "filenamePatterns": ["**/Sea Power_Data/StreamingAssets/**/*.ini", "**/workshop/content/1286220/**/*.ini"],
+      "firstLine": "^\\s*#!(?:extend|prepend|alias|copy)\\b",
+      "configuration": "./language.json"
+    }],
+    "grammars": [{ "language": "seapower-ini", "scopeName": "source.seapower-ini", "path": "./syntax.json" }],
+    "commands": [{ "command": "seapower-ini.refresh", "title": "Sea Power INI: Rebuild Content Index" }],
+    "configuration": {
+      "title": "Sea Power INI",
+      "properties": {
+        "seapowerIni.gameDirectory": {
+          "type": "string", "default": "", "scope": "machine",
+          "description": "Sea Power installation folder containing Sea Power_Data. Leave empty to search Steam libraries."
+        },
+        "seapowerIni.localModDirectories": {
+          "type": "array", "items": { "type": "string" }, "default": [], "scope": "machine",
+          "description": "Additional absolute paths to local mod content folders."
+        },
+        "seapowerIni.workshopDirectories": {
+          "type": "array", "items": { "type": "string" }, "default": [], "scope": "machine",
+          "description": "Additional absolute paths to Steam Workshop content/1286220 folders."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "esbuild src/extension.js src/server.js --bundle --platform=node --target=node18 --external:vscode --outdir=dist",
+    "test": "node --test test/*.test.js",
+    "package": "pnpm run build && vsce package --no-dependencies --skip-license"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "4.1.1",
+    "esbuild": "0.28.2",
+    "vscode-languageclient": "9.0.1",
+    "vscode-languageserver": "9.0.1",
+    "vscode-languageserver-textdocument": "1.0.12"
+  }
+}

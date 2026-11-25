@@ -1,0 +1,7 @@
+src/**
+test/**
+node_modules/**
+pnpm-*
+.gitignore
+.vscodeignore
+*.vsix
