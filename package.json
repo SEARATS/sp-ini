@@ -2,13 +2,14 @@
   "name": "seapower-ini",
   "displayName": "Sea Power INI",
   "description": "Autocomplete, error checking and Go to Definition for Sea Power INI files.",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "publisher": "searats",
   "private": true,
   "repository": { "type": "git", "url": "https://github.com/SEARATS/sp-ini.git" },
   "engines": { "vscode": "^1.82.0" },
   "categories": ["Programming Languages"],
   "main": "./dist/extension.js",
+  "activationEvents": ["onLanguage:wavefront-obj"],
   "contributes": {
     "languages": [{
       "id": "seapower-ini",
@@ -20,6 +21,9 @@
       "id": "wavefront-obj", "aliases": ["Wavefront OBJ"], "extensions": [".obj"]
     }],
     "grammars": [{ "language": "seapower-ini", "scopeName": "source.seapower-ini", "path": "./syntax.json" }],
+    "configurationDefaults": {
+      "[wavefront-obj]": { "editor.showFoldingControls": "always" }
+    },
     "customEditors": [{
       "viewType": "seapower-ini.obj",
       "displayName": "OBJ Preview",
@@ -39,8 +43,12 @@
     "configuration": {
       "title": "Sea Power INI",
       "properties": {
-        "seapowerIni.obj.openSourceBeside": {
+        "seapowerIni.obj.collapseObjectsOnOpen": {
           "type": "boolean", "default": true, "scope": "resource",
+          "description": "Collapse object blocks when opening OBJ source."
+        },
+        "seapowerIni.obj.openSourceBeside": {
+          "type": "boolean", "default": false, "scope": "resource",
           "description": "Open the OBJ source beside its 3D preview."
         },
         "seapowerIni.gameDirectory": {

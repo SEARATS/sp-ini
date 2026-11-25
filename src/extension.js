@@ -5,6 +5,27 @@ const { objFolds } = require("./folding");
 const { registerObjPreview } = require("./obj-preview");
 let client;
 
+function registerObjFolding() {
+  const seen = new WeakSet();
+  const provider = vscode.languages.registerFoldingRangeProvider({ pattern: "**/*.[oO][bB][jJ]" }, {
+    provideFoldingRanges: document => objFolds(document).map(r => new vscode.FoldingRange(r.startLine, r.endLine))
+  });
+  async function collapseObjects(editor) {
+    const doc = editor?.document;
+    if (!doc || !/\.obj$/i.test(doc.uri.path) || seen.has(doc)) return;
+    seen.add(doc);
+    if (!vscode.workspace.getConfiguration("seapowerIni", doc.uri).get("obj.collapseObjectsOnOpen")) return;
+    const ranges = await vscode.commands.executeCommand("vscode.executeFoldingRangeProvider", doc.uri);
+    if (vscode.window.activeTextEditor !== editor) { seen.delete(doc); return; }
+    const selectionLines = (ranges || []).map(range => range.start).filter(line => /^\s*o(?:\s|$)/.test(doc.lineAt(line).text));
+    if (selectionLines.length) await vscode.commands.executeCommand("editor.fold", { selectionLines, levels: 1, direction: "down" });
+  }
+  const onEditor = editor => collapseObjects(editor).catch(error => console.warn("OBJ folding:", error.message));
+  const active = vscode.window.onDidChangeActiveTextEditor(onEditor);
+  onEditor(vscode.window.activeTextEditor);
+  return vscode.Disposable.from(provider, active);
+}
+
 function options() {
   const config = vscode.workspace.getConfiguration("seapowerIni");
   return { gameDirectory: config.get("gameDirectory"), localModDirectories: config.get("localModDirectories"),
@@ -19,10 +40,7 @@ async function activate(context) {
     fs.watchFile(stamp, { interval: 350 }, reload);
     context.subscriptions.push({ dispose: () => fs.unwatchFile(stamp, reload) });
   }
-  context.subscriptions.push(registerObjPreview(context),
-    vscode.languages.registerFoldingRangeProvider({ pattern: "**/*.[oO][bB][jJ]" }, {
-      provideFoldingRanges: document => objFolds(document).map(r => new vscode.FoldingRange(r.startLine, r.endLine))
-    }));
+  context.subscriptions.push(registerObjPreview(context), registerObjFolding());
   client = new LanguageClient("seapower-ini", "Sea Power INI",
     { module: context.asAbsolutePath("dist/server.js"), transport: TransportKind.ipc },
     { documentSelector: [{ language: "seapower-ini", scheme: "file" }, { language: "seapower-ini", scheme: "untitled" }],
