@@ -6,4 +6,4 @@ Press **Ctrl+Space** for keys and values. Press **F12** on a unit, sensor, weapo
 
 Open a mod folder in VS Code and select **Sea Power INI** in the language picker. To protect game and Workshop files while browsing, run **Sea Power INI: Enable Read-Only Reference Previews in Workspace**.
 
-[Downloads](https://github.com/SEARATS/seapower-ini/releases) · [Editor setup](docs/setup.md) · [PSPad instructions](pspad/README.txt)
+[Downloads](https://github.com/SEARATS/sp-ini/releases) · [Editor setup](docs/setup.md) · [PSPad instructions](pspad/README.txt)

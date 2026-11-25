@@ -5,7 +5,7 @@
   "version": "0.3.0",
   "publisher": "searats",
   "private": true,
-  "repository": { "type": "git", "url": "https://github.com/SEARATS/seapower-ini.git" },
+  "repository": { "type": "git", "url": "https://github.com/SEARATS/sp-ini.git" },
   "engines": { "vscode": "^1.82.0" },
   "categories": ["Programming Languages"],
   "main": "./dist/extension.js",
