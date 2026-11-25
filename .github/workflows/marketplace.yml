@@ -1,0 +1,35 @@
+name: Publish VS Code Marketplace extension
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    if: vars.PUBLISH_MARKETPLACE == 'true' && !github.event.release.prerelease
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.23.0
+      - run: pnpm install --frozen-lockfile
+      - name: Publish the released VSIX using Trusted Publishing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          version=$(node -p 'require("./package.json").version')
+          test "$TAG" = "v$version"
+          vsix="seapower-ini-$version.vsix"
+          gh release download "$TAG" --pattern "$vsix" --dir "$RUNNER_TEMP"
+          pnpm exec vsce publish --oidc --packagePath "$RUNNER_TEMP/$vsix"

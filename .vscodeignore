@@ -1,5 +1,8 @@
 src/**
 scripts/**
+.github/**
+pspad/**
+release/**
 test/**
 node_modules/**
 pnpm-*
