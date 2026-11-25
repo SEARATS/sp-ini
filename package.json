@@ -2,7 +2,7 @@
   "name": "seapower-ini",
   "displayName": "Sea Power INI",
   "description": "Autocomplete, error checking and Go to Definition for Sea Power INI files.",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "publisher": "searats",
   "private": true,
   "repository": { "type": "git", "url": "https://github.com/SEARATS/sp-ini.git" },

@@ -1,5 +1,7 @@
 # Sea Power INI
 
+[Downloads](https://github.com/SEARATS/sp-ini/releases) | [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=SEARATS.seapower-ini) | [Editor setup](https://github.com/SEARATS/sp-ini/blob/main/docs/setup.md) | [PSPad](https://github.com/SEARATS/sp-ini/blob/main/pspad/README.txt) | [Notepad++](https://github.com/SEARATS/sp-ini/blob/main/notepadpp/README.md)
+
 Autocomplete, error checking and Go to Definition for Sea Power INI files. Reads units and systems from the game, your mod and installed Workshop items.
 
 [![Wireframe and textured mesh][mesh-hover]][mesh-hover]
@@ -40,8 +42,6 @@ The examples use the stock Spruance VLS destroyer. Select a screenshot to view i
 | Mesh collider geometry<br>[![Mesh collider geometry][mesh-collider]][mesh-collider] | Lit material and texture maps<br>[![Lit material and texture maps][material-hover]][material-hover] |
 | Box collider shape and dimensions<br>[![Box collider shape and dimensions][box-collider]][box-collider] | Spruance VLS in the 3D preview<br>[![Spruance VLS in the 3D preview][obj-preview]][obj-preview] |
 | Collapsed OBJ objects<br>[![Collapsed OBJ objects][obj-folding]][obj-folding] | Spruance VLS in the FBX viewer<br>[![Spruance VLS in the FBX viewer][fbx-preview]][fbx-preview] |
-
-[Downloads](https://github.com/SEARATS/sp-ini/releases) | [Editor setup](docs/setup.md) | [PSPad](pspad/README.txt) | [Notepad++](notepadpp/README.md)
 
 [mesh-links]: https://raw.githubusercontent.com/SEARATS/binaries/7f281d9a58b1003a9c2528a4332b457e20e195e7/sp-ini/01-mesh-links.png
 [mesh-hover]: https://raw.githubusercontent.com/SEARATS/binaries/7f281d9a58b1003a9c2528a4332b457e20e195e7/sp-ini/02-mesh-hover.png
