@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import { basename, dirname, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { ModelNode, Role, changes, defaultRole, flatten, generate, hierarchy, snippet } from "./hierarchy";
+import { ModelNode, Role, changes, colliderSnippet, defaultRole, flatten, generate, hierarchy, snippet } from "./hierarchy";
 import { parse } from "./ini";
 
 export function registerHierarchy(context: vscode.ExtensionContext) {
@@ -51,13 +51,35 @@ export function registerHierarchy(context: vscode.ExtensionContext) {
     const candidate = vscode.Uri.file(resolve(dirname(document.uri.fsPath),root.value));
     if (/\.fbx$/i.test(candidate.path) && await vscode.workspace.fs.stat(candidate).then(()=>true,()=>false)) return candidate;
   }
-  async function run(from: string,node?: ModelNode,resource?: vscode.Uri) {
+  async function run(from: string,node?: ModelNode,resource?: vscode.Uri, previewNodeId?: string) {
     const editor = vscode.window.activeTextEditor;
     const existing = from==="ini" ? editor?.document : undefined;
     const model = resource || (node ? file : existing ? await referenced(existing,editor.selection.active.line) : undefined)
       || await pickFile("Choose model","fbx");
     if (!model) return;
-    const nodes = flatten(hierarchy(await readFile(model.fsPath)));
+    const roots = hierarchy(await readFile(model.fsPath));
+    const nodes = flatten(roots);
+    if (node || previewNodeId !== undefined) {
+      node = nodes.find(n => previewNodeId !== undefined ? n.id === previewNodeId : n.path === node.path);
+      if (!node) throw Error("That object no longer exists in this FBX.");
+    }
+    if (from === "colliders") {
+      const candidates = (node ? flatten([node]) : nodes).filter(n => n.mesh);
+      if (!candidates.length) {
+        void vscode.window.showInformationMessage("There are no meshes in this selection.");
+        return;
+      }
+      const selected = await vscode.window.showQuickPick(candidates.map(n => ({
+        label: n.name, description: n.mesh === n.name ? undefined : n.mesh, detail: n.path,
+        picked: defaultRole(n) === "Collider", node: n
+      })), { title: "Copy Colliders as INI", placeHolder: "Select collision meshes (_col names are preselected)",
+        canPickMany: true, matchOnDescription: true, matchOnDetail: true });
+      if (!selected?.length) return;
+      const paths = new Set(selected.map(item => item.node.path));
+      await vscode.env.clipboard.writeText(colliderSnippet(basename(model.fsPath), roots, paths));
+      void vscode.window.showInformationMessage("Copied " + paths.size + (paths.size === 1 ? " collider." : " colliders."));
+      return;
+    }
     const parents = nodes.filter(n=>n.children.length);
     if (!parents.length) {
       void vscode.window.showInformationMessage("This FBX has no child objects to export.");
@@ -117,15 +139,15 @@ export function registerHierarchy(context: vscode.ExtensionContext) {
   }
   const command = (name:string,from:string) => vscode.commands.registerCommand("seapower-ini."+name,(node?:ModelNode)=>
     run(from,from==="model" ? node : undefined).catch(e=>vscode.window.showErrorMessage(String(e))));
-  type CopyTarget = vscode.Uri | ModelNode | {spIniFbxUri?: string};
-  const copy = vscode.commands.registerCommand("seapower-ini.copyHierarchy", (target?: CopyTarget) => {
+  type CopyTarget = vscode.Uri | ModelNode | {spIniFbxUri?: string; spIniModelId?: string};
+  const copy = (name: string, from: string) => vscode.commands.registerCommand("seapower-ini."+name, (target?: CopyTarget) => {
     if (!target) return;
-    if ("children" in target) return run("copy",target).catch(e=>vscode.window.showErrorMessage(String(e)));
+    if ("children" in target) return run(from,target).catch(e=>vscode.window.showErrorMessage(String(e)));
     const uri = "fsPath" in target ? target : target.spIniFbxUri && vscode.Uri.parse(target.spIniFbxUri);
     if (uri?.scheme==="file" && /\.fbx$/i.test(uri.path))
-      return run("copy",undefined,uri).catch(e=>vscode.window.showErrorMessage(String(e)));
+      return run(from,undefined,uri,"spIniModelId" in target ? target.spIniModelId : undefined).catch(e=>vscode.window.showErrorMessage(String(e)));
   });
-  context.subscriptions.push(copy,changed,tree,preview,command("generate","palette"),command("generateFromModel","model"),
+  context.subscriptions.push(copy("copyHierarchy","copy"),copy("copyColliders","colliders"),changed,tree,preview,command("generate","palette"),command("generateFromModel","model"),
     command("generateFromIni","ini"),vscode.window.tabGroups.onDidChangeTabs(active),
     vscode.workspace.onDidCloseTextDocument(d=>previews.delete(d.uri.toString())));
   active();

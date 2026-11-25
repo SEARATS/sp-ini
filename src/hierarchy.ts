@@ -26,7 +26,7 @@ export function hierarchy(bytes: Buffer): ModelNode[] {
   const nodes = new Map<string,ModelNode>(), geometries = new Map<string,string>();
   for (const item of objects?.nodes || []) {
     const [id, label] = item.props, name = clean(label);
-    if (item.name === "Geometry") geometries.set(String(id),name);
+    if (item.name === "Geometry" && item.props[2] === "Mesh") geometries.set(String(id),name);
     if (item.name !== "Model") continue;
     const properties = children(item,"Properties70")[0] || children(item,"Properties60")[0];
     const vector = (key:string, fallback:number[]) => properties?.nodes.find(n=>n.props[0]===key)?.props.slice(-3).map(Number) || fallback;
@@ -65,9 +65,18 @@ export function selectParent(roots: ModelNode[], parent: string) {
   if (matches.length!==1) throw Error("Choose a unique parent path for " + parent);
   return matches[0];
 }
-export function defaultRole(n: ModelNode): Role { return isColliderName(n.mesh || n.name) ? "Collider" : "Submodel"; }
+export function defaultRole(n: ModelNode): Role { return isColliderName(n.name) || isColliderName(n.mesh) ? "Collider" : "Submodel"; }
 
-export function generate(original: string, model: string, root: ModelNode, roles: Record<string,Role> = {}) {
+type ExportRole = Role | "Existing parent";
+
+export function colliderSnippet(model: string, roots: ModelNode[], selected: ReadonlySet<string>) {
+  const roles: Record<string, ExportRole> = {};
+  for (const node of flatten(roots)) roles[node.path] = selected.has(node.path) ? "Collider" : "Existing parent";
+  const scene: ModelNode = { id: "", name: "VisibleParent", mesh: "", path: "", position: [0,0,0], children: roots };
+  return snippet(model, scene, roles);
+}
+
+export function generate(original: string, model: string, root: ModelNode, roles: Record<string,ExportRole> = {}) {
   const id = createHash("sha256").update(model + "\n" + root.path).digest("hex").slice(0,16);
   const begin = "; sp-ini " + id + " begin", end = "; sp-ini " + id + " end";
   const eol = original.includes("\r\n") ? "\r\n" : "\n";
@@ -84,6 +93,10 @@ export function generate(original: string, model: string, root: ModelNode, roles
   const groups = {Submodel:[] as string[],Collider:[] as string[]};
   const sections: string[] = [];
   function visit(n: ModelNode,parent: string, inherited: Matrix4) {
+    if (roles[n.path] === "Existing parent") {
+      n.children.forEach(child => visit(child, n.name, new Matrix4()));
+      return;
+    }
     const local = inherited.clone().multiply(n.transform || new Matrix4().makeTranslation(n.position[0],n.position[1],n.position[2]));
     const role = roles[n.path] ?? defaultRole(n);
     if (role === "Skip") {
@@ -120,7 +133,7 @@ export function generate(original: string, model: string, root: ModelNode, roles
   if (sections.length) lines.push(begin,...sections,end);
   return lines.join(eol);
 }
-export function snippet(model: string, root: ModelNode, roles: Record<string,Role> = {}) {
+export function snippet(model: string, root: ModelNode, roles: Record<string,ExportRole> = {}) {
   return generate("",model,root,roles).split("\n").filter(line=>!/^; sp-ini [0-9a-f]+ (begin|end)$/.test(line)).join("\n").trim()+"\n";
 }
 export const changes = (target: string, before: string, after: string) => createTwoFilesPatch(target,target,before,after);

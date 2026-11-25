@@ -19,7 +19,7 @@ async function renderedModel(port: number) {
           if (msg.id===1) {
             if (!contexts.size) return finish();
             for (const id of contexts) ws.send(JSON.stringify({id:id+2,method:"Runtime.evaluate",params:{contextId:id,
-              returnByValue:true,expression:'Array.from(document.querySelectorAll("canvas")).some(c=>c.getAttribute("aria-label")==="3D model") ? document.querySelector("[role=status]").textContent : location.protocol'}}));
+              returnByValue:true,expression:'document.querySelector("#outline li[data-vscode-context]") && document.querySelector("canvas[aria-label]") ? document.querySelector("[role=status]").textContent : location.protocol'}}));
           } else if (msg.id>1) {
             values.push(msg.result?.result?.value || "empty");
             if (values.length>=contexts.size) finish();
@@ -63,7 +63,7 @@ export const run = async () => {
         outcomes.push("FBX preview opened");
         if (process.env.SP_INI_CDP_PORT) {
           await renderedModel(Number(process.env.SP_INI_CDP_PORT));
-          outcomes.push("FBX WebGL model rendered");
+          outcomes.push("FBX model rendered with hierarchy rows");
         }
       }
     }

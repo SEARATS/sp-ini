@@ -1,5 +1,7 @@
 import { randomBytes } from "node:crypto";
 import * as vscode from "vscode";
+import { hierarchy } from "./hierarchy";
+import { fbxOutline } from "./model-outline";
 const viewType = "seapower-ini.obj";
 
 function openSourceBeside(document, column) {
@@ -77,10 +79,20 @@ function registerObjPreview(context) {
       <style nonce="${nonce}">
       body { margin:0; overflow:hidden; background:var(--vscode-editor-background); color:var(--vscode-editor-foreground); }
       canvas { display:block; width:100vw; height:100vh; touch-action:none; }
-      aside { position:absolute; top:10px; left:12px; max-width:85%; background:var(--vscode-editor-background); }
+      aside { position:absolute; bottom:10px; left:12px; max-width:85%; background:var(--vscode-editor-background); }
+      #outline { position:absolute; top:8px; left:8px; max-width:min(42vw,30rem); max-height:70vh; overflow:auto;
+        padding:5px 8px; background:var(--vscode-sideBar-background,var(--vscode-editor-background)); border:1px solid var(--vscode-panel-border); }
+      summary { cursor:pointer; }
+      summary:focus-visible { outline:1px solid var(--vscode-focusBorder); }
+      #outline ul { margin:2px 0; padding-left:1.1em; list-style:none; }
+      #outline > ul { padding-left:0; }
+      #outline li { line-height:1.55; white-space:nowrap; }
+      #outline li > span { padding-left:1em; }
+      #outline p { margin:4px 0; color:var(--vscode-descriptionForeground); }
       button { color:var(--vscode-button-foreground); background:var(--vscode-button-background); border:0; padding:5px 10px; cursor:pointer; }
       </style></head><body>
       <canvas aria-label="3D model"></canvas><aside><button hidden>Fit model</button> <span role="status">Opening model…</span></aside>
+      <details id="outline" open><summary>Model hierarchy</summary><p></p><ul></ul></details>
       <script nonce="${nonce}" src="${script}"></script></body></html>`;
   }
   const fbx = vscode.window.registerCustomEditorProvider("seapower-ini.fbx", {
@@ -88,11 +100,23 @@ function registerObjPreview(context) {
     resolveCustomEditor(document, panel) {
       const folder = vscode.Uri.joinPath(document.uri, "..");
       panel.webview.options = { enableScripts: true, localResourceRoots: [dist, folder] };
-      const send = () => panel.webview.postMessage({ type: "fbx", uri: document.uri.toString(), url: panel.webview.asWebviewUri(document.uri).toString() });
+      let revision = 0;
+      const send = async () => {
+        const current = ++revision;
+        const message = { type: "fbx", uri: document.uri.toString(), url: panel.webview.asWebviewUri(document.uri).toString() };
+        await panel.webview.postMessage(message);
+        try {
+          const bytes = await vscode.workspace.fs.readFile(document.uri);
+          if (revision !== current) return;
+          await panel.webview.postMessage({ type: "outline", nodes: fbxOutline(hierarchy(Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength))) });
+        } catch (error) {
+          if (revision === current) await panel.webview.postMessage({ type: "outline", error: String(error) });
+        }
+      };
       const messages = panel.webview.onDidReceiveMessage(message => { if (message.type === "ready") send(); });
       const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(folder, "*"));
       const changes = watcher.onDidChange(uri => { if (uri.toString() === document.uri.toString()) send(); });
-      panel.onDidDispose(() => { changes.dispose(); watcher.dispose(); messages.dispose(); });
+      panel.onDidDispose(() => { revision++; changes.dispose(); watcher.dispose(); messages.dispose(); });
       showViewer(panel);
     }
   });

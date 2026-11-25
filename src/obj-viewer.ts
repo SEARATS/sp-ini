@@ -1,4 +1,5 @@
 import { previewObj } from "./obj-geometry";
+import { objOutline, type OutlineNode } from "./model-outline";
 import { Texture, Box3, DirectionalLight, HemisphereLight, LoadingManager, PerspectiveCamera, Scene, Sphere, WebGLRenderer } from "three";
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
@@ -8,10 +9,36 @@ const vscode = acquireVsCodeApi();
 const status = document.querySelector("[role=status]");
 const fit = document.querySelector("button");
 const canvas = document.querySelector("canvas");
+const outline = document.querySelector<HTMLDetailsElement>("#outline");
 const scene = new Scene();
 const camera = new PerspectiveCamera(42, 1, 0.01, 10000);
 const bounds = new Sphere();
 let renderer, controls, model;
+
+function showOutline(nodes: OutlineNode[], note: string, uri?: string) {
+  outline.querySelector("p").textContent = note;
+  function row(node: OutlineNode, path: string, depth: number): HTMLLIElement {
+    const item = document.createElement("li");
+    const fullPath = path ? path + " / " + node.name : node.name;
+    const label = document.createElement(node.children.length ? "summary" : "span");
+    label.textContent = node.name || "(unnamed)";
+    label.title = fullPath;
+    if (uri) item.dataset.vscodeContext = JSON.stringify({ spIniFbxUri: uri, spIniModelId: node.modelId, spIniLeaf: !node.children.length });
+    if (node.children.length) {
+      const branch = document.createElement("details");
+      branch.open = depth === 0 && nodes.length === 1;
+      const children = document.createElement("ul");
+      children.append(...node.children.map(child => row(child, fullPath, depth + 1)));
+      branch.append(label, children);
+      item.append(branch);
+    } else {
+      if (uri) label.tabIndex = 0;
+      item.append(label);
+    }
+    return item;
+  }
+  outline.querySelector("ul").replaceChildren(...nodes.map(node => row(node, "", 0)));
+}
 
 function draw() { renderer.render(scene, camera); }
 
@@ -53,7 +80,6 @@ async function load(data) {
   try {
     let next;
     if (data.type === "fbx") {
-      document.body.dataset.vscodeContext = JSON.stringify({spIniFbxUri: data.uri});
       const manager = new LoadingManager();
       manager.onLoad = () => { if (current === revision) draw(); };
       const response = await fetch(data.url, { cache: "no-store" });
@@ -102,8 +128,26 @@ try {
   resize();
   window.addEventListener("resize", resize);
   fit.addEventListener("click", frame);
-  window.addEventListener("message", ({ data }) => { if (data.type === "model" || data.type === "fbx") load(data); });
-  vscode.postMessage({ type: "ready" });
 } catch {
   status.textContent = "The model preview needs WebGL 2. Check graphics acceleration in VS Code.";
 }
+
+let fbxUri: string;
+window.addEventListener("message", ({ data }) => {
+  if (data.type === "outline") {
+    showOutline(data.nodes || [], data.error || (data.nodes?.length ? "" : "No model nodes in this FBX."), fbxUri);
+    return;
+  }
+  if (data.type !== "model" && data.type !== "fbx") return;
+  fbxUri = data.type === "fbx" ? data.uri : undefined;
+  if (fbxUri) {
+    document.body.dataset.vscodeContext = JSON.stringify({spIniFbxUri: fbxUri});
+    showOutline([], "Reading FBX hierarchy…");
+  } else {
+    delete document.body.dataset.vscodeContext;
+    outline.querySelector("summary").textContent = "Objects and groups";
+    showOutline(objOutline(data.text), "OBJ records group membership only.");
+  }
+  if (controls) void load(data);
+});
+vscode.postMessage({ type: "ready" });

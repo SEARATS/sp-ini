@@ -2,7 +2,7 @@
   "name": "seapower-ini",
   "displayName": "Sea Power INI",
   "description": "Autocomplete, error checking and Go to Definition for Sea Power INI files.",
-  "version": "0.6.2",
+  "version": "0.6.3",
   "publisher": "searats",
   "private": true,
   "repository": {
@@ -124,6 +124,11 @@
         "command": "seapower-ini.copyHierarchy",
         "title": "Copy Hierarchy as INI",
         "category": "Sea Power INI"
+      },
+      {
+        "command": "seapower-ini.copyColliders",
+        "title": "Copy Colliders as INI",
+        "category": "Sea Power INI"
       }
     ],
     "menus": {
@@ -159,6 +164,10 @@
         {
           "command": "seapower-ini.copyHierarchy",
           "when": "!explorerResourceIsFolder && resourceExtname =~ /[.]fbx$/i"
+        },
+        {
+          "command": "seapower-ini.copyColliders",
+          "when": "!explorerResourceIsFolder && resourceExtname =~ /[.]fbx$/i"
         }
       ],
       "commandPalette": [
@@ -177,6 +186,10 @@
         {
           "command": "seapower-ini.copyHierarchy",
           "when": "false"
+        },
+        {
+          "command": "seapower-ini.copyColliders",
+          "when": "false"
         }
       ],
       "view/item/context": [
@@ -187,17 +200,29 @@
         {
           "command": "seapower-ini.copyHierarchy",
           "when": "view == seapower-ini.hierarchy && viewItem == spIniParent"
+        },
+        {
+          "command": "seapower-ini.copyColliders",
+          "when": "view == seapower-ini.hierarchy"
         }
       ],
       "editor/title/context": [
         {
           "command": "seapower-ini.copyHierarchy",
           "when": "resourceExtname =~ /[.]fbx$/i"
+        },
+        {
+          "command": "seapower-ini.copyColliders",
+          "when": "resourceExtname =~ /[.]fbx$/i"
         }
       ],
       "webview/context": [
         {
           "command": "seapower-ini.copyHierarchy",
+          "when": "spIniFbxUri && !spIniLeaf"
+        },
+        {
+          "command": "seapower-ini.copyColliders",
           "when": "spIniFbxUri"
         }
       ]

@@ -9,7 +9,7 @@ import { hierarchy, generate, snippet, changes } from "../src/hierarchy";
 test("INI and model context commands share the CLI preview and respect the clipboard destination", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(),"sp-ini-ui-"));
   try {
-    const source = Buffer.from('Objects: {\n Model: 1,"Model::Hull","Null" {\n }\n Model: 2,"Model::Hull_Col","Mesh" {\n }\n}\nConnections: {\n C: "OO",2,1\n}\n');
+    const source = Buffer.from('Objects: {\n Model: 1,"Model::Hull","Null" {\n }\n Model: 2,"Model::Hull_Col","Mesh" {\n }\n Geometry: 3,"Geometry::collision","Mesh" {\n }\n}\nConnections: {\n C: "OO",2,1\n C: "OO",3,2\n}\n');
     const model = {scheme:"file",path:path.join(dir,"ship.fbx"),fsPath:path.join(dir,"ship.fbx")};
     const ini = {path:path.join(dir,"ship.ini"),fsPath:path.join(dir,"ship.ini")};
     await writeFile(model.fsPath,source);
@@ -29,7 +29,7 @@ test("INI and model context commands share the CLI preview and respect the clipb
       window:{activeTextEditor:{document:doc,selection:{active:{line:1}}},
         tabGroups:{activeTabGroup:{activeTab:{input:new Input(model)}},onDidChangeTabs:noop},
         createTreeView:()=>({}),showOpenDialog:()=>[ini],
-        showQuickPick:items=>chooser(items,picks.shift()),showTextDocument:d=>{visible=d;},
+        showQuickPick:(items,options)=>options.canPickMany ? items.filter(i=>i.picked && picks[0]!=="cancel") : chooser(items,picks.shift()),showTextDocument:d=>{visible=d;},
         showInformationMessage:noop,showErrorMessage:message=>assert.fail(message)},
       workspace:{registerTextDocumentContentProvider:(scheme,p)=>{provider=p;},onDidCloseTextDocument:noop,
         openTextDocument:uri=>uri===ini ? doc : provider.provideTextDocumentContent(uri),
@@ -58,6 +58,17 @@ test("INI and model context commands share the CLI preview and respect the clipb
       await commands.get("seapower-ini.copyHierarchy")(target);
       assert.equal(copied,snippet("ship.fbx",root));
     }
+    for (const target of [model,root.children[0],{spIniFbxUri:"file:///ship.fbx",spIniModelId:"2"}]) {
+      copied = undefined;
+      await commands.get("seapower-ini.copyColliders")(target);
+      assert.match(copied,/\[Colliders\]\nNumberOfMeshColliders=1\nMeshCollider1=Hull_Col/);
+      assert.match(copied,/Collider=collision\nParent=Hull/);
+      assert.doesNotMatch(copied,/\[Submodels\]/i);
+    }
+    picks=["cancel"];
+    copied="previous";
+    await commands.get("seapower-ini.copyColliders")(model);
+    assert.equal(copied,"previous");
     const after=generate(before,"ship.fbx",root);
     picks=["INI file","Preview Changes",undefined];
     await commands.get("seapower-ini.generateFromModel")(root);
