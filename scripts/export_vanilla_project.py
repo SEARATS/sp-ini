@@ -13,6 +13,11 @@ import urllib.parse
 import urllib.request
 
 
+def builtin_archives(data):
+    return [p for name in ("unity default resources", "unity_builtin_extra")
+            if (p := data / "Resources" / name).is_file()]
+
+
 def extract_project(ripper, data, output):
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
@@ -85,6 +90,8 @@ def export_models(studio, data, output, models, retry=None):
             if not src.is_file() or not (src.name.startswith(("level", "globalgamemanagers")) or
                     src.suffix.lower() in (".assets", ".ress", ".resource")):
                 continue
+            stage_archive(src, Path(stage) / src.name)
+        for src in builtin_archives(data):
             stage_archive(src, Path(stage) / src.name)
         log_path = output / ("fbx-retry.log" if retry else "fbx-export.log")
         command = [studio, stage, "-m", "splitObjects", "-o", models / "prefabs", "--fbx-animation", "skip"]
