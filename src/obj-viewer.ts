@@ -1,10 +1,12 @@
 import { previewObj } from "./obj-geometry";
-import { objOutline, type OutlineNode } from "./model-outline";
+import { objLayout, type OutlineNode, type PreviewPart } from "./model-outline";
+import { applyDisplay, type DisplaySettings } from "./preview-display";
 import { Texture, Box3, DirectionalLight, HemisphereLight, LoadingManager, PerspectiveCamera, Scene, Sphere, WebGLRenderer } from "three";
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
-declare function acquireVsCodeApi(): { postMessage(message: unknown): void };
+type SavedDisplay = DisplaySettings & {hidden: string[]};
+declare function acquireVsCodeApi(): { postMessage(message: unknown): void; getState(): SavedDisplay | undefined; setState(value: SavedDisplay): void };
 const vscode = acquireVsCodeApi();
 const status = document.querySelector("[role=status]");
 const fit = document.querySelector("button");
@@ -14,30 +16,85 @@ const scene = new Scene();
 const camera = new PerspectiveCamera(42, 1, 0.01, 10000);
 const bounds = new Sphere();
 let renderer, controls, model;
+const saved = vscode.getState();
+const settings: DisplaySettings = {meshes: saved?.meshes ?? true, colliders: saved?.colliders ?? true, wireframe: saved?.wireframe ?? false};
+const hidden = new Set<string>(saved?.hidden);
+const categories = new Map<string, boolean>();
+let updateRows: (() => void)[] = [];
+const inCategory = (part: PreviewPart) => part.collider ? settings.colliders : settings.meshes;
+function updateDisplay() {
+  updateRows.forEach(update => update());
+  if (model) { applyDisplay(model, categories, hidden, settings); draw(); }
+}
+function changed() {
+  updateDisplay();
+  vscode.setState({...settings, hidden: [...hidden]});
+}
+for (const category of ["meshes","colliders"] as const) {
+  const input = document.querySelector<HTMLInputElement>("#"+category);
+  input.checked = settings[category];
+  input.onchange = () => { settings[category] = input.checked; changed(); };
+}
+const shading = document.querySelector<HTMLSelectElement>("#shading");
+shading.value = settings.wireframe ? "wireframe" : "shaded";
+shading.onchange = () => { settings.wireframe = shading.value === "wireframe"; changed(); };
 
 function showOutline(nodes: OutlineNode[], note: string, uri?: string) {
   outline.querySelector("p").textContent = note;
-  function row(node: OutlineNode, path: string, depth: number): HTMLLIElement {
+  updateRows = [];
+  categories.clear();
+  function row(node: OutlineNode, path: string, depth: number): {item: HTMLLIElement; subtree: PreviewPart[]} {
     const item = document.createElement("li");
     const fullPath = path ? path + " / " + node.name : node.name;
     const label = document.createElement(node.children.length ? "summary" : "span");
-    label.textContent = node.name || "(unnamed)";
     label.title = fullPath;
+    const content = document.createElement("span");
+    content.className = "row";
+    label.append(content);
     if (uri) item.dataset.vscodeContext = JSON.stringify({ spIniFbxUri: uri, spIniModelId: node.modelId, spIniLeaf: !node.children.length });
+    const children = node.children.map(child => row(child, fullPath, depth + 1));
+    const subtree: PreviewPart[] = [...node.parts, ...children.flatMap(child => child.subtree)];
+    const targets = node.parts.length ? node.parts : subtree;
+    node.parts.forEach(part => categories.set(part.id, part.collider));
+    const check = document.createElement("input");
+    check.type = "checkbox";
+    check.setAttribute("aria-label", "Visibility of " + fullPath);
+    check.title = "Show or hide " + node.name;
+    check.onclick = event => event.stopPropagation();
+    check.onchange = () => {
+      for (const part of targets.filter(inCategory)) {
+        if (check.checked) hidden.delete(part.id);
+        else hidden.add(part.id);
+      }
+      changed();
+    };
+    if (targets.length) content.append(check);
+    if (node.parts.length && node.parts.every(part => part.collider))
+      content.append(document.querySelector<HTMLTemplateElement>("#box").content.cloneNode(true));
+    content.append(node.name || "(unnamed)");
+    updateRows.push(() => {
+      const active = targets.filter(inCategory);
+      const visible = active.filter(part => !hidden.has(part.id)).length;
+      check.checked = visible > 0 && visible === active.length;
+      check.indeterminate = visible > 0 && visible < active.length;
+      check.disabled = !active.length;
+      item.hidden = !subtree.some(inCategory) && !(subtree.length === 0 && settings.meshes && settings.colliders);
+    });
     if (node.children.length) {
       const branch = document.createElement("details");
       branch.open = depth === 0 && nodes.length === 1;
-      const children = document.createElement("ul");
-      children.append(...node.children.map(child => row(child, fullPath, depth + 1)));
-      branch.append(label, children);
+      const list = document.createElement("ul");
+      list.append(...children.map(child => child.item));
+      branch.append(label, list);
       item.append(branch);
     } else {
       if (uri) label.tabIndex = 0;
       item.append(label);
     }
-    return item;
+    return {item, subtree};
   }
-  outline.querySelector("ul").replaceChildren(...nodes.map(node => row(node, "", 0)));
+  outline.querySelector("ul").replaceChildren(...nodes.map(node => row(node, "", 0).item));
+  updateDisplay();
 }
 
 function draw() { renderer.render(scene, camera); }
@@ -74,7 +131,7 @@ function dispose(group) {
 }
 
 let revision = 0;
-async function load(data) {
+async function load(data, layout?: ReturnType<typeof objLayout>) {
   const current = ++revision;
   if (model) { scene.remove(model); dispose(model); model = undefined; }
   try {
@@ -88,7 +145,7 @@ async function load(data) {
       if (current !== revision) return;
       next = new FBXLoader(manager).parse(buffer, new URL(".", data.url).href);
     } else {
-      next = previewObj(data.text);
+      next = previewObj(data.text, layout);
     }
     model = next;
     new Box3().setFromObject(model).getBoundingSphere(bounds);
@@ -96,6 +153,7 @@ async function load(data) {
     bounds.radius ||= 1;
     model.position.sub(bounds.center);
     scene.add(model);
+    applyDisplay(model, categories, hidden, settings);
     frame();
     fit.hidden = false;
     status.textContent = "Drag to orbit · Scroll to zoom";
@@ -140,14 +198,16 @@ window.addEventListener("message", ({ data }) => {
   }
   if (data.type !== "model" && data.type !== "fbx") return;
   fbxUri = data.type === "fbx" ? data.uri : undefined;
+  let layout: ReturnType<typeof objLayout>;
   if (fbxUri) {
     document.body.dataset.vscodeContext = JSON.stringify({spIniFbxUri: fbxUri});
     showOutline([], "Reading FBX hierarchy…");
   } else {
     delete document.body.dataset.vscodeContext;
     outline.querySelector("summary").textContent = "Objects and groups";
-    showOutline(objOutline(data.text), "OBJ records group membership only.");
+    layout = objLayout(data.text);
+    showOutline(layout.nodes, "OBJ records group membership only.");
   }
-  if (controls) void load(data);
+  if (controls) void load(data, layout);
 });
 vscode.postMessage({ type: "ready" });

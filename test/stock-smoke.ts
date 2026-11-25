@@ -2,6 +2,35 @@
 import * as vscode from "vscode";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
+function checkPreviewControls() {
+  const canvas = document.querySelector("canvas[aria-label]") as HTMLCanvasElement;
+  if (!canvas || !document.querySelector("[role=status]")?.textContent.includes("Drag to orbit")) return "loading";
+  const icon = document.querySelector<SVGElement>("#outline li .collider-icon");
+  if (!icon) return "waiting for colliders";
+  const row = icon.closest("li"), part = icon.closest(".row").querySelector("input");
+  const meshes = document.querySelector<HTMLInputElement>("#meshes");
+  const colliders = document.querySelector<HTMLInputElement>("#colliders");
+  const shading = document.querySelector<HTMLSelectElement>("#shading");
+  part.click();
+  colliders.click();
+  const filtered = row.hidden;
+  colliders.click();
+  const remembered = !part.checked;
+  part.click();
+  meshes.click();
+  const onlyColliders = canvas.toDataURL();
+  colliders.click();
+  const empty = canvas.toDataURL();
+  meshes.click();
+  colliders.click();
+  shading.value = "wireframe";
+  shading.dispatchEvent(new Event("change"));
+  const wireframe = canvas.toDataURL();
+  shading.value = "shaded";
+  shading.dispatchEvent(new Event("change"));
+  const shaded = canvas.toDataURL();
+  return filtered && remembered && !row.hidden && onlyColliders !== empty && wireframe !== shaded ? "verified controls" : "display check failed";
+}
 async function renderedModel(port: number) {
   const seen = new Set<string>();
   for (let attempt=0; attempt<40; attempt++) {
@@ -19,7 +48,7 @@ async function renderedModel(port: number) {
           if (msg.id===1) {
             if (!contexts.size) return finish();
             for (const id of contexts) ws.send(JSON.stringify({id:id+2,method:"Runtime.evaluate",params:{contextId:id,
-              returnByValue:true,expression:'document.querySelector("#outline li[data-vscode-context]") && document.querySelector("canvas[aria-label]") ? document.querySelector("[role=status]").textContent : location.protocol'}}));
+              returnByValue:true,expression:"("+checkPreviewControls.toString()+")()"}}));
           } else if (msg.id>1) {
             values.push(msg.result?.result?.value || "empty");
             if (values.length>=contexts.size) finish();
@@ -27,7 +56,7 @@ async function renderedModel(port: number) {
         };
       });
       statuses.forEach(status=>seen.add(target.type+" "+status));
-      if (statuses.some(status=>status.includes("Drag to orbit"))) return;
+      if (statuses.includes("verified controls")) return;
     }
     await new Promise(resolve=>setTimeout(resolve,250));
   }
@@ -63,7 +92,7 @@ export const run = async () => {
         outcomes.push("FBX preview opened");
         if (process.env.SP_INI_CDP_PORT) {
           await renderedModel(Number(process.env.SP_INI_CDP_PORT));
-          outcomes.push("FBX model rendered with hierarchy rows");
+          outcomes.push("FBX collider icon, visibility, category filters and wireframe verified");
         }
       }
     }

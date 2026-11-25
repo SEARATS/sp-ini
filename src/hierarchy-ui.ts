@@ -25,6 +25,7 @@ export function registerHierarchy(context: vscode.ExtensionContext) {
     getTreeItem: (node: ModelNode) => {
       const item = new vscode.TreeItem(node.name, node.children.length ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None);
       item.id = node.path;
+      if (node.mesh && defaultRole(node) === "Collider") item.iconPath = new vscode.ThemeIcon("package");
       item.contextValue = node.children.length ? "spIniParent" : "spIniLeaf";
       item.tooltip = node.path;
       return item;
