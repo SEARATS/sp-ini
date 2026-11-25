@@ -2,7 +2,9 @@ name: Build editor releases
 
 on:
   push:
-    tags: ['v*']
+    branches: [main]
+  pull_request:
+  workflow_call:
   workflow_dispatch:
 
 permissions:
@@ -20,7 +22,7 @@ jobs:
         with:
           version: 11.23.0
       - name: Check release tag
-        if: github.event_name == 'push'
+        if: startsWith(github.ref, 'refs/tags/')
         run: test "$GITHUB_REF_NAME" = "v$(node -p 'require("./package.json").version')"
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
@@ -33,27 +35,3 @@ jobs:
           name: editor-downloads
           path: release/*
           if-no-files-found: error
-
-  draft:
-    needs: build
-    if: github.event_name == 'push'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    concurrency: draft-${{ github.ref }}
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: editor-downloads
-          path: release
-      - name: Attach downloads to a draft GitHub release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          if gh release view "$GITHUB_REF_NAME" --json isDraft > release-state.json; then
-            test "$(jq -r .isDraft release-state.json)" = true
-            gh release upload "$GITHUB_REF_NAME" release/* --clobber
-          else
-            gh release create "$GITHUB_REF_NAME" release/* --verify-tag --draft --generate-notes --title "Sea Power INI $GITHUB_REF_NAME"
-          fi
