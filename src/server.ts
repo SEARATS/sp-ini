@@ -11,6 +11,7 @@ import { isColliderName } from "./mesh-names";
 import { Materials, imageMarkdown, resize } from "./materials";
 import { colliderSection, primitiveHover } from "./colliders";
 import { parse } from "./ini";
+import { moveToMount } from "./section-placement";
 import { entityAssets } from "./entity-assets";
 import { selectEntity, type PreviewRequest } from "./entity-selection";
 import { iniFolds, objFolds } from "./folding";
@@ -29,6 +30,7 @@ const materials = new Materials(uri => {
 });
 let catalog = new Catalog(), options, folders;
 let building, requested = 0;
+let versionedEdits = false;
 
 function publish(uri) {
   if (parsed.has(uri)) connection.sendDiagnostics({ uri, version: documents.get(uri)?.version, diagnostics: diagnostics(parsed.get(uri), catalog, uri) });
@@ -59,11 +61,18 @@ function refresh() {
 }
 
 connection.onInitialize(params => {
+  versionedEdits = !!params.capabilities.workspace?.workspaceEdit?.documentChanges;
   options = params.initializationOptions || {};
   folders = params.workspaceFolders || (params.rootUri ? [{ uri: params.rootUri }] : []);
   return { capabilities: { textDocumentSync: TextDocumentSyncKind.Incremental,
     completionProvider: { triggerCharacters: ["[", "=", "/", "!"] }, hoverProvider: true,
-    definitionProvider: true, documentLinkProvider: {}, documentSymbolProvider: true, foldingRangeProvider: true } };
+    definitionProvider: true, documentLinkProvider: {}, documentSymbolProvider: true, foldingRangeProvider: true,
+    codeActionProvider: { codeActionKinds: ["quickfix"] } } };
+});
+connection.onCodeAction(({ textDocument, context }) => {
+  const document = documents.get(textDocument.uri), doc = parsed.get(textDocument.uri);
+  if (!document || !doc || (context.only && !context.only.includes("quickfix"))) return [];
+  return context.diagnostics.map(diagnostic => moveToMount(document, doc, diagnostic, versionedEdits)).filter(Boolean);
 });
 connection.onInitialized(() => refresh().catch(error => connection.console.error(String(error))));
 connection.onRequest("seapower/entityPreview", async (request: PreviewRequest, token) => {

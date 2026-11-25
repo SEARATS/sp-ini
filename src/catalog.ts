@@ -265,7 +265,7 @@ async function buildCatalog(roots: ContentRoot[]) {
   return catalog;
 }
 
-function submodelNames(doc) {
+function submodelNames(doc: ReturnType<typeof parse>) {
   const list = doc.sections.find(s => /^submodels$/i.test(s.name));
   const entries = list?.keys ?? doc.sections.find(s => /^models$/i.test(s.name))?.keys.filter(k => /^submodel\d+$/i.test(k.name));
   return new Set((entries || []).map(k => k.value.toLowerCase()));

@@ -24,6 +24,8 @@ Choose **Copy Colliders as INI** to copy just the mesh collider definitions. Rig
 
 The **Problems** panel lists INI issues. Repeating a key in the same section gives a warning when the values match and an error when they differ.
 
+Sea Power ignores material settings in numbered sensor sections. Use **Quick Fix** on the warning to move the line to the submodel named by `Mount`. The fix requires a single declared submodel in the same file with no existing assignment for that key.
+
 To suppress an issue, right-click its line in the INI editor and choose **Suppress Diagnostic on This Line**. This adds a comment to that line. To comment out or restore a whole section, including its header, right-click anywhere in it and choose **Comment or Uncomment INI Section**.
 
 ## Screenshots
