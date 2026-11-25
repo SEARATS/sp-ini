@@ -2,6 +2,8 @@
 
 Autocomplete, error checking and Go to Definition for Sea Power INI files. Reads units and systems from the game, your mod and installed Workshop items.
 
+[![Wireframe and textured mesh][mesh-hover]][mesh-hover]
+
 Press **Ctrl+Space** for keys and values. Press **F12** on a unit, sensor, weapon, model or file path to open its definition. **Problems** lists errors as you type.
 
 Open an OBJ or FBX to see its 3D preview. Drag to rotate and scroll to zoom. To change the default, run **Reopen Editor With…** and choose **Configure default editor for '*.obj'…**. Enable `seapowerIni.obj.openSourceBeside` to see the source alongside the preview.
@@ -18,4 +20,43 @@ Repeating a key in the same section gives a warning for the same value and an er
 
 Open a mod folder in VS Code and select **Sea Power INI** in the language picker. To protect game and Workshop files while browsing, run **Sea Power INI: Enable Read-Only Reference Previews in Workspace**.
 
-[Screenshots](https://github.com/SEARATS/binaries/tree/main/sp-ini) | [Downloads](https://github.com/SEARATS/sp-ini/releases) · [Editor setup](docs/setup.md) · [PSPad](pspad/README.txt) � [Notepad++](notepadpp/README.md)
+## Screenshots
+
+The examples use the stock Spruance VLS destroyer. Select a screenshot to view it at full size.
+
+| INI editing | Diagnostics and quick fixes |
+| --- | --- |
+| Value completion<br>[![Value completion][completion]][completion] | Duplicate warning and conflicting-value error<br>[![Duplicate warning and conflicting-value error][duplicate-diagnostics]][duplicate-diagnostics] |
+| Collapsed INI section<br>[![Collapsed INI section][ini-folding]][ini-folding] | Diagnostic quick fix<br>[![Diagnostic quick fix][quick-fix]][quick-fix] |
+| Commented INI section<br>[![Commented INI section][section-toggle]][section-toggle] | Same-line diagnostic suppression<br>[![Same-line diagnostic suppression][inline-suppression]][inline-suppression] |
+
+| Go to Definition | Reference files |
+| --- | --- |
+| Mesh and material links<br>[![Mesh and material links][mesh-links]][mesh-links] | Read-only stock reference<br>[![Read-only stock reference][read-only-reference]][read-only-reference] |
+| Mount and barrel definitions<br>[![Mount and barrel definitions][model-part-links]][model-part-links] | Object preview in OBJ source<br>[![Object preview in OBJ source][obj-source-hover]][obj-source-hover] |
+
+| Geometry | Materials and models |
+| --- | --- |
+| Mesh collider geometry<br>[![Mesh collider geometry][mesh-collider]][mesh-collider] | Lit material and texture maps<br>[![Lit material and texture maps][material-hover]][material-hover] |
+| Box collider shape and dimensions<br>[![Box collider shape and dimensions][box-collider]][box-collider] | Spruance VLS in the 3D preview<br>[![Spruance VLS in the 3D preview][obj-preview]][obj-preview] |
+| Collapsed OBJ objects<br>[![Collapsed OBJ objects][obj-folding]][obj-folding] | Spruance VLS in the FBX viewer<br>[![Spruance VLS in the FBX viewer][fbx-preview]][fbx-preview] |
+
+[Downloads](https://github.com/SEARATS/sp-ini/releases) | [Editor setup](docs/setup.md) | [PSPad](pspad/README.txt) | [Notepad++](notepadpp/README.md)
+
+[mesh-links]: https://raw.githubusercontent.com/SEARATS/binaries/7f281d9a58b1003a9c2528a4332b457e20e195e7/sp-ini/01-mesh-links.png
+[mesh-hover]: https://raw.githubusercontent.com/SEARATS/binaries/7f281d9a58b1003a9c2528a4332b457e20e195e7/sp-ini/02-mesh-hover.png
+[material-hover]: https://raw.githubusercontent.com/SEARATS/binaries/7f281d9a58b1003a9c2528a4332b457e20e195e7/sp-ini/03-material-hover.png
+[mesh-collider]: https://raw.githubusercontent.com/SEARATS/binaries/7f281d9a58b1003a9c2528a4332b457e20e195e7/sp-ini/04-mesh-collider.png
+[box-collider]: https://raw.githubusercontent.com/SEARATS/binaries/7f281d9a58b1003a9c2528a4332b457e20e195e7/sp-ini/05-box-collider.png
+[model-part-links]: https://raw.githubusercontent.com/SEARATS/binaries/7f281d9a58b1003a9c2528a4332b457e20e195e7/sp-ini/06-model-part-links.png
+[obj-source-hover]: https://raw.githubusercontent.com/SEARATS/binaries/7f281d9a58b1003a9c2528a4332b457e20e195e7/sp-ini/07-obj-source-hover.png
+[obj-folding]: https://raw.githubusercontent.com/SEARATS/binaries/7f281d9a58b1003a9c2528a4332b457e20e195e7/sp-ini/08-obj-folding.png
+[obj-preview]: https://raw.githubusercontent.com/SEARATS/binaries/7f281d9a58b1003a9c2528a4332b457e20e195e7/sp-ini/09-obj-preview.png
+[ini-folding]: https://raw.githubusercontent.com/SEARATS/binaries/7f281d9a58b1003a9c2528a4332b457e20e195e7/sp-ini/10-ini-folding.png
+[completion]: https://raw.githubusercontent.com/SEARATS/binaries/7f281d9a58b1003a9c2528a4332b457e20e195e7/sp-ini/11-completion.png
+[duplicate-diagnostics]: https://raw.githubusercontent.com/SEARATS/binaries/7f281d9a58b1003a9c2528a4332b457e20e195e7/sp-ini/12-duplicate-diagnostics.png
+[quick-fix]: https://raw.githubusercontent.com/SEARATS/binaries/7f281d9a58b1003a9c2528a4332b457e20e195e7/sp-ini/13-quick-fix.png
+[inline-suppression]: https://raw.githubusercontent.com/SEARATS/binaries/7f281d9a58b1003a9c2528a4332b457e20e195e7/sp-ini/14-inline-suppression.png
+[section-toggle]: https://raw.githubusercontent.com/SEARATS/binaries/7f281d9a58b1003a9c2528a4332b457e20e195e7/sp-ini/15-section-toggle.png
+[read-only-reference]: https://raw.githubusercontent.com/SEARATS/binaries/7f281d9a58b1003a9c2528a4332b457e20e195e7/sp-ini/16-read-only-reference.png
+[fbx-preview]: https://raw.githubusercontent.com/SEARATS/binaries/7f281d9a58b1003a9c2528a4332b457e20e195e7/sp-ini/17-fbx-preview.png
