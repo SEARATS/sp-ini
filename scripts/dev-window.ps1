@@ -8,7 +8,7 @@ Push-Location $root
 try {
     pnpm run build
     if ($LASTEXITCODE) { throw 'Build failed.' }
-    $watcher = Start-Process node -ArgumentList 'scripts/build.js --watch' -WorkingDirectory $root -WindowStyle Hidden -PassThru
+    $watcher = Start-Process node -ArgumentList '--import tsx scripts/build.ts --watch' -WorkingDirectory $root -WindowStyle Hidden -PassThru
     try {
         code --user-data-dir "$profile" --extensionDevelopmentPath "$root" --reuse-window "$folder"
         if ($LASTEXITCODE) { throw 'VS Code failed to open the development window.' }

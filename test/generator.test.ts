@@ -1,5 +1,5 @@
 const {test} = require("node:test");
-const assert = require("node:assert/strict");
+import assert from "node:assert/strict";
 const {generate,snippet,hierarchy,selectParent} = require("../src/hierarchy");
 const {isColliderName} = require("../src/mesh-names");
 test("OBJ preview highlights collider groups sharing the same material with the hull",async()=>{

@@ -1,11 +1,11 @@
-const { test } = require("node:test");
-const assert = require("node:assert/strict");
-const os = require("node:os");
-const fs = require("node:fs/promises");
-const path = require("node:path");
-const { buildCatalog } = require("../src/catalog");
-const { parse } = require("../src/ini");
-const { completions, exact, inspect, diagnostics, symbols } = require("../src/features");
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import * as os from "node:os";
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
+import { buildCatalog } from "../src/catalog";
+import { parse } from "../src/ini";
+import { completions, exact, inspect, diagnostics, symbols } from "../src/features";
 
 test("indexes stock and mod definitions, including extensions and overlapping unit IDs", async t => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "seapower-ini-"));
@@ -26,7 +26,9 @@ test("indexes stock and mod definitions, including extensions and overlapping un
     "Type has a different value on line 2 of this section.", "Unit ID 'missing' was not found in the indexed content folders."
   ]);
   const typePos = { line: 1, character: 5 };
-  assert.deepEqual(completions(lookup(mission, 1, 5), typePos).map(c => c.label).sort(), ["Local", "Vanilla", "Workshop", "shared"]);
+  const items = completions(lookup(mission, 1, 5), typePos);
+  assert.ok(Array.isArray(items));
+  assert.deepEqual(items.map(c => c.label).sort(), ["Local", "Vanilla", "Workshop", "shared"]);
   const patch = parse("#!extend vessels/shared.ini\n[General]\nLoc");
   assert.equal(completions(lookup(patch, 2, 3), { line: 2, character: 3 })[0].textEdit.newText, "LocalKey=");
   assert.equal(exact(lookup(patch, 0, 15)).length, 3);

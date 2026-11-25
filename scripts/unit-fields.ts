@@ -1,6 +1,6 @@
 // Run with the path to the Seapower namespace of a locally exported game assembly.
-const fs = require("node:fs");
-const path = require("node:path");
+import * as fs from "node:fs";
+import * as path from "node:path";
 const loaders = {
   shared: ["ObjectBaseLoader"], vessels: ["VesselLoader", "SubmarineLoader"],
   aircraft: ["AircraftLoader", "HelicopterLoader"], land_units: ["LandUnitLoader"], biologic: ["BiologicLoader"]

@@ -51,7 +51,7 @@ try {
     $env:SP_GALLERY_OUTPUT = $out
     $env:SP_GALLERY_GAME = $game
     $env:SP_GALLERY_RESULT = Join-Path $session 'result'
-    code --user-data-dir "$session/profile" --extensions-dir "$session/extensions" --extensionDevelopmentPath "$repo" --extensionTestsPath "$PSScriptRoot/gallery/capture.js" "--remote-debugging-port=$port" --skip-welcome --disable-workspace-trust --new-window --wait "$workspace"
+    code --user-data-dir "$session/profile" --extensions-dir "$session/extensions" --extensionDevelopmentPath "$repo" --extensionTestsPath "$repo/dist/dev/capture.js" "--remote-debugging-port=$port" --skip-welcome --disable-workspace-trust --new-window --wait "$workspace"
     if (!(Test-Path -LiteralPath $env:SP_GALLERY_RESULT)) { throw "Capture stopped. See $session/profile/logs." }
     $result = Get-Content -LiteralPath $env:SP_GALLERY_RESULT -Raw
     if ($result -ne 'ok') { throw $result }

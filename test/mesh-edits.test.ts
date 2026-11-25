@@ -1,11 +1,11 @@
-const { test } = require("node:test");
-const assert = require("node:assert/strict");
-const { Catalog } = require("../src/catalog");
-const { parse } = require("../src/ini");
-const { diagnostics, documentLinks } = require("../src/features");
-const { sectionEdit, suppression } = require("../src/ini-edits");
-const { MeshFiles } = require("../src/meshes");
-const { meshHover, thumbnail } = require("../src/mesh-hover");
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { Catalog } from "../src/catalog";
+import { parse } from "../src/ini";
+import { diagnostics, documentLinks } from "../src/features";
+import { sectionEdit, suppression } from "../src/ini-edits";
+import { MeshFiles } from "../src/meshes";
+import { meshHover, thumbnail } from "../src/mesh-hover";
 
 test("mesh definitions and wireframes use the referenced OBJ and global vertex indices", async () => {
   const uri = "file:///mod/vessels/sample.ini";

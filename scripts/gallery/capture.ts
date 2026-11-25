@@ -1,10 +1,10 @@
-const assert = require("node:assert/strict");
-const fs = require("node:fs/promises");
-const path = require("node:path");
-const vscode = require("vscode");
-const { camera, delay, waitFor } = require("./camera");
+import assert from "node:assert/strict";
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
+import * as vscode from "vscode";
+import { camera, delay, waitFor } from "./camera";
 
-const command = (id, ...args) => vscode.commands.executeCommand(id, ...args);
+const command = <T = void>(id: string, ...args: unknown[]) => vscode.commands.executeCommand<T>(id, ...args);
 function select(editor, position) {
   editor.selection = new vscode.Selection(position, position);
   editor.revealRange(editor.selection, vscode.TextEditorRevealType.InCenter);
@@ -36,7 +36,7 @@ async function capture(screen) {
 
   const mesh = "Mesh=usn_dd_spruance_vls_deck", mat = "Material=usn_dd_spruance_vls_deck_mat.ini", header = "[Deck]";
   const p = position(mesh);
-  const links = await command("vscode.executeLinkProvider", doc.uri);
+  const links = await command<vscode.DocumentLink[]>("vscode.executeLinkProvider", doc.uri);
   assert.ok(links.some(link => link.range.contains(p) && link.target));
   select(editor, p);
   await screen.capture("01-mesh-links", "Mesh and material links", { lines: [mesh, mat] });
@@ -116,14 +116,14 @@ async function capture(screen) {
   const fbx = vscode.Uri.joinPath(workspace, "ships/usn_dd_spruance_vls/spruance_vls_exterior.fbx");
   if (await fs.stat(fbx.fsPath).then(() => true, () => false)) {
     await command("vscode.open", fbx);
-    await waitFor(() => vscode.window.tabGroups.activeTabGroup.activeTab?.input?.viewType === "seapower-ini.fbx", "Default FBX viewer");
+    await waitFor(() => (vscode.window.tabGroups.activeTabGroup.activeTab?.input as vscode.TabInputCustom)?.viewType === "seapower-ini.fbx", "Default FBX viewer");
     await delay(2200);
     await screen.capture("17-fbx-preview", "Spruance VLS in the FBX viewer", { canvas: true });
   }
   await screen.finish();
 }
 
-exports.run = async () => {
+export const run = async () => {
   const screen = await camera();
   try {
     await capture(screen);

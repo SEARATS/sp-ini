@@ -1,7 +1,7 @@
-const { build } = require("esbuild");
-const fs = require("node:fs/promises");
-const path = require("node:path");
-const { watch } = require("node:fs");
+import { build } from "esbuild";
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
+import { watch } from "node:fs";
 const root = path.resolve(__dirname, "..");
 process.chdir(root);
 
@@ -9,6 +9,8 @@ async function compile() {
   await Promise.all([
     build({ entryPoints: ["src/extension.ts", "src/server.ts", "src/pspad.ts", "src/generate.ts"], outdir: "dist",
       bundle: true, platform: "node", target: "node18", external: ["vscode"] }),
+    build({ entryPoints: ["test/preview-smoke.ts", "test/stock-smoke.ts", "test/vscode-smoke.ts", "scripts/gallery/capture.ts"],
+      outdir: "dist/dev", entryNames: "[name]", bundle: true, platform: "node", target: "node18", external: ["vscode"] }),
     build({ entryPoints: ["src/obj-viewer.ts"], outdir: "dist", bundle: true, minify: true, target: "chrome114" })
   ]);
   const licenses = [];

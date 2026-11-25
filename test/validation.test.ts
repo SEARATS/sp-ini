@@ -1,8 +1,8 @@
 const test = require("node:test");
-const assert = require("node:assert/strict");
-const { Catalog } = require("../src/catalog");
-const { parse } = require("../src/ini");
-const { diagnostics, inspect, exact, documentLinks, completions } = require("../src/features");
+import assert from "node:assert/strict";
+import { Catalog } from "../src/catalog";
+import { parse } from "../src/ini";
+import { diagnostics, inspect, exact, documentLinks, completions } from "../src/features";
 const uri = "file:///mod/vessels/test.ini";
 
 test("mount part links use declared submodels and preserve ContainerBase sentinels", () => {

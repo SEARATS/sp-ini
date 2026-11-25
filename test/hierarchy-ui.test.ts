@@ -1,8 +1,10 @@
-const { test } = require("node:test");
-const assert = require("node:assert/strict");
-const { mkdtemp, writeFile, readFile, rm } = require("node:fs/promises");
-const os = require("node:os"), path = require("node:path"), Module = require("node:module");
-const { hierarchy, generate, snippet, changes } = require("../src/hierarchy");
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
+import * as os from "node:os";
+import * as path from "node:path";
+import Module from "node:module";
+import { hierarchy, generate, snippet, changes } from "../src/hierarchy";
 
 test("INI and model context commands share the CLI preview and respect the clipboard destination", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(),"sp-ini-ui-"));
@@ -17,11 +19,11 @@ test("INI and model context commands share the CLI preview and respect the clipb
     let chooser, provider, visible, copied, applied, picks;
     const commands = new Map();
     const noop = ()=>{};
-    class Input { constructor(uri) {this.uri=uri;} }
+    class Input { constructor(public uri) {} }
     const vscode = {
       Uri:{from: value=>({...value,toString:()=>value.path+"?"+value.query})},
       TabInputCustom:Input,TabInputText:class {},Position:class {},Range:class {},
-      EventEmitter:class {fire() {}}, WorkspaceEdit:class {replace(uri,range,text){this.text=text;}},
+      EventEmitter:class {fire() {}}, WorkspaceEdit:class {text: string; replace(uri,range,text){this.text=text;}},
       commands:{registerCommand:(id,fn)=>commands.set(id,fn),executeCommand:()=>[{uri:model}]},
       env:{clipboard:{writeText:text=>{copied=text;}}},
       window:{activeTextEditor:{document:doc,selection:{active:{line:1}}},

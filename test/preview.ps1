@@ -18,7 +18,7 @@ Set-Content -LiteralPath "$mod/nested-mod/_info.ini" -Value '[General]'
 Set-Content -LiteralPath "$mod/nested-mod/sonar.ini" -Value @('[SensorData]', "BladesCount=5  //number of blades on vessel's propulsion systems", 'MinNoiseClassificationTreshold=5 //in dBs, the minimal value of noise on sonar system')
 Set-Content -LiteralPath "$mod/unrelated.ini" -Value '[General]'
 Set-Content -LiteralPath "$mod/.vscode/settings.json" -Value '{"files.associations":{"**/missions/*.ini":"seapower-ini","**/vessels/*.ini":"seapower-ini"}}'
-code --user-data-dir "$session/profile" --extensions-dir "$session/extensions" --extensionDevelopmentPath "$project" --extensionTestsPath "$PSScriptRoot/preview-smoke.js" --disable-gpu --skip-welcome --new-window --wait "$mod"
+code --user-data-dir "$session/profile" --extensions-dir "$session/extensions" --extensionDevelopmentPath "$project" --extensionTestsPath "$project/dist/dev/preview-smoke.js" --disable-gpu --skip-welcome --new-window --wait "$mod"
 $code = $LASTEXITCODE
 Get-ChildItem -Path "$session/profile/logs/*/window*/exthost/exthost.log" | Get-Content -Tail 3
 if (!(Test-Path -LiteralPath "$mod/preview-test-passed")) { throw "Editor assertions did not finish. See $session/profile/logs" }

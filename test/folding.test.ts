@@ -1,6 +1,6 @@
-const { test } = require("node:test");
-const assert = require("node:assert/strict");
-const { iniFolds, objFolds } = require("../src/folding");
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { iniFolds, objFolds } from "../src/folding";
 
 test("INI folds keep the next header and trailing blank lines visible", () => {
   assert.deepEqual(iniFolds(["[Empty]", "[Textures]", "Map=a.png", "", "[Next]", "A=1", ""]),

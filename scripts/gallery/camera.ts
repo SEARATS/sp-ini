@@ -1,6 +1,6 @@
-const fs = require("node:fs/promises");
-const path = require("node:path");
-const { PNG } = require("pngjs");
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
+import { PNG } from "pngjs";
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function waitFor(check, message) {
@@ -21,7 +21,7 @@ function measure({ lines, after = 0, widget, tab, canvas }) {
     const r = el.getBoundingClientRect();
     return r.width && r.height && r.bottom > viewport.top && r.top < viewport.bottom && getComputedStyle(el).visibility !== "hidden";
   };
-  const views = [...editor.querySelectorAll(".view-line")].filter(visible).sort((a, b) => a.offsetTop - b.offsetTop);
+  const views = [...editor.querySelectorAll<HTMLElement>(".view-line")].filter(visible).sort((a, b) => a.offsetTop - b.offsetTop);
   const cursorY = editor.querySelector(".cursor")?.getBoundingClientRect().top ?? (viewport.top + viewport.bottom) / 2;
   for (const needle of lines || []) {
     const matches = views.filter(el => el.innerText.replace(/\u00a0/g, " ").trim().startsWith(needle));
@@ -79,12 +79,12 @@ async function camera() {
     pending.get(reply.id)?.(reply);
     pending.delete(reply.id);
   };
-  const call = (method, params = {}) => new Promise((resolve, reject) => {
+  const call = <T = void>(method: string, params = {}) => new Promise<T>((resolve, reject) => {
     const request = ++id;
     pending.set(request, reply => reply.error ? reject(Error(reply.error.message)) : resolve(reply.result));
     socket.send(JSON.stringify({ id: request, method, params }));
   });
-  const evaluate = async expression => (await call("Runtime.evaluate", { expression, returnByValue: true })).result.value;
+  const evaluate = async expression => (await call<{result:{value:unknown}}>("Runtime.evaluate", { expression, returnByValue: true })).result.value;
   const resize = (width, height) => call("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false });
   await resize(1120, 800);
   return {
@@ -108,7 +108,7 @@ async function camera() {
         clip = await evaluate("(" + measure.toString() + ")(" + JSON.stringify(region) + ")");
         return clip?.width > 8 && clip.height > 8;
       }, "Could not frame " + file);
-      const { data } = await call("Page.captureScreenshot", { format: "png", fromSurface: true, clip });
+      const { data } = await call<{data:string}>("Page.captureScreenshot", { format: "png", fromSurface: true, clip });
       const bytes = Buffer.from(data, "base64");
       await fs.writeFile(path.join(process.env.SP_GALLERY_OUTPUT, file + ".png"), region.canvas ? cropModel(bytes) : bytes);
       if (region.canvas) await resize(1120, 800);
@@ -129,4 +129,4 @@ async function camera() {
   };
 }
 
-module.exports = { camera, delay, waitFor };
+export { camera, delay, waitFor };

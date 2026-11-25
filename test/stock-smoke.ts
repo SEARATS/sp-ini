@@ -1,8 +1,8 @@
 // Run with VS Code --extensionTestsPath against an installed game or exported workspace.
-const vscode = require("vscode");
-const assert = require("node:assert/strict");
-const fs = require("node:fs");
-exports.run = async () => {
+import * as vscode from "vscode";
+import assert from "node:assert/strict";
+import * as fs from "node:fs";
+export const run = async () => {
   const ini = vscode.Uri.file(process.env.SP_INI_STOCK_INI);
   const doc = await vscode.workspace.openTextDocument(ini);
   await vscode.window.showTextDocument(doc);
@@ -12,22 +12,22 @@ exports.run = async () => {
   const deck = lines.indexOf("[Deck]");
   assert.ok(deck>=0);
   const outcomes = [];
-  for (const [key,labels] of [["Mesh",["303 faces","Wireframe","Textured"]],["Material",["Lit material","MainTex","SpecTex","BumpMap"]]]) {
+  for (const [key,labels] of [["Mesh",["303 faces","Wireframe","Textured"]],["Material",["Lit material","MainTex","SpecTex","BumpMap"]]] as const) {
     const line = lines.findIndex((s,i)=>i>deck && s.startsWith(key+"="));
     const pos = new vscode.Position(line,key.length+2);
-    const hovers = await vscode.commands.executeCommand("vscode.executeHoverProvider",ini,pos);
-    const hover = hovers.flatMap(h=>h.contents.map(c=>c.value || c)).join(" ");
+    const hovers = await vscode.commands.executeCommand<vscode.Hover[]>("vscode.executeHoverProvider",ini,pos);
+    const hover = hovers.flatMap(h=>h.contents.map(c=>typeof c === "string" ? c : c.value)).join(" ");
     labels.forEach(label=>assert.ok(hover.includes(label),"Missing "+label+" in "+hover.slice(0,110)));
     assert.ok(hover.includes("data:image/"));
     outcomes.push(key+" hover: "+labels.join(", "));
     if (process.env.SP_INI_MIRROR==="1") {
-      const refs = await vscode.commands.executeCommand("vscode.executeDefinitionProvider",ini,pos);
-      const target = refs.map(r=>r.uri || r.targetUri).find(u=>u.path.endsWith(key==="Mesh"?".fbx":".mat"));
+      const refs = await vscode.commands.executeCommand<(vscode.Location | vscode.LocationLink)[]>("vscode.executeDefinitionProvider",ini,pos);
+      const target = refs.map(r=>"uri" in r ? r.uri : r.targetUri).find(u=>u.path.endsWith(key==="Mesh"?".fbx":".mat"));
       assert.ok(target,"Missing "+key+" definition");
       outcomes.push(key+" definition: "+target.path);
       if (key==="Mesh") {
         await vscode.commands.executeCommand("vscode.openWith",target,"seapower-ini.fbx");
-        assert.ok(vscode.window.tabGroups.all.some(g=>g.tabs.some(t=>t.input?.viewType==="seapower-ini.fbx")));
+        assert.ok(vscode.window.tabGroups.all.some(g=>g.tabs.some(t=>(t.input instanceof vscode.TabInputCustom && t.input.viewType)==="seapower-ini.fbx")));
       }
     }
   }

@@ -225,8 +225,8 @@
     }
   },
   "scripts": {
-    "build": "node scripts/build.js",
-    "test": "pnpm run typecheck && tsx --test test/*.test.js",
+    "build": "tsx scripts/build.ts",
+    "test": "pnpm run typecheck && tsx --test test/*.test.ts",
     "package": "pnpm run build && vsce package --no-dependencies --skip-license",
     "typecheck": "tsc --noEmit"
   },

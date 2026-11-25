@@ -39,7 +39,7 @@ function parseObj(text) {
 }
 
 class MeshFiles {
-  constructor(private readonly openDocument: (uri: string) => import('vscode-languageserver-textdocument').TextDocument = () => undefined) {}
+  constructor(private readonly openDocument: (uri: string) => Pick<import('vscode-languageserver-textdocument').TextDocument, 'getText' | 'version'> = () => undefined) {}
   cache = new Map();
 
   async model(file) {
