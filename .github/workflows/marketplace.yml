@@ -1,15 +1,48 @@
-name: Publish VS Code Marketplace extension
+name: Publish editor releases
 
 on:
-  release:
-    types: [published]
+  push:
+    tags: ['v*']
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency: publish-${{ github.ref }}
+
 jobs:
-  publish:
-    if: vars.PUBLISH_MARKETPLACE == 'true' && !github.event.release.prerelease
+  build:
+    if: github.event_name == 'push'
+    uses: ./.github/workflows/release.yml
+
+  github-release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: editor-downloads
+          path: release
+      - name: Publish both downloads
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" --json isDraft > release-state.json; then
+            if [ "$(jq -r .isDraft release-state.json)" = false ]; then exit 0; fi
+            gh release upload "$GITHUB_REF_NAME" release/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" release/* --draft --verify-tag --generate-notes --title "Sea Power INI $GITHUB_REF_NAME"
+          fi
+          gh release edit "$GITHUB_REF_NAME" --draft=false
+
+  marketplace:
+    needs: github-release
+    if: >-
+      always() && vars.PUBLISH_MARKETPLACE == 'true' &&
+      (needs.github-release.result == 'success' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'))
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -23,13 +56,17 @@ jobs:
         with:
           version: 11.23.0
       - run: pnpm install --frozen-lockfile
-      - name: Publish the released VSIX using Trusted Publishing
+      - name: Verify Marketplace trust without publishing
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          node -e "require('@vscode/vsce/out/oidc').getOIDCCredential(require('./package.json').publisher).then(() => console.log('Marketplace accepted the workflow identity.')).catch(() => { console.error('Marketplace credential exchange failed.'); process.exitCode = 1; })"
+      - name: Publish the released VSIX
+        if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.release.tag_name }}
         run: |
           version=$(node -p 'require("./package.json").version')
-          test "$TAG" = "v$version"
+          test "$GITHUB_REF_NAME" = "v$version"
           vsix="seapower-ini-$version.vsix"
-          gh release download "$TAG" --pattern "$vsix" --dir "$RUNNER_TEMP"
+          gh release download "$GITHUB_REF_NAME" --pattern "$vsix" --dir "$RUNNER_TEMP"
           pnpm exec vsce publish --oidc --packagePath "$RUNNER_TEMP/$vsix"
