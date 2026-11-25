@@ -2,6 +2,12 @@ const {test} = require("node:test");
 import assert from "node:assert/strict";
 const {generate,snippet,hierarchy,selectParent} = require("../src/hierarchy");
 const {isColliderName} = require("../src/mesh-names");
+test("coll anywhere or a legacy _col tag marks a likely collider", () => {
+  for (const name of ["collHull", "DeckCOLLIPort", "HullCollider", "collision", "usn_dd_spruance_vls_coll_hull_1", "Hull_Col", "Hull_col2", "Hull_col.001"])
+    assert.ok(isColliderName(name), name);
+  for (const name of ["Hull", "DeckColor", "Hull_color"])
+    assert.equal(isColliderName(name), false, name);
+});
 test("OBJ preview highlights collider groups sharing the same material with the hull",async()=>{
   const {previewObj} = require("../src/obj-geometry");
   const m = previewObj("v 0 0 0\nv 1 0 0\nv 0 1 0\no Hull\nusemtl common\nf 1 2 3\no Hull_Col\ng sides\nusemtl common\nf 1 3 2");

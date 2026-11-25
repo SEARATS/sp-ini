@@ -72,7 +72,7 @@ export function registerHierarchy(context: vscode.ExtensionContext) {
       const selected = await vscode.window.showQuickPick(candidates.map(n => ({
         label: n.name, description: n.mesh === n.name ? undefined : n.mesh, detail: n.path,
         picked: defaultRole(n) === "Collider", node: n
-      })), { title: "Copy Colliders as INI", placeHolder: "Select collision meshes (_col names are preselected)",
+      })), { title: "Copy Colliders as INI", placeHolder: "Select collision meshes (likely colliders are preselected)",
         canPickMany: true, matchOnDescription: true, matchOnDetail: true });
       if (!selected?.length) return;
       const paths = new Set(selected.map(item => item.node.path));

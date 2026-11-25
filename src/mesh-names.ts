@@ -1,1 +1,1 @@
-export const isColliderName = (name: string) => /_col(?:$|[_\d.])/i.test(name);
+export const isColliderName = (name: string) => /coll|_col(?:$|[_\d.])/i.test(name);

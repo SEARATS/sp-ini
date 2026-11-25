@@ -16,11 +16,11 @@ Expand **Model hierarchy** in an FBX preview to check each object's parent. In a
 
 Ctrl+click an underlined mesh or mesh collider to open its OBJ declaration. Hover over the INI value or OBJ name to see the wireframe and, when UVs and a diffuse map are available, the textured mesh. Material hovers show a lit plane covering the full texture, followed by each texture. The swatch approximates lighting and supports PNG and JPEG textures.
 
-The Windows x64 extension reads stock meshes and materials directly from your installed game. Loose overrides take priority. Objects tagged `_col` appear orange in the OBJ viewer and rank first among matching mesh suggestions.
+The Windows x64 extension reads stock meshes and materials directly from your installed game. Loose overrides take priority. Mesh names containing `coll` anywhere (case-insensitive) or tagged `_col` appear orange in the OBJ viewer and rank first among matching mesh suggestions.
 
 Right-click an FBX in the Explorer or its 3D preview and choose **Copy Hierarchy as INI** to copy submodels and colliders. For custom object roles, right-click a parent in **FBX hierarchy** and choose **Generate Submodels and Colliders…**. Review object roles, then apply the diff to an INI or copy the generated text to your clipboard.
 
-Choose **Copy Colliders as INI** to copy just the mesh collider definitions. Right-click a tree row to limit the picker to that branch. Meshes tagged `_col` are preselected. Each collider keeps its FBX parent and local position.
+Choose **Copy Colliders as INI** to copy just the mesh collider definitions. Right-click a tree row to limit the picker to that branch. The picker preselects likely colliders by object or mesh name. You can change the selection before copying. Each collider keeps its FBX parent and local position.
 
 Hover over a collider reference to see its shape. `ContainerBase` and numbered `Gun` references link to the unit's declared model parts.
 
