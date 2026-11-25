@@ -20,5 +20,23 @@ exports.run = async () => {
   assert.ok(definitions.some(d => (d.uri || d.targetUri).fsPath.toLowerCase().endsWith(process.env.SEAPOWER_TEST_UNIT.toLowerCase() + ".ini")), "unit definition");
   assert.ok((await request("Hover", pos.translate(0, -1))).length, "unit hover");
   assert.equal((await request("DocumentSymbol")).length, 2);
+  const vessel = await vscode.workspace.openTextDocument({ language: "seapower-ini",
+    content: "[General]\nUnitType=Vessel\nArmorType=Heavyd\n[SensorSystem1]\nSystemName=SPS-48" });
+  await vscode.window.showTextDocument(vessel);
+  const checkArmor = async invalid => {
+    for (let i = 0; i < 80; i++) {
+      const issues = vscode.languages.getDiagnostics(vessel.uri);
+      if (issues.some(d => d.severity === vscode.DiagnosticSeverity.Error && d.message.includes("Heavyd")) === invalid) return;
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    assert.fail("Expected armor error present=" + invalid);
+  };
+  await checkArmor(true);
+  const sensors = await vscode.commands.executeCommand("vscode.executeDefinitionProvider", vessel.uri, new vscode.Position(4, 13));
+  assert.ok(sensors.some(d => (d.uri || d.targetUri).fsPath.endsWith("sensors.ini")));
+  const edit = new vscode.WorkspaceEdit();
+  edit.replace(vessel.uri, new vscode.Range(2, 10, 2, 16), "Heavy");
+  assert.ok(await vscode.workspace.applyEdit(edit));
+  await checkArmor(false);
   await vscode.window.showTextDocument(editor.document);
 };

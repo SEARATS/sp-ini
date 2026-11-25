@@ -3,7 +3,7 @@ const { TextDocument } = require("vscode-languageserver-textdocument");
 const { roots } = require("./roots");
 const { Catalog, buildCatalog } = require("./catalog");
 const { parse } = require("./ini");
-const { completions, diagnostics, exact, inspect, location, source, symbols } = require("./features");
+const { completions, diagnostics, documentLinks, exact, inspect, location, source, symbols } = require("./features");
 
 const connection = createConnection();
 const documents = new TextDocuments(TextDocument);
@@ -12,7 +12,7 @@ let catalog = new Catalog(), options, folders;
 let building, requested = 0;
 
 function publish(uri) {
-  if (parsed.has(uri)) connection.sendDiagnostics({ uri, version: documents.get(uri)?.version, diagnostics: diagnostics(parsed.get(uri), catalog) });
+  if (parsed.has(uri)) connection.sendDiagnostics({ uri, version: documents.get(uri)?.version, diagnostics: diagnostics(parsed.get(uri), catalog, uri) });
 }
 
 function refresh() {
@@ -40,7 +40,7 @@ connection.onInitialize(params => {
   folders = params.workspaceFolders || (params.rootUri ? [{ uri: params.rootUri }] : []);
   return { capabilities: { textDocumentSync: TextDocumentSyncKind.Incremental,
     completionProvider: { triggerCharacters: ["[", "=", "/", "!"] }, hoverProvider: true,
-    definitionProvider: true, documentSymbolProvider: true } };
+    definitionProvider: true, documentLinkProvider: {}, documentSymbolProvider: true } };
 });
 connection.onInitialized(() => refresh().catch(error => connection.console.error(String(error))));
 connection.onRequest("seapower/rebuild", params => {
@@ -64,6 +64,11 @@ async function context(params) {
 }
 connection.onCompletion(async p => completions(await context(p), p.position));
 connection.onDefinition(async p => exact(await context(p)).filter(ref => ref.file).map(location));
+connection.onDocumentLinks(async p => {
+  await building;
+  const uri = p.textDocument.uri, doc = parsed.get(uri);
+  return doc ? documentLinks(doc, uri, catalog) : [];
+});
 connection.onHover(async p => {
   const refs = exact(await context(p));
   if (!refs.length) return null;

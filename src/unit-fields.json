@@ -1,0 +1,182 @@
+{
+  "shared": {
+    "Animations": {
+      "integer": [
+        "NumberOfAnimationReferences"
+      ]
+    },
+    "Cargo": {
+      "integer": [
+        "NumberOfCargoHolds",
+        "NumberOfCargoSlots"
+      ]
+    },
+    "Colliders": {
+      "integer": [
+        "NumberOfColliders",
+        "NumberOfMeshColliders"
+      ]
+    },
+    "CombatSystems": {
+      "integer": [
+        "NumberOfCombatSystems"
+      ]
+    },
+    "DecoySystems": {
+      "integer": [
+        "NumberOfDecoySystems"
+      ]
+    },
+    "FlightDeck": {
+      "number": [
+        "LandingDirection"
+      ],
+      "integer": [
+        "NumberOfLaunchPoints"
+      ]
+    },
+    "General": {
+      "number": [
+        "CameraPivotHeight",
+        "CameraYOffsetForDirectControl",
+        "DefaultCameraDistance",
+        "MinCameraDistanceBroadside",
+        "MinCameraDistanceForeAft"
+      ],
+      "integer": [
+        "DamagePoints",
+        "DatalinkTier"
+      ]
+    },
+    "HitZones": {
+      "integer": [
+        "NumberOfHitZones"
+      ]
+    },
+    "Models": {
+      "integer": [
+        "LODLevels",
+        "NumberOfDamageModels",
+        "NumberOfSubModels"
+      ]
+    },
+    "Performance": {
+      "number": [
+        "LoiterRange"
+      ]
+    },
+    "Physics": {
+      "number": [
+        "LoiterRange",
+        "WaypointTolerance"
+      ],
+      "integer": [
+        "TransportCapacity"
+      ]
+    },
+    "SensorSystems": {
+      "integer": [
+        "NumberOfSensorSystems"
+      ]
+    },
+    "Sounds": {
+      "integer": [
+        "SoundMode"
+      ]
+    },
+    "SupplySystems": {
+      "integer": [
+        "NumberOfSupplySystems"
+      ]
+    },
+    "TestPoints": {
+      "integer": [
+        "NumberOfPoints"
+      ]
+    },
+    "WeaponSystems": {
+      "integer": [
+        "NumberOfWeaponSystems"
+      ],
+      "number": [
+        "TorpedoLaunchDelay"
+      ]
+    }
+  },
+  "vessels": {
+    "Foam": {
+      "number": [
+        "HullFoamAlpha",
+        "HullFoamDuration",
+        "HullFoamExpansion",
+        "HullFoamJitter",
+        "HullFoamMomentum",
+        "HullFoamSize",
+        "HullFoamSpacing",
+        "HullFoamSpin",
+        "OverlayFoamMaxAlpha",
+        "OverlayHeightMaxAlpha",
+        "OverlayNormalMaxAlpha",
+        "OverlayOffset",
+        "SternFoamAlpha",
+        "SternFoamDuration",
+        "SternFoamExpansion",
+        "SternFoamJitter",
+        "SternFoamMomentum",
+        "SternFoamSize",
+        "SternFoamSpacing",
+        "SternFoamSpin",
+        "VelocityForMaxParticles",
+        "VelocityForMinParticles"
+      ]
+    },
+    "Particles": {
+      "number": [
+        "BowWaveMaxHeight",
+        "BowWaveMinHeight"
+      ]
+    },
+    "Sounds": {
+      "number": [
+        "EngineAudioVolume",
+        "FlowAudioPitch",
+        "FlowAudioVolume",
+        "PropAudioVolume",
+        "SonarAudioPitch",
+        "SonarAudioVolume"
+      ]
+    }
+  },
+  "aircraft": {
+    "Hover": {
+      "number": [
+        "MaxAltitudeForHoverEffect",
+        "OverlaySize"
+      ]
+    },
+    "Sounds": {
+      "number": [
+        "EngineLoopAudioPitch",
+        "EngineLoopAudioVolume",
+        "EnginePowerUpAudioPitch",
+        "EnginePowerUpAudioVolume",
+        "EnginePowerUpToLoopAudioFadeTime",
+        "RotorsFlightLoopAudioPitch",
+        "RotorsFlightLoopAudioVolume",
+        "RotorsIdleLoopAudioFadeInTime",
+        "RotorsIdleLoopAudioPitch",
+        "RotorsIdleLoopAudioVolume",
+        "SonarAudioPitch",
+        "SonarAudioVolume"
+      ]
+    }
+  },
+  "land_units": {
+    "Particles": {
+      "number": [
+        "MinVelocityForDust"
+      ]
+    }
+  },
+  "biologic": {}
+}

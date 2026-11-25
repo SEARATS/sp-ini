@@ -14,6 +14,8 @@ Install the VSIX with **Extensions: Install from VSIX...**. Open a stock mission
 - In a numbered mission unit section such as `[Taskforce1Vessel1]`, complete `Type=` with indexed unit IDs. F12 opens the definition. If several mods define the same ID, VS Code lists the matches.
 - Complete file paths in `#!extend`, `#!prepend`, `#!alias` and `#!copy` directives. F12 opens the target. Within a mission, F12 on a `HomeBase` reference jumps to the named section.
 - Use the Outline for sections and keys. The Problems panel reports malformed assignments and section headers, unmatched repeat blocks, and mission unit IDs missing from the index.
+- Unit files get type checks for fields read by the vanilla loader. For example, `ArmorType=Heavyd` is an error and Ctrl+Space lists the four armor classes. Fields with a consistent number, boolean or vector format across multiple vanilla files get advisory checks. Duplicate keys and likely misspellings also appear in Problems.
+- Use F12 on individual items in lists such as `AssociatedSensors` and `Views`, on system names, ammunition IDs, nation names, mission variants, or file paths. The server resolves models and materials through `[Models] ResourcesFolder`. It also links indexed texture files. F12 shows all matching definitions when multiple content packs supply a name.
 
 The index includes installed Workshop items regardless of their Mod Manager selection. For suggestions with the same spelling, it prefers workspace examples, then local mods, Workshop and vanilla. This order helps locate editable source files. The game decides runtime load order. Custom keys are welcome, and an unrecognized unit ID is informational.
 
@@ -33,7 +35,7 @@ pnpm test
 pnpm run package
 ```
 
-This creates `seapower-ini-0.1.0.vsix`. The package includes both the client and the server. Game and Workshop data stay on the user's machine.
+This creates `seapower-ini-0.2.0.vsix`. The package includes both the client and the server. Game and Workshop data stay on the user's machine.
 
 ## Other editors
 

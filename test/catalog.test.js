@@ -22,7 +22,9 @@ test("indexes stock and mod definitions, including extensions and overlapping un
   const mission = parse("[Taskforce1Vessel42]\r\nType=shared // comment\r\nType=missing");
   const lookup = (doc, line, character) => inspect(doc, uri, { line, character }, catalog);
   assert.deepEqual(exact(lookup(mission, 1, 7)).map(r => r.file.source), ["Local", "Workshop", "Vanilla"]);
-  assert.deepEqual(diagnostics(mission, catalog).map(d => d.range.start.line), [2]);
+  assert.deepEqual(diagnostics(mission, catalog).map(d => d.message), [
+    "Type already appears on line 2 of this section.", "Unit ID 'missing' was not found in the indexed content folders."
+  ]);
   const typePos = { line: 1, character: 5 };
   assert.deepEqual(completions(lookup(mission, 1, 5), typePos).map(c => c.label).sort(), ["Local", "Vanilla", "Workshop", "shared"]);
   const patch = parse("#!extend vessels/shared.ini\n[General]\nLoc");

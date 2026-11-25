@@ -24,7 +24,7 @@ function parse(text) {
     const directive = /^#!(\w+)\b\s*(.*)/.exec(value);
     if (directive) {
       const [, name, args] = directive;
-      modifiers.push({ name, args, line });
+      modifiers.push({ name, args, line, argsStart: start + directive[0].length - args.length });
       if (name === "repeat") {
         if (repeat !== undefined) issues.push({ line, message: "Nested #!repeat block." });
         else repeat = line;
@@ -54,7 +54,9 @@ function parse(text) {
       continue;
     }
     const key = content.slice(0, equals).trimEnd();
-    const entry = { name: key, value: content.slice(equals + 1).trim(), start, line, section };
+    const tail = content.slice(equals + 1);
+    const entry = { name: key, value: tail.trim(), valueStart: start + equals + 1 + tail.length - tail.trimStart().length,
+      start, line, section, repeated: repeat !== undefined };
     entries.push(entry);
     section?.keys.push(entry);
   }

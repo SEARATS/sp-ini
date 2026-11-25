@@ -2,7 +2,7 @@
   "name": "seapower-ini",
   "displayName": "Sea Power INI",
   "description": "INI editing for Sea Power with definitions from the game, local mods and Steam Workshop.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "searats",
   "private": true,
   "repository": { "type": "git", "url": "https://github.com/SEARATS/seapower-ini.git" },
