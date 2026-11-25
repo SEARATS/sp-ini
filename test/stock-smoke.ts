@@ -2,6 +2,7 @@
 import * as vscode from "vscode";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
+import { renderedModel } from "../scripts/gallery/webview";
 function checkPreviewControls() {
   const canvas = document.querySelector("canvas[aria-label]") as HTMLCanvasElement;
   if (!canvas || !document.querySelector("[role=status]")?.textContent.includes("Drag to orbit")) return "loading";
@@ -38,38 +39,6 @@ function checkPreviewControls() {
   const independentModes = onlyColliders === sameColliders && onlyColliders !== solidColliders && wireMesh === sameMesh && wireMesh !== shadedMesh;
   return filtered && remembered && !row.hidden && onlyColliders !== empty && independentModes ? "verified controls" : "display check failed";
 }
-async function renderedModel(port: number, check: () => string | Promise<string> = checkPreviewControls) {
-  const seen = new Set<string>();
-  for (let attempt=0; attempt<40; attempt++) {
-    const targets = await (await fetch("http://127.0.0.1:"+port+"/json/list")).json();
-    for (const target of targets.filter(t=>t.type==="iframe" || t.type==="page")) {
-      const statuses = await new Promise<string[]>(resolve=>{
-        const ws = new WebSocket(target.webSocketDebuggerUrl), contexts = new Set<number>(), values: string[] = [];
-        const timer = setTimeout(finish,1200);
-        function finish() { clearTimeout(timer); ws.close(); resolve(values); }
-        ws.onerror=finish;
-        ws.onopen=()=>ws.send(JSON.stringify({id:1,method:"Runtime.enable"}));
-        ws.onmessage=event=>{
-          const msg=JSON.parse(String(event.data));
-          if (msg.method==="Runtime.executionContextCreated") contexts.add(msg.params.context.id);
-          if (msg.id===1) {
-            if (!contexts.size) return finish();
-            for (const id of contexts) ws.send(JSON.stringify({id:id+2,method:"Runtime.evaluate",params:{contextId:id,
-              returnByValue:true,awaitPromise:true,expression:"("+check.toString()+")()"}}));
-          } else if (msg.id>1) {
-            values.push(msg.result?.result?.value || "empty");
-            if (values.length>=contexts.size) finish();
-          }
-        };
-      });
-      statuses.forEach(status=>seen.add(target.type+" "+status));
-      if (statuses.includes("verified controls")) return;
-    }
-    await new Promise(resolve=>setTimeout(resolve,250));
-  }
-  assert.fail("FBX webview did not finish drawing its model: "+[...seen].join(", "));
-}
-
 export const run = async () => {
   const ini = vscode.Uri.file(process.env.SP_INI_STOCK_INI);
   const doc = await vscode.workspace.openTextDocument(ini);
@@ -98,7 +67,7 @@ export const run = async () => {
         assert.ok(vscode.window.tabGroups.all.some(g=>g.tabs.some(t=>(t.input instanceof vscode.TabInputCustom && t.input.viewType)==="seapower-ini.fbx")));
         outcomes.push("FBX preview opened");
         if (process.env.SP_INI_CDP_PORT) {
-          await renderedModel(Number(process.env.SP_INI_CDP_PORT));
+          await renderedModel(Number(process.env.SP_INI_CDP_PORT),checkPreviewControls);
           outcomes.push("FBX collider icon, visibility, category filters and wireframe verified");
         }
       }

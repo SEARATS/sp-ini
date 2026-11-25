@@ -59,13 +59,15 @@ Each OBJ contains the mesh's geometry, normals and UVs where supplied. Materials
 
 The [public gallery](https://github.com/SEARATS/binaries/tree/main/sp-ini) lives in the SEARATS binaries repository.
 
-On Windows, install the project dependencies with `pnpm install --frozen-lockfile`. With VS Code's `code` command on PATH and either `uv` or Python with UnityPy 1.25.4, run:
+On Windows, install the project dependencies with `pnpm install --frozen-lockfile`. The capture script uses VS Code's `code` command and either `uv` or Python 3.12 with UnityPy 1.25.4 and PyInstaller 6.16.0.
 
 ```powershell
 ./scripts/screenshots.ps1 -OutputDirectory "$env:TEMP\sp-ini-feature-gallery"
 ```
 
 Blender adds a screenshot of the same stock exterior in FBX format. Pass `-BlenderPath` if it is installed outside the default location.
+
+The entity preview screenshots use the installed ship INI. The script hovers over the ship and a sphere collider, then follows links from the viewport and hierarchy to their INI sections.
 
 Pass `-GameDirectory` for a different Steam library. The script opens an isolated VS Code window, exports selected stock Spruance VLS meshes and textures into a temporary workspace, and exercises the extension on a copy of the ship INI. It crops the rendered widgets and relevant source lines, then writes the PNGs, a Markdown gallery and `index.html` to the output folder.
 

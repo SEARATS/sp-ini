@@ -44,6 +44,11 @@ VS Code selects **Sea Power INI** for files inside a mod with an `_info.ini`, in
 
 The examples use the stock Spruance VLS destroyer. Select a screenshot to view it at full size.
 
+| Entity preview | Go to INI section |
+| --- | --- |
+| Hover over an assembled mesh<br>[![Mesh tooltip on the Spruance][entity-mesh]][entity-mesh] | Ctrl+click a hierarchy row to open its repeat template<br>[![Repeated mesh and its INI template][hierarchy-definition]][hierarchy-definition] |
+| Sphere colliders at different in-game sizes<br>[![Sphere wireframes and collider tooltip][sphere-colliders]][sphere-colliders] | Ctrl+click a collider to open its definition<br>[![Selected collider section beside the preview][preview-definition]][preview-definition] |
+
 | INI editing | Diagnostics and quick fixes |
 | --- | --- |
 | Value completion<br>[![Value completion][completion]][completion] | Duplicate warning and conflicting-value error<br>[![Duplicate warning and conflicting-value error][duplicate-diagnostics]][duplicate-diagnostics] |
@@ -61,20 +66,24 @@ The examples use the stock Spruance VLS destroyer. Select a screenshot to view i
 | Box collider shape and dimensions<br>[![Box collider shape and dimensions][box-collider]][box-collider] | Spruance VLS in the 3D preview<br>[![Spruance VLS in the 3D preview][obj-preview]][obj-preview] |
 | Collapsed OBJ objects<br>[![Collapsed OBJ objects][obj-folding]][obj-folding] | Spruance VLS in the FBX viewer<br>[![Spruance VLS in the FBX viewer][fbx-preview]][fbx-preview] |
 
-[mesh-links]: https://raw.githubusercontent.com/SEARATS/binaries/7f281d9a58b1003a9c2528a4332b457e20e195e7/sp-ini/01-mesh-links.png
-[mesh-hover]: https://raw.githubusercontent.com/SEARATS/binaries/7f281d9a58b1003a9c2528a4332b457e20e195e7/sp-ini/02-mesh-hover.png
-[material-hover]: https://raw.githubusercontent.com/SEARATS/binaries/7f281d9a58b1003a9c2528a4332b457e20e195e7/sp-ini/03-material-hover.png
-[mesh-collider]: https://raw.githubusercontent.com/SEARATS/binaries/7f281d9a58b1003a9c2528a4332b457e20e195e7/sp-ini/04-mesh-collider.png
-[box-collider]: https://raw.githubusercontent.com/SEARATS/binaries/7f281d9a58b1003a9c2528a4332b457e20e195e7/sp-ini/05-box-collider.png
-[model-part-links]: https://raw.githubusercontent.com/SEARATS/binaries/7f281d9a58b1003a9c2528a4332b457e20e195e7/sp-ini/06-model-part-links.png
-[obj-source-hover]: https://raw.githubusercontent.com/SEARATS/binaries/7f281d9a58b1003a9c2528a4332b457e20e195e7/sp-ini/07-obj-source-hover.png
-[obj-folding]: https://raw.githubusercontent.com/SEARATS/binaries/7f281d9a58b1003a9c2528a4332b457e20e195e7/sp-ini/08-obj-folding.png
-[obj-preview]: https://raw.githubusercontent.com/SEARATS/binaries/7f281d9a58b1003a9c2528a4332b457e20e195e7/sp-ini/09-obj-preview.png
-[ini-folding]: https://raw.githubusercontent.com/SEARATS/binaries/7f281d9a58b1003a9c2528a4332b457e20e195e7/sp-ini/10-ini-folding.png
-[completion]: https://raw.githubusercontent.com/SEARATS/binaries/7f281d9a58b1003a9c2528a4332b457e20e195e7/sp-ini/11-completion.png
-[duplicate-diagnostics]: https://raw.githubusercontent.com/SEARATS/binaries/7f281d9a58b1003a9c2528a4332b457e20e195e7/sp-ini/12-duplicate-diagnostics.png
-[quick-fix]: https://raw.githubusercontent.com/SEARATS/binaries/7f281d9a58b1003a9c2528a4332b457e20e195e7/sp-ini/13-quick-fix.png
-[inline-suppression]: https://raw.githubusercontent.com/SEARATS/binaries/7f281d9a58b1003a9c2528a4332b457e20e195e7/sp-ini/14-inline-suppression.png
-[section-toggle]: https://raw.githubusercontent.com/SEARATS/binaries/7f281d9a58b1003a9c2528a4332b457e20e195e7/sp-ini/15-section-toggle.png
-[read-only-reference]: https://raw.githubusercontent.com/SEARATS/binaries/7f281d9a58b1003a9c2528a4332b457e20e195e7/sp-ini/16-read-only-reference.png
-[fbx-preview]: https://raw.githubusercontent.com/SEARATS/binaries/7f281d9a58b1003a9c2528a4332b457e20e195e7/sp-ini/17-fbx-preview.png
+[mesh-links]: https://raw.githubusercontent.com/SEARATS/binaries/805eca8818285cc83fa79d1179ae11178758f3d7/sp-ini/01-mesh-links.png
+[mesh-hover]: https://raw.githubusercontent.com/SEARATS/binaries/805eca8818285cc83fa79d1179ae11178758f3d7/sp-ini/02-mesh-hover.png
+[material-hover]: https://raw.githubusercontent.com/SEARATS/binaries/805eca8818285cc83fa79d1179ae11178758f3d7/sp-ini/03-material-hover.png
+[mesh-collider]: https://raw.githubusercontent.com/SEARATS/binaries/805eca8818285cc83fa79d1179ae11178758f3d7/sp-ini/04-mesh-collider.png
+[box-collider]: https://raw.githubusercontent.com/SEARATS/binaries/805eca8818285cc83fa79d1179ae11178758f3d7/sp-ini/05-box-collider.png
+[model-part-links]: https://raw.githubusercontent.com/SEARATS/binaries/805eca8818285cc83fa79d1179ae11178758f3d7/sp-ini/06-model-part-links.png
+[obj-source-hover]: https://raw.githubusercontent.com/SEARATS/binaries/805eca8818285cc83fa79d1179ae11178758f3d7/sp-ini/07-obj-source-hover.png
+[obj-folding]: https://raw.githubusercontent.com/SEARATS/binaries/805eca8818285cc83fa79d1179ae11178758f3d7/sp-ini/08-obj-folding.png
+[obj-preview]: https://raw.githubusercontent.com/SEARATS/binaries/805eca8818285cc83fa79d1179ae11178758f3d7/sp-ini/09-obj-preview.png
+[ini-folding]: https://raw.githubusercontent.com/SEARATS/binaries/805eca8818285cc83fa79d1179ae11178758f3d7/sp-ini/10-ini-folding.png
+[completion]: https://raw.githubusercontent.com/SEARATS/binaries/805eca8818285cc83fa79d1179ae11178758f3d7/sp-ini/11-completion.png
+[duplicate-diagnostics]: https://raw.githubusercontent.com/SEARATS/binaries/805eca8818285cc83fa79d1179ae11178758f3d7/sp-ini/12-duplicate-diagnostics.png
+[quick-fix]: https://raw.githubusercontent.com/SEARATS/binaries/805eca8818285cc83fa79d1179ae11178758f3d7/sp-ini/13-quick-fix.png
+[inline-suppression]: https://raw.githubusercontent.com/SEARATS/binaries/805eca8818285cc83fa79d1179ae11178758f3d7/sp-ini/14-inline-suppression.png
+[section-toggle]: https://raw.githubusercontent.com/SEARATS/binaries/805eca8818285cc83fa79d1179ae11178758f3d7/sp-ini/15-section-toggle.png
+[read-only-reference]: https://raw.githubusercontent.com/SEARATS/binaries/805eca8818285cc83fa79d1179ae11178758f3d7/sp-ini/16-read-only-reference.png
+[fbx-preview]: https://raw.githubusercontent.com/SEARATS/binaries/805eca8818285cc83fa79d1179ae11178758f3d7/sp-ini/17-fbx-preview.png
+[entity-mesh]: https://raw.githubusercontent.com/SEARATS/binaries/805eca8818285cc83fa79d1179ae11178758f3d7/sp-ini/18-entity-mesh-hover.png
+[sphere-colliders]: https://raw.githubusercontent.com/SEARATS/binaries/805eca8818285cc83fa79d1179ae11178758f3d7/sp-ini/19-sphere-colliders.png
+[preview-definition]: https://raw.githubusercontent.com/SEARATS/binaries/805eca8818285cc83fa79d1179ae11178758f3d7/sp-ini/20-preview-definition.png
+[hierarchy-definition]: https://raw.githubusercontent.com/SEARATS/binaries/805eca8818285cc83fa79d1179ae11178758f3d7/sp-ini/21-hierarchy-definition.png

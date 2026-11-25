@@ -3,6 +3,8 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { camera, delay, waitFor } from "./camera";
+import { renderedModel } from "./webview";
+import { inspectSpruance } from "./entity";
 
 const command = <T = void>(id: string, ...args: unknown[]) => vscode.commands.executeCommand<T>(id, ...args);
 function select(editor, position) {
@@ -28,8 +30,18 @@ async function capture(screen) {
     select(source, pos);
     await command("vscode.executeHoverProvider", source.document.uri, pos);
     await delay(180);
-    await command("editor.action.showHover");
-    for (const [alt, count] of Object.entries(expected)) await screen.rendered(alt, count);
+    for (let attempt = 0; ; attempt++) {
+      await command("editor.action.showHover");
+      try {
+        for (const [alt, count] of Object.entries(expected)) await screen.rendered(alt, count);
+        break;
+      } catch (error) {
+        if (attempt === 2) throw error;
+        await command("editor.action.hideHover");
+        await vscode.window.showTextDocument(source.document);
+        select(source, pos);
+      }
+    }
     await screen.capture(file, title, { lines: [lineText], widget: ".monaco-hover" });
     await command("editor.action.hideHover");
   }
@@ -120,6 +132,28 @@ async function capture(screen) {
     await delay(2200);
     await screen.capture("17-fbx-preview", "Spruance VLS in the FBX viewer", { canvas: true });
   }
+  await command("workbench.action.closeAllEditors");
+  await screen.resize(920, 600);
+  await command("vscode.openWith", stock, "seapower-ini.entity", vscode.ViewColumn.One);
+  const port = Number(process.env.SP_GALLERY_PORT);
+  await renderedModel(port, inspectSpruance, "mesh");
+  await screen.capture("18-entity-mesh-hover", "Mesh tooltip on the assembled Spruance", { preview: [0,0.22,0.85,1] });
+  await renderedModel(port, inspectSpruance, "sphere");
+  await screen.capture("19-sphere-colliders", "Sphere collider wireframes and INI source tooltip", { preview: [0.12,0.18,0.91,0.86] });
+  await renderedModel(port, inspectSpruance, "open");
+  await waitFor(() => {
+    const target = vscode.window.activeTextEditor;
+    return target?.document.uri.toString() === stock.toString() && /^\[coll_/i.test(target.document.getText(target.selection))
+      && target.document.lineAt(target.selection.start.line + 1).text.trim() === "Collider=Sphere";
+  }, "Ctrl+click on the rendered sphere did not select its INI definition");
+  const target = vscode.window.activeTextEditor;
+  target.revealRange(target.selection, vscode.TextEditorRevealType.InCenter);
+  await screen.capture("20-preview-definition", "Ctrl+click opens the collider definition beside the preview", { preview: true });
+  await screen.resize(1180, 560);
+  await renderedModel(port, inspectSpruance, "hierarchy");
+  await waitFor(() => target.document.getText(target.selection) === "[VLS_Module_Fwd_{lr}_{rm}]", "Hierarchy link to repeat template");
+  target.revealRange(target.selection, vscode.TextEditorRevealType.InCenter);
+  await screen.capture("21-hierarchy-definition", "Repeated mesh and its source template", { preview: true });
   await screen.finish();
 }
 

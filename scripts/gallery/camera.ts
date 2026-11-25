@@ -12,10 +12,14 @@ async function waitFor(check, message) {
 }
 
 // Runs inside the workbench renderer. Measure the visible glyphs and widget, not the editor pane.
-function measure({ lines, after = 0, widget, tab, canvas }) {
+function measure({ lines, after = 0, widget, tab, canvas, preview }) {
   const editor = document.querySelector(".part.editor");
   const viewport = editor.getBoundingClientRect();
-  if (canvas) return { x: viewport.x, y: viewport.y, width: viewport.width, height: viewport.height, scale: 1 };
+  if (canvas || preview) {
+    const [left,top,right,bottom] = Array.isArray(preview) ? preview : [0,0,1,1];
+    return {x:viewport.x+left*viewport.width, y:viewport.y+top*viewport.height,
+      width:(right-left)*viewport.width, height:(bottom-top)*viewport.height, scale:1};
+  }
   const boxes = [];
   const visible = el => {
     const r = el.getBoundingClientRect();
@@ -89,6 +93,7 @@ async function camera() {
   await resize(1120, 800);
   return {
     close: () => socket.close(),
+    resize,
     async escape() {
       for (const type of ["keyDown", "keyUp"]) await call("Input.dispatchKeyEvent", { type, key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
     },

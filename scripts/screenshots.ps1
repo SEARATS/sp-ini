@@ -14,6 +14,14 @@ Push-Location $repo
 try {
     pnpm run build
     if ($LASTEXITCODE) { throw 'Extension build failed.' }
+    if (!(Test-Path -LiteralPath "$repo/dist/stock-reader/stock-reader.exe")) {
+        $readerPython = 'python'
+        if (Get-Command uv -ErrorAction SilentlyContinue) {
+            $readerPython = uv run --python 3.12 --with UnityPy==1.25.4 --with pyinstaller==6.16.0 python -c 'import sys; print(sys.executable)'
+            if ($LASTEXITCODE) { throw 'Could not prepare the stock reader environment.' }
+        }
+        & "$PSScriptRoot/build-reader.ps1" -Python $readerPython
+    }
     if (Get-Command uv -ErrorAction SilentlyContinue) {
         uv run scripts/gallery/stock_assets.py "$game" "$folder"
     } else {
