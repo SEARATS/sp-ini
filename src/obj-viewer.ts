@@ -1,11 +1,12 @@
 import { previewObj } from "./obj-geometry";
 import { objLayout, type OutlineNode, type PreviewPart } from "./model-outline";
 import { applyDisplay, type DisplaySettings } from "./preview-display";
+import { assembledEntity } from "./entity-viewer";
 import { Texture, Box3, DirectionalLight, HemisphereLight, LoadingManager, PerspectiveCamera, Scene, Sphere, WebGLRenderer } from "three";
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
-type SavedDisplay = Partial<DisplaySettings> & {hidden?: string[]; wireframe?: boolean};
+type SavedDisplay = Partial<DisplaySettings> & {hidden?: string[]; wireframe?: boolean; entity?: string; appearance?: string};
 declare function acquireVsCodeApi(): { postMessage(message: unknown): void; getState(): SavedDisplay | undefined; setState(value: SavedDisplay): void };
 const vscode = acquireVsCodeApi();
 const status = document.querySelector("[role=status]");
@@ -17,6 +18,11 @@ const camera = new PerspectiveCamera(42, 1, 0.01, 10000);
 const bounds = new Sphere();
 let renderer, controls, model;
 const saved = vscode.getState();
+let selectedEntity = saved?.entity, selectedAppearance = saved?.appearance;
+let initializedEntity = saved?.entity;
+const picker = document.querySelector<HTMLElement>("#entity-pickers");
+const entitySelect = picker.querySelector<HTMLSelectElement>("#entity"), appearanceSelect = picker.querySelector<HTMLSelectElement>("#appearance");
+const warnings = document.querySelector<HTMLDetailsElement>("#entity-warnings");
 const settings: DisplaySettings = {
   meshes: saved?.meshes ?? true, colliders: saved?.colliders ?? true,
   meshWireframe: saved?.meshWireframe ?? saved?.wireframe ?? false, colliderWireframe: saved?.colliderWireframe ?? true
@@ -31,8 +37,10 @@ function updateDisplay() {
 }
 function changed() {
   updateDisplay();
-  vscode.setState({...settings, hidden: [...hidden]});
+  vscode.setState({...settings, hidden: [...hidden], entity:selectedEntity, appearance:selectedAppearance});
 }
+entitySelect.onchange = () => vscode.postMessage({type:"selectEntity",entity:entitySelect.value});
+appearanceSelect.onchange = () => vscode.postMessage({type:"selectEntity",entity:entitySelect.value,appearance:appearanceSelect.value});
 for (const category of ["meshes","colliders"] as const) {
   const input = document.querySelector<HTMLInputElement>("#"+category);
   input.checked = settings[category];
@@ -149,6 +157,18 @@ async function load(data, layout?: ReturnType<typeof objLayout>) {
       const buffer = await response.arrayBuffer();
       if (current !== revision) return;
       next = new FBXLoader(manager).parse(buffer, new URL(".", data.url).href);
+    } else if (data.type === "entityScene") {
+      const manager = new LoadingManager();
+      const ready = () => {
+        if (current !== revision) return;
+        canvas.setAttribute("aria-label",[selectedEntity,selectedAppearance].filter(Boolean).join(" · ")+" 3D preview");
+        draw();
+      };
+      manager.onLoad = ready;
+      const assembled = assembledEntity(data.scene,manager);
+      if (!data.scene.textures.length) ready();
+      showOutline(assembled.outline,"");
+      next = assembled.model;
     } else {
       next = previewObj(data.text, layout);
     }
@@ -197,6 +217,47 @@ try {
 
 let fbxUri: string;
 window.addEventListener("message", ({ data }) => {
+  if (data.type === "entityLoading" || data.type === "entityError") {
+    canvas.setAttribute("aria-label","3D model");
+    revision++;
+    if (model) { scene.remove(model); dispose(model); model = undefined; draw(); }
+    fit.hidden = true;
+    warnings.hidden = true;
+    showOutline([],"");
+    status.textContent = data.message || "Assembling entity…";
+    return;
+  }
+  if (data.type === "entityChoices") {
+    if (selectedEntity !== data.entity) hidden.clear();
+    selectedEntity = data.entity; selectedAppearance = data.appearance;
+    for (const [select,choices,value] of [[entitySelect,data.entities,selectedEntity],[appearanceSelect,data.appearances,selectedAppearance]] as const) {
+      select.replaceChildren(...choices.map(c=>new Option(c.label,c.id)));
+      select.value = value || "";
+    }
+    picker.hidden = false;
+    entitySelect.disabled = data.entities.length === 1;
+    picker.querySelector("#appearance-label").textContent = data.appearances.some(c=>/^squadron/i.test(c.id)) ? "Squadron" : "Variant";
+    appearanceSelect.parentElement.parentElement.hidden = !data.appearances.length;
+    return;
+  }
+  if (data.type === "entityScene") {
+    const notes: string[] = data.scene.warnings;
+    warnings.hidden = !notes.length;
+    warnings.querySelector("summary").textContent = "Preview notes ("+notes.length+")";
+    warnings.querySelector("div").replaceChildren(...notes.map(note=>{const p=document.createElement("p");p.textContent=note;return p;}));
+    if (!initializedEntity && !vscode.getState()) {
+      settings.colliders = false;
+      document.querySelector<HTMLInputElement>("#colliders").checked = false;
+    }
+    if (initializedEntity !== data.entity) {
+      for (const part of data.scene.parts) if (!part.visible) hidden.add(part.id);
+      initializedEntity = data.entity;
+    }
+    changed();
+    if (controls) void load(data);
+    else status.textContent = "The entity preview needs WebGL 2.";
+    return;
+  }
   if (data.type === "outline") {
     showOutline(data.nodes || [], data.error || (data.nodes?.length ? "" : "No model nodes in this FBX."), fbxUri);
     return;
@@ -215,4 +276,4 @@ window.addEventListener("message", ({ data }) => {
   }
   if (controls) void load(data, layout);
 });
-vscode.postMessage({ type: "ready" });
+vscode.postMessage({ type: "ready",entity:selectedEntity,appearance:selectedAppearance });

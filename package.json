@@ -2,7 +2,7 @@
   "name": "seapower-ini",
   "displayName": "Sea Power INI",
   "description": "Autocomplete, error checking and Go to Definition for Sea Power INI files.",
-  "version": "0.6.6",
+  "version": "0.7.0",
   "publisher": "searats",
   "private": true,
   "repository": {
@@ -76,6 +76,16 @@
           }
         ],
         "priority": "default"
+      },
+      {
+        "viewType": "seapower-ini.entity",
+        "displayName": "Sea Power Entity Preview",
+        "selector": [
+          {
+            "filenamePattern": "*.[iI][nN][iI]"
+          }
+        ],
+        "priority": "option"
       }
     ],
     "commands": [
@@ -129,6 +139,12 @@
         "command": "seapower-ini.copyColliders",
         "title": "Copy Colliders as INI",
         "category": "Sea Power INI"
+      },
+      {
+        "command": "seapower-ini.previewEntity",
+        "title": "Preview Entity",
+        "category": "Sea Power INI",
+        "icon": "$(preview)"
       }
     ],
     "menus": {
@@ -154,6 +170,11 @@
           "command": "seapower-ini.previewObj",
           "when": "resourceExtname =~ /[.]obj$/i && activeCustomEditorId != seapower-ini.obj",
           "group": "navigation"
+        },
+        {
+          "command": "seapower-ini.previewEntity",
+          "when": "resourceExtname =~ /[.]ini$/i && activeCustomEditorId != seapower-ini.entity && (editorLangId == seapower-ini || resourcePath =~ /[\\\\\\/](vessels|aircraft|land_units|biologic|missions)[\\\\\\/]/i)",
+          "group": "navigation"
         }
       ],
       "explorer/context": [
@@ -168,6 +189,10 @@
         {
           "command": "seapower-ini.copyColliders",
           "when": "!explorerResourceIsFolder && resourceExtname =~ /[.]fbx$/i"
+        },
+        {
+          "command": "seapower-ini.previewEntity",
+          "when": "resourceExtname =~ /[.]ini$/i && !explorerResourceIsFolder"
         }
       ],
       "commandPalette": [
@@ -190,6 +215,10 @@
         {
           "command": "seapower-ini.copyColliders",
           "when": "false"
+        },
+        {
+          "command": "seapower-ini.previewEntity",
+          "when": "resourceExtname =~ /[.]ini$/i"
         }
       ],
       "view/item/context": [

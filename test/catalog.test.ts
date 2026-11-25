@@ -17,10 +17,20 @@ test("indexes stock and mod definitions, including extensions and overlapping un
     await fs.writeFile(path.join(root.dir, "vessels/shared.ini"), "[General]\nUnitType=Vessel\n");
   }
   await fs.writeFile(path.join(roots[0].dir, "patch.ini"), "#!extend vessels/shared.ini\n[General]\nLocalKey=7");
+  await fs.writeFile(path.join(roots[0].dir, "layout.ini"), "[Nations]\nCustom_Nation=Custom Nation");
+  await fs.writeFile(path.join(roots[2].dir, "nations.ini"), "[Nations]\nSouth_Africa=South Africa");
   const catalog = await buildCatalog(roots);
   const uri = "file:///missions/demo.ini";
   const mission = parse("[Taskforce1Vessel42]\r\nType=shared // comment\r\nType=missing");
   const lookup = (doc, line, character) => inspect(doc, uri, { line, character }, catalog);
+  for (const [name,file] of [["South_Africa","nations.ini"],["Custom_Nation","layout.ini"]]) {
+    const squadron = parse("[Squadron1]\n# nations are referenced in the layout.ini file:\nNation="+name);
+    const info = lookup(squadron,2,8);
+    assert.equal(exact(info)[0].file.rel,file);
+    const suggestions = completions(info,{line:2,character:8});
+    assert.ok((Array.isArray(suggestions) ? suggestions : suggestions.items).some(item=>item.label===name));
+    assert.equal(diagnostics(squadron,catalog).length,0);
+  }
   assert.deepEqual(exact(lookup(mission, 1, 7)).map(r => r.file.source), ["Local", "Workshop", "Vanilla"]);
   assert.deepEqual(diagnostics(mission, catalog).map(d => d.message), [
     "Type has a different value on line 2 of this section.", "Unit ID 'missing' was not found in the indexed content folders."

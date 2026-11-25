@@ -15,7 +15,7 @@ function openSourceBeside(document, column) {
   });
 }
 
-function registerObjPreview(context) {
+function registerObjPreview(context, entityRequest) {
   const dist = vscode.Uri.joinPath(context.extensionUri, "dist");
   const openSource = vscode.commands.registerCommand("seapower-ini.openObjSource", async (url, line, column) => {
     const uri = vscode.Uri.parse(url);
@@ -89,6 +89,8 @@ function registerObjPreview(context) {
       #outline li { line-height:1.55; white-space:nowrap; }
       #outline li > span { padding-left:1em; }
       #outline p { margin:4px 0; color:var(--vscode-descriptionForeground); }
+      #entity-pickers label { display:grid; gap:2px; margin:4px 0; }
+      #entity-warnings { max-width:28rem; white-space:normal; }
       #filters { display:grid; grid-template-columns:auto auto; align-items:center; gap:4px 8px; margin:6px 0; }
       #filters label, .row { display:inline-flex; align-items:center; gap:4px; }
       input[type=checkbox] { margin:0; accent-color:var(--vscode-focusBorder); }
@@ -98,11 +100,12 @@ function registerObjPreview(context) {
       </style></head><body>
       <canvas aria-label="3D model"></canvas><aside><button hidden>Fit model</button> <span role="status">Opening model…</span></aside>
       <details id="outline" open><summary>Model hierarchy</summary>
+      <div id="entity-pickers" hidden><label>Entity<select id="entity"></select></label><div hidden><label><span id="appearance-label">Appearance</span><select id="appearance"></select></label></div></div>
       <div id="filters"><label><input id="meshes" type="checkbox" checked>Meshes</label>
       <select id="meshWireframe" aria-label="Mesh render mode"><option value="shaded">Shaded</option><option value="wireframe">Wireframe</option></select>
       <label><input id="colliders" type="checkbox" checked>Colliders</label>
       <select id="colliderWireframe" aria-label="Collider render mode"><option value="shaded">Shaded</option><option value="wireframe" selected>Wireframe</option></select></div>
-      <p></p><ul></ul></details>
+      <p></p><details id="entity-warnings" hidden><summary></summary><div></div></details><ul></ul></details>
       <template id="box"><svg class="collider-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-linejoin="round" role="img" aria-label="Likely collider"><title>Likely collider</title><path d="M8 1 14.5 4.5v7L8 15l-6.5-3.5v-7z M1.5 4.5 8 8l6.5-3.5 M8 8v7"/></svg></template>
       <script nonce="${nonce}" src="${script}"></script></body></html>`;
   }
@@ -131,7 +134,47 @@ function registerObjPreview(context) {
       showViewer(panel);
     }
   });
-  return vscode.Disposable.from(command, openSource, fbx, vscode.window.registerCustomEditorProvider(viewType, { resolveCustomTextEditor }));
+  const entityType = "seapower-ini.entity";
+  const openEntity = vscode.commands.registerCommand("seapower-ini.previewEntity", resource => {
+    const uri = resource || vscode.window.activeTextEditor?.document.uri;
+    if (uri && /\.ini$/i.test(uri.path)) return vscode.commands.executeCommand("vscode.openWith",uri,entityType,vscode.ViewColumn.Beside);
+  });
+  const entity = vscode.window.registerCustomEditorProvider(entityType, {
+    resolveCustomTextEditor(document,panel) {
+      panel.webview.options = {enableScripts:true,localResourceRoots:[dist]};
+      let pending: vscode.CancellationTokenSource, timer, entity: string, appearance: string;
+      function cancel() { pending?.cancel(); pending?.dispose(); pending = undefined; clearTimeout(timer); }
+      async function update() {
+        cancel();
+        const source = pending = new vscode.CancellationTokenSource();
+        const token = source.token;
+        const request = {uri:document.uri.toString(),text:document.getText(),entity,appearance};
+        try {
+          await panel.webview.postMessage({type:"entityLoading"});
+          const choices = await entityRequest(request,token);
+          if (token.isCancellationRequested) return;
+          entity = choices.entity; appearance = choices.appearance;
+          await panel.webview.postMessage({type:"entityChoices",...choices});
+          const scene = await entityRequest({...request,entity,appearance,render:true},token);
+          if (!token.isCancellationRequested) await panel.webview.postMessage({type:"entityScene",scene,entity});
+        } catch (error) {
+          if (!token.isCancellationRequested) await panel.webview.postMessage({type:"entityError",message:error.message});
+        }
+      }
+      const messages = panel.webview.onDidReceiveMessage(message => {
+        if (message.type !== "ready" && message.type !== "selectEntity") return;
+        entity = message.entity; appearance = message.appearance;
+        void update();
+      });
+      const edits = vscode.workspace.onDidChangeTextDocument(event=>{
+        if (event.document !== document || !event.contentChanges.length) return;
+        cancel(); timer = setTimeout(update,350);
+      });
+      panel.onDidDispose(()=>{cancel();messages.dispose();edits.dispose();});
+      showViewer(panel);
+    }
+  });
+  return vscode.Disposable.from(command, openSource, fbx, openEntity, entity, vscode.window.registerCustomEditorProvider(viewType, { resolveCustomTextEditor }));
 }
 
 export { registerObjPreview };

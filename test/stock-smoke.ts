@@ -38,7 +38,7 @@ function checkPreviewControls() {
   const independentModes = onlyColliders === sameColliders && onlyColliders !== solidColliders && wireMesh === sameMesh && wireMesh !== shadedMesh;
   return filtered && remembered && !row.hidden && onlyColliders !== empty && independentModes ? "verified controls" : "display check failed";
 }
-async function renderedModel(port: number) {
+async function renderedModel(port: number, check: () => string = checkPreviewControls) {
   const seen = new Set<string>();
   for (let attempt=0; attempt<40; attempt++) {
     const targets = await (await fetch("http://127.0.0.1:"+port+"/json/list")).json();
@@ -55,7 +55,7 @@ async function renderedModel(port: number) {
           if (msg.id===1) {
             if (!contexts.size) return finish();
             for (const id of contexts) ws.send(JSON.stringify({id:id+2,method:"Runtime.evaluate",params:{contextId:id,
-              returnByValue:true,expression:"("+checkPreviewControls.toString()+")()"}}));
+              returnByValue:true,expression:"("+check.toString()+")()"}}));
           } else if (msg.id>1) {
             values.push(msg.result?.result?.value || "empty");
             if (values.length>=contexts.size) finish();
@@ -103,6 +103,55 @@ export const run = async () => {
         }
       }
     }
+  }
+  if (process.env.SP_INI_CDP_PORT) {
+    const port = Number(process.env.SP_INI_CDP_PORT);
+    await vscode.commands.executeCommand("vscode.open",ini);
+    assert.equal(vscode.window.activeTextEditor?.document.uri.toString(),ini.toString());
+    await vscode.commands.executeCommand("seapower-ini.previewEntity",ini);
+    await renderedModel(port,()=>{
+      const tree = document.querySelector("#outline > ul");
+      if (document.querySelector("#entity-pickers:not([hidden])") && tree?.textContent.includes("MK45_Turret_1") &&
+          tree.textContent.includes("VLS_Module_Fwd_L_1") && document.querySelector("#appearance option[value=Variant2]") &&
+          tree.querySelectorAll("input").length > 35 && document.querySelector("[role=status]")?.textContent.includes("Drag to orbit")) return "verified controls";
+      return document.querySelector("[role=status]")?.textContent || "waiting";
+    });
+    outcomes.push("Assembled Spruance with nested and repeated submodels and variant selector");
+    const aircraft = vscode.Uri.joinPath(ini,"../../aircraft/usn_f-14a_squadrons.ini");
+    await vscode.commands.executeCommand("seapower-ini.previewEntity",aircraft);
+    await renderedModel(port,()=>{
+      const selector = document.querySelector<HTMLSelectElement>("#appearance");
+      const status = document.querySelector("[role=status]")?.textContent;
+      if (!selector?.querySelector("option[value=Squadron2]") || !status?.includes("Drag to orbit")) return status || "waiting";
+      const canvas = document.querySelector<HTMLCanvasElement>("canvas");
+      if (canvas.getAttribute("aria-label").includes("Squadron1") && selector.value === "Squadron1") {
+        document.querySelector("#meshWireframe").dispatchEvent(new Event("change"));
+        canvas.dataset.firstPaint = canvas.toDataURL();
+        selector.value = "Squadron2"; selector.dispatchEvent(new Event("change"));
+        return "switching";
+      }
+      if (!canvas.getAttribute("aria-label").includes("Squadron2") || !canvas.dataset.firstPaint) return "waiting for squadron";
+      document.querySelector("#meshWireframe").dispatchEvent(new Event("change"));
+      return document.querySelector("#outline > ul")?.textContent.includes("Cockpit") && canvas.toDataURL() !== canvas.dataset.firstPaint ? "verified controls" : "unchanged squadron";
+    });
+    outcomes.push("Assembled F-14A and switched squadrons");
+    const mission = vscode.Uri.joinPath(ini,"../../missions/Warsaw Pact/Northern Passage.ini");
+    await vscode.commands.executeCommand("seapower-ini.previewEntity",mission);
+    await renderedModel(port,()=>{
+      const units = document.querySelector<HTMLSelectElement>("#entity");
+      if (!units?.querySelector("option[value=Taskforce1Vessel1]") || !units.querySelector("option[value=Taskforce1Aircraft1]")) return "waiting for mission";
+      if (units.value !== "Taskforce1Aircraft1") {
+        units.value = "Taskforce1Aircraft1"; units.dispatchEvent(new Event("change")); return "switching mission unit";
+      }
+      return document.querySelector('canvas[aria-label*="Taskforce1Aircraft1"][aria-label*="Squadron2"]') && document.querySelector("#outline > ul")?.textContent.includes("usn_p-3c") ? "verified controls" : "waiting for P-3C";
+    });
+    outcomes.push("Selected the Northern Passage P-3C and its declared squadron");
+    const nationDoc = await vscode.workspace.openTextDocument(vscode.Uri.joinPath(ini,"../../aircraft/fr_f1c_squadrons.ini"));
+    await vscode.languages.setTextDocumentLanguage(nationDoc,"seapower-ini");
+    const nationLine = nationDoc.getText().split(/\r?\n/).findIndex(l=>/^Nation=South_Africa/i.test(l));
+    const defs = await vscode.commands.executeCommand<(vscode.Location|vscode.LocationLink)[]>("vscode.executeDefinitionProvider",nationDoc.uri,new vscode.Position(nationLine,9));
+    assert.ok(defs.some(d=>/nations\.ini$/i.test(("uri" in d ? d.uri : d.targetUri).path)));
+    outcomes.push("South_Africa links to the vanilla nations dictionary");
   }
   fs.writeFileSync(process.env.SP_INI_TEST_RESULT,outcomes.join("\n"));
 };

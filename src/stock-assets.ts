@@ -79,6 +79,11 @@ const field = (section, name: string) => section?.keys.find(k => k.name.toLowerC
 const materialDoc = (m: StockMaterial) => parse(["[Shader]", "Path=" + m.shader, "[Properties]",
   ...Object.entries(m.floats).map(([k,v]) => k+"="+v)].join("\n"));
 
+export async function stockDiffuse(stock: StockAssets, name: string, scope: string) {
+  const m = await stock.read("Material",name,scope);
+  if (m?.maps._MainTex) return diffusePreview(decode(m.maps._MainTex),materialDoc(m));
+}
+
 export async function stockHover(stock: StockAssets, materials: Materials, doc: ReturnType<typeof parse>, uri: string,
     entry: IniEntry, catalog, images: boolean, mesh = false) {
   if (!entry?.value || /\.(ini|obj|fbx|png|jpe?g)$/i.test(entry.value)) return;
@@ -100,8 +105,8 @@ export async function stockHover(stock: StockAssets, materials: Materials, doc: 
     const loose = materials.materialFile(matEntry,doc,uri,catalog);
     if (loose) textures.set("",await materials.diffuse(loose,catalog));
     else if (matName && !/\.ini$/i.test(matName)) {
-      const m = await stock.read("Material",matName,matScope);
-      if (m?.maps._MainTex) textures.set("",diffusePreview(decode(m.maps._MainTex),materialDoc(m)));
+      const image = await stockDiffuse(stock,matName,matScope);
+      if (image) textures.set("",image);
     }
     return meshHover(model,obj,textures);
   }

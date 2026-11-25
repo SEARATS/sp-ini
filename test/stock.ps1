@@ -8,16 +8,15 @@ $session = Join-Path ([IO.Path]::GetTempPath()) ('sp-ini-stock-test-' + [guid]::
 $workspace = (New-Item -ItemType Directory -Path "$session/empty" -Force).FullName
 $source = Join-Path $GameDirectory 'Sea Power_Data/StreamingAssets/original'
 $env:SP_INI_MIRROR = '0'
-$debugArgs = @()
+$listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback,0)
+$listener.Start()
+try { $port = $listener.LocalEndpoint.Port } finally { $listener.Stop() }
+$env:SP_INI_CDP_PORT = $port
+$debugArgs = @("--remote-debugging-port=$port")
 if ($Mirror) {
     $workspace = (Resolve-Path -LiteralPath (Join-Path $Mirror 'Sea Power.code-workspace')).Path
     $source = Join-Path $Mirror 'Unity/ExportedProject/Assets/StreamingAssets/original'
     $env:SP_INI_MIRROR = '1'
-    $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback,0)
-    $listener.Start()
-    try { $port = $listener.LocalEndpoint.Port } finally { $listener.Stop() }
-    $env:SP_INI_CDP_PORT = $port
-    $debugArgs += "--remote-debugging-port=$port"
 }
 $env:SP_INI_STOCK_INI = (Resolve-Path -LiteralPath (Join-Path $source 'vessels/usn_dd_spruance_vls.ini')).Path
 $env:SP_INI_TEST_RESULT = "$session/result.txt"

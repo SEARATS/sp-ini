@@ -11,6 +11,8 @@ import { isColliderName } from "./mesh-names";
 import { Materials } from "./materials";
 import { colliderSection, primitiveHover } from "./colliders";
 import { parse } from "./ini";
+import { entityAssets } from "./entity-assets";
+import { selectEntity, type PreviewRequest } from "./entity-selection";
 import { iniFolds, objFolds } from "./folding";
 import { completions, diagnostics, documentLinks, exact, inspect, location, source, symbols } from "./features";
 
@@ -63,6 +65,13 @@ connection.onInitialize(params => {
     definitionProvider: true, documentLinkProvider: {}, documentSymbolProvider: true, foldingRangeProvider: true } };
 });
 connection.onInitialized(() => refresh().catch(error => connection.console.error(String(error))));
+connection.onRequest("seapower/entityPreview", async (request: PreviewRequest, token) => {
+  await building;
+  const {sourceText,sourceUri,paint,...choices} = await selectEntity(request,catalog,materials);
+  if (!request.render) return choices;
+  if (!sourceText) throw Error("Missing model definition for "+choices.entities.find(e=>e.id === choices.entity)?.label);
+  return entityAssets(sourceText,sourceUri,catalog,meshes,materials,stock,paint,()=>token.isCancellationRequested);
+});
 connection.onRequest("seapower/rebuild", params => {
   if (params) { options = params.options; folders = params.folders; }
   return refresh();

@@ -9,7 +9,8 @@ function array(node: FBXNode,key: string): number[] {
 export function fbxGeometry(bytes: Buffer) {
   const tree = fbxTree(bytes), nodes = tree.find(n=>n.name==="Objects")?.nodes || [];
   const links = tree.find(n=>n.name==="Connections")?.nodes || [];
-  const names = new Map(nodes.filter(n=>n.name==="Model").map(n=>[String(n.props[0]),String(n.props[1]).replace(/^Model::/,"")]));
+  const label = (value: unknown) => String(value).split("\0",1)[0].replace(/^(?:Model|Geometry)::/,"");
+  const names = new Map(nodes.filter(n=>n.name==="Model").map(n=>[String(n.props[0]),label(n.props[1])]));
   const owners = new Map(links.filter(n=>n.props[0]==="OO").map(n=>[String(n.props[1]),names.get(String(n.props[2]))]));
   const vertices: number[][] = [], uvs: number[][] = [], objects = [];
   for (const geometry of nodes.filter(n=>n.name==="Geometry" && n.props[2]==="Mesh")) {
@@ -30,7 +31,7 @@ export function fbxGeometry(bytes: Buffer) {
       if (raw<0) { faces.push({indices: face,texcoords,material:""}); face=[]; texcoords=[]; }
     }
     const owner = owners.get(String(geometry.props[0]));
-    const name = String(geometry.props[1]).replace(/^Geometry::/,"") || owner;
+    const name = label(geometry.props[1]) || owner;
     for (const alias of new Set([name,owner].filter(Boolean))) objects.push({name:alias,line:0,start:0,firstVertex,vertexCount:coords.length/3,faces});
   }
   return {vertices,uvs,objects,libraries:[]};

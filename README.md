@@ -8,6 +8,10 @@ Autocomplete, error checking and Go to Definition for Sea Power INI files. Reads
 
 Press **Ctrl+Space** for keys and values. Press **F12** on a unit, sensor, weapon, model or file path to open its definition. **Problems** lists errors as you type.
 
+Entity and scenario INIs open as text. Choose **Sea Power INI: Preview Entity** to see the assembled model beside the editor. In a scenario, use **Entity** to switch between units. Open a unit, `_variants.ini`, or `_squadrons.ini` and use **Variant** or **Squadron** to compare liveries and markings.
+
+The preview uses the intact model, declared submodels, parent transforms, and diffuse textures. Enable **Colliders** to inspect collision shapes. **Preview notes** lists missing assets. The preview updates as you edit the open INI.
+
 Open an OBJ or FBX to see its 3D preview. Drag to rotate and scroll to zoom. To change the default, run **Reopen Editor With…** and choose **Configure default editor for '*.obj'…**. Enable `seapowerIni.obj.openSourceBeside` to see the source alongside the preview.
 
 OBJ source opens with each object (`o`) collapsed. Click the arrow beside a name to expand it. Fold arrows also work for OBJ groups (`g`) and INI sections.
@@ -29,6 +33,8 @@ Hover over a collider reference to see its shape. `ContainerBase` and numbered `
 Right-click an INI line and choose **Suppress Diagnostic on This Line** to append a comment such as `; sp-ini-ignore invalid-value`. **Comment or Uncomment INI Section** toggles the entire section, including its header.
 
 Repeating a key in the same section gives a warning for the same value and an error for conflicting values.
+
+`Nation=` offers completion and Go to Definition for nation IDs such as `South_Africa` in indexed `nations.ini`, `layout.ini`, and `nations_reference.ini` files.
 
 VS Code selects **Sea Power INI** for files inside a mod with an `_info.ini`, including mods nested in the open folder. For other folders, use the language picker. To protect game and Workshop files while browsing, run **Sea Power INI: Enable Read-Only Reference Previews in Workspace**.
 

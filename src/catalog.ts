@@ -84,6 +84,9 @@ class Catalog {
       if (stem === "nations_reference") for (const k of doc.entries) {
         if (k.name.toLowerCase() === "nationname") addRef("nations", ref(k.value, k.line, k.valueStart));
       }
+      if (stem === "nations" || stem === "layout") for (const k of doc.entries) {
+        if (/^nations$/i.test(k.section?.name || "")) addRef("nations", ref(k.name, k.line, k.start));
+      }
     }
     const parent = unitFolder(file.rel);
     const filename = path.basename(file.rel);

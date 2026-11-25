@@ -64,7 +64,7 @@ async function activate(context) {
     context.subscriptions.push({ dispose: () => fs.unwatchFile(stamp, reload) });
   }
   registerHierarchy(context);
-  context.subscriptions.push(registerModIniLanguage(), registerObjPreview(context), registerIniActions());
+  context.subscriptions.push(registerModIniLanguage(), registerObjPreview(context,(params,token)=>client.sendRequest("seapower/entityPreview",params,token)), registerIniActions());
   client = new LanguageClient("seapower-ini", "Sea Power INI",
     { module: context.asAbsolutePath("dist/server.js"), transport: TransportKind.ipc },
     { documentSelector: [{ language: "seapower-ini", scheme: "file" }, { language: "seapower-ini", scheme: "untitled" },
