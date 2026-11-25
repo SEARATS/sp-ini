@@ -17,4 +17,4 @@ Save an INI and run Compile. The log lists definitions for references on
 the current line, followed by diagnostics for the file. Double-click a
 result to open the corresponding file and line.
 
-Project and updates: https://github.com/SEARATS/seapower-ini/releases
+Project and updates: https://github.com/SEARATS/sp-ini/releases
