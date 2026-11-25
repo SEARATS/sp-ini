@@ -3,10 +3,12 @@ const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 const { parse, sectionGroup } = require("./ini");
 const { children } = require("./roots");
+const { scalarType } = require("./values");
 
 const unitFolders = { aircraft: ["aircraft", "helicopter"], vessels: ["vessel", "submarine"], land_units: ["landunit"], biologic: ["biologic"] };
 const excluded = new Set(["node_modules", "bin", "obj", "dist", "decompiled", "artifacts", "Library", "Packages"]);
 const normalize = value => value.replaceAll("\\", "/").toLowerCase();
+const uriKey = uri => process.platform === "win32" ? uri.toLowerCase().replace(/^(file:\/\/\/[a-z])%3a/, "$1:") : uri;
 const unitFolder = rel => normalize(rel).split("/").at(-2);
 
 function family(rel, doc) {
@@ -37,6 +39,9 @@ class Catalog {
   sections = new Map();
   units = new Map();
   paths = new Map();
+  assets = new Map();
+  filesByUri = new Map();
+  references = new Map();
   counts = new Map();
   skipped = 0;
 
@@ -45,6 +50,24 @@ class Catalog {
     const ref = (name, line, start = 0) => ({ name, line, start, file });
     const addPath = rel => getOrCreate(this.paths, normalize(rel), () => []).push(ref(rel, 0));
     addPath(file.rel);
+    this.filesByUri.set(uriKey(file.uri), file);
+    const target = doc.modifiers.find(m => ["extend", "prepend"].includes(m.name));
+    const targets = target ? target.args.split(",").map(s => normalize(s.trim())) : [normalize(file.rel)];
+    const addRef = (domain, item) => {
+      const names = getOrCreate(this.references, domain, () => new Map());
+      getOrCreate(names, item.name.toLowerCase(), () => []).push(item);
+    };
+    for (const rel of targets) {
+      const dir = unitFolder(rel), stem = path.posix.basename(rel, ".ini");
+      if (["ammunition", "animations", "optical_views"].includes(dir) && !target) addRef(dir, ref(stem, 0));
+      if (dir === "systems" || /_(variants|squadrons)$/.test(stem)) {
+        const domain = dir === "systems" ? stem : dir + "/" + stem;
+        for (const s of doc.sections) addRef(domain, ref(s.name, s.line, s.start));
+      }
+      if (stem === "nations_reference") for (const k of doc.entries) {
+        if (k.name.toLowerCase() === "nationname") addRef("nations", ref(k.value, k.line, k.valueStart));
+      }
+    }
     const parent = unitFolder(file.rel);
     const filename = path.basename(file.rel);
     if (Object.hasOwn(unitFolders, parent) && !/_(?:variants|squadrons)\.ini$/i.test(filename) && filename.toLowerCase() !== "_info.ini" &&
@@ -59,9 +82,17 @@ class Catalog {
       const groups = getOrCreate(this.sections, sectionGroup(section.name), () => new Map());
       const schema = getOrCreate(groups, group, () => ({ ...ref(section.name, section.line, section.start), keys: new Map() }));
       for (const key of section.keys) {
-        if (!schema.keys.has(key.name.toLowerCase())) schema.keys.set(key.name.toLowerCase(), {
+        const item = getOrCreate(schema.keys, key.name.toLowerCase(), () => ({
           ...ref(key.name, key.line, key.start), example: key.value.slice(0, 100)
-        });
+        }));
+        if (file.source === "Vanilla" && item.stock?.type !== "text") {
+          const type = scalarType(key.value);
+          if (!item.stock) item.stock = { type, first: file, multiple: false };
+          else {
+            if (item.stock.type !== type) item.stock.type = "text";
+            if (item.stock.first !== file) item.stock.multiple = true;
+          }
+        }
       }
     }
     this.counts.set(file.source, (this.counts.get(file.source) || 0) + 1);
@@ -82,9 +113,11 @@ async function buildCatalog(roots) {
     for (const entry of childrenHere.sort((a, b) => a.name.localeCompare(b.name))) {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory() && !entry.name.startsWith(".") && !excluded.has(entry.name)) await walk(full, base, source);
-      else if (entry.isFile() && entry.name.toLowerCase().endsWith(".ini") && !seen.has(full)) {
+      else if (entry.isFile() && /\.(ini|png|jpe?g|tga|dds|obj|mtl|fbx|wav|ogg|xml|json|txt)$/i.test(entry.name) && !seen.has(full)) {
         seen.add(full);
-        files.push({ full, rel: path.relative(base, full).replaceAll("\\", "/"), uri: pathToFileURL(full).href, source });
+        const file = { full, rel: path.relative(base, full).replaceAll("\\", "/"), uri: pathToFileURL(full).href, source };
+        if (entry.name.toLowerCase().endsWith(".ini")) files.push(file);
+        else getOrCreate(catalog.assets, normalize(file.rel), () => []).push({ file, name: file.rel, line: 0, start: 0 });
       }
     }
   }
@@ -100,4 +133,4 @@ async function buildCatalog(roots) {
   return catalog;
 }
 
-module.exports = { Catalog, buildCatalog, family, normalize };
+module.exports = { Catalog, buildCatalog, family, normalize, uriKey };

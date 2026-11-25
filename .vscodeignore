@@ -1,4 +1,5 @@
 src/**
+scripts/**
 test/**
 node_modules/**
 pnpm-*
