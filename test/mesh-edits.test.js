@@ -84,3 +84,14 @@ test("an explicit FBX mesh path links to the indexed model", () => {
   const doc = parse("[Models]\nResourcesFolder=ships\nResourcesRoot=destroyer.fbx\n[Hull]\nMesh=destroyer.fbx");
   assert.deepEqual(documentLinks(doc, uri, catalog).map(link => link.target), [target, target]);
 });
+
+test("opaque, cutout and glass shaders handle diffuse alpha independently", () => {
+  const { diffusePreview } = require("../src/materials");
+  const image = { width: 2, height: 1, data: Buffer.from([1, 2, 3, 16, 4, 5, 6, 240]) };
+  const preview = (path, properties = "") => diffusePreview(image, parse("[Shader]\nPath=" + path + "\n[Properties]\n" + properties)).data;
+  assert.deepEqual([...preview("Marmoset/Bumped Specular IBL")], [1, 2, 3, 255, 4, 5, 6, 255]);
+  assert.deepEqual([...preview("Marmoset/Transparent/Cutout/Diffuse IBL", "_Cutoff=Float,0.7")], [1, 2, 3, 0, 4, 5, 6, 255]);
+  assert.equal(preview("Marmoset/Transparent/Simple Glass/Specular IBL"), image.data);
+  assert.equal(preview("Standard", "_Mode=Float,3.0"), image.data);
+  assert.equal(image.data[3], 16);
+});

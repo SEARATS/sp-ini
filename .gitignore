@@ -2,3 +2,18 @@ node_modules/
 dist/
 release/
 *.vsix
+
+# Generated image assets
+*.[pP][nN][gG]
+*.[jJ][pP][gG]
+*.[jJ][pP][eE][gG]
+*.[wW][eE][bB][pP]
+*.[gG][iI][fF]
+*.[aA][vV][iI][fF]
+*.[iI][cC][oO]
+*.[sS][vV][gG]
+*.[bB][mM][pP]
+*.[tT][iI][fF]
+*.[tT][iI][fF][fF]
+*.[tT][gG][aA]
+*.[dD][dD][sS]

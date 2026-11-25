@@ -58,12 +58,13 @@ def main():
         if asset.type.name == "Material" and asset.peek_name() == "usn_dd_spruance_vls_deck_mat":
             material = asset.read()
     if set(meshes) != set(names) or material is None:
-        raise ValueError("The installed archive is missing an Spruance VLS mesh or material needed for the gallery.")
+        raise ValueError("The installed archive is missing a Spruance VLS mesh or material needed for the gallery.")
     export_parts({name: meshes[name] for name in names}, folder / "usn_dd_spruance_vls.obj")
     # The collision hull is for inspection in source and is invisible on the ship.
     export_parts({name: meshes[name] for name in names if "_coll_" not in name}, folder / "spruance_vls_exterior.obj")
 
-    fields = ["[Textures]"]
+    shader = material.m_Shader.read().m_ParsedForm.m_Name
+    fields = ["[Shader]", f"Path={shader}", "", "[Textures]"]
     for name, slot in material.m_SavedProperties.m_TexEnvs:
         if not slot.m_Texture.m_PathID:
             continue

@@ -42,6 +42,22 @@ function resize(source, limit) {
   return image;
 }
 
+function diffusePreview(image, doc) {
+  if (!image) return;
+  const setting = (section, key) => doc?.sections.find(s => s.name.toLowerCase() === section)?.keys
+    .find(k => k.name.toLowerCase() === key)?.value;
+  const shader = setting("shader", "path") || "";
+  const mode = Number(setting("properties", "_mode")?.split(",").at(-1));
+  const standard = /^standard(?:$| )/i.test(shader);
+  const cutout = /cutout/i.test(shader) || (standard && mode === 1);
+  if (!cutout && (/transparent|alpha blended|additive/i.test(shader) || (standard && [2, 3].includes(mode)))) return image;
+  const threshold = Number(setting("properties", "_cutoff")?.split(",").at(-1) ?? 0.5);
+  const cutoff = (Number.isFinite(threshold) ? Math.min(1, Math.max(0, threshold)) : 0.5) * 255;
+  const data = Buffer.from(image.data);
+  for (let i = 3; i < data.length; i += 4) data[i] = cutout && data[i] < cutoff ? 0 : 255;
+  return { width: image.width, height: image.height, data };
+}
+
 class Materials {
   cache = new Map();
   constructor(openIni) { this.openIni = openIni; }
@@ -103,7 +119,8 @@ class Materials {
         previews.push(imageMarkdown("Lit material", swatch, budget));
       }
       for (const map of group) {
-        const image = textures.get(map.key.name.toLowerCase());
+        const raw = textures.get(map.key.name.toLowerCase());
+        const image = /^_maintex$/i.test(map.key.name) ? diffusePreview(raw, doc) : raw;
         previews.push(image ? imageMarkdown("Texture", resize(image, 144), budget) : map.file ? "Preview unavailable" : "File missing");
       }
       parts.push([labels, labels.map(() => "---"), previews]
@@ -114,8 +131,9 @@ class Materials {
   }
 
   async diffuse(file, catalog) {
-    const main = this.maps(file, catalog, await this.readIni(file)).find(m => /^_maintex$/i.test(m.key.name));
-    return this.texture(main?.file);
+    const doc = await this.readIni(file);
+    const main = this.maps(file, catalog, doc).find(m => /^_maintex$/i.test(m.key.name));
+    return diffusePreview(await this.texture(main?.file), doc);
   }
 
   async objTextures(file, model, object, catalog) {
@@ -141,4 +159,4 @@ class Materials {
   }
 }
 
-module.exports = { Materials, escape, imageMarkdown };
+module.exports = { Materials, diffusePreview, escape, imageMarkdown };

@@ -29,6 +29,8 @@ Each OBJ contains the mesh's geometry, normals and UVs where supplied. Materials
 
 ## Regenerate the feature screenshots
 
+The [public gallery](https://github.com/SEARATS/binaries/tree/main/sp-ini) lives in the SEARATS binaries repository.
+
 On Windows, install the project dependencies with `pnpm install --frozen-lockfile`. With VS Code's `code` command on PATH and either `uv` or Python with UnityPy 1.25.4, run:
 
 ```powershell

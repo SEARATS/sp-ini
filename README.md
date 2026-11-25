@@ -18,4 +18,4 @@ Repeating a key in the same section gives a warning for the same value and an er
 
 Open a mod folder in VS Code and select **Sea Power INI** in the language picker. To protect game and Workshop files while browsing, run **Sea Power INI: Enable Read-Only Reference Previews in Workspace**.
 
-[Downloads](https://github.com/SEARATS/sp-ini/releases) · [Editor setup](docs/setup.md) · [PSPad](pspad/README.txt) � [Notepad++](notepadpp/README.md)
+[Screenshots](https://github.com/SEARATS/binaries/tree/main/sp-ini) | [Downloads](https://github.com/SEARATS/sp-ini/releases) · [Editor setup](docs/setup.md) · [PSPad](pspad/README.txt) � [Notepad++](notepadpp/README.md)
