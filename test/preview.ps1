@@ -1,0 +1,18 @@
+$ErrorActionPreference = 'Stop'
+$project = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$session = Join-Path ([IO.Path]::GetTempPath()) ('seapower-preview-' + [guid]::NewGuid())
+$mod = Join-Path $session 'preview-fixture'
+$env:SEA_POWER_DIR = Join-Path $session 'steamapps/common/Sea Power'
+$vanilla = Join-Path $env:SEA_POWER_DIR 'Sea Power_Data/StreamingAssets/original/vessels'
+$workshop = Join-Path $session 'steamapps/workshop/content/1286220/12345/vessels'
+foreach ($dir in @("$mod/missions", $vanilla, $workshop)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+Set-Content -LiteralPath "$vanilla/stock_sample.ini" -Value @('[General]', 'UnitType=Vessel')
+Set-Content -LiteralPath "$workshop/workshop_sample.ini" -Value @('[General]', 'UnitType=Vessel')
+Set-Content -LiteralPath "$mod/missions/demo.ini" -Value @('[Mission]', '[Taskforce1Vessel1]', 'Type=stock_sample', '[Taskforce1Vessel2]', 'Type=workshop_sample')
+New-Item -ItemType Directory -Path "$mod/.vscode" | Out-Null
+Set-Content -LiteralPath "$mod/.vscode/settings.json" -Value '{"files.associations":{"*.ini":"seapower-ini"}}'
+code --user-data-dir "$session/profile" --extensions-dir "$session/extensions" --extensionDevelopmentPath "$project" --extensionTestsPath "$PSScriptRoot/preview-smoke.js" --disable-gpu --skip-welcome --new-window --wait "$mod"
+$code = $LASTEXITCODE
+Get-ChildItem -Path "$session/profile/logs/*/window*/exthost/exthost.log" | Get-Content -Tail 3
+if (!(Test-Path -LiteralPath "$mod/preview-test-passed")) { throw "Editor assertions did not finish. See $session/profile/logs" }
+exit $code
