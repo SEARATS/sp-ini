@@ -88,7 +88,7 @@ function registerObjPreview(context) {
     resolveCustomEditor(document, panel) {
       const folder = vscode.Uri.joinPath(document.uri, "..");
       panel.webview.options = { enableScripts: true, localResourceRoots: [dist, folder] };
-      const send = () => panel.webview.postMessage({ type: "fbx", url: panel.webview.asWebviewUri(document.uri).toString() });
+      const send = () => panel.webview.postMessage({ type: "fbx", uri: document.uri.toString(), url: panel.webview.asWebviewUri(document.uri).toString() });
       const messages = panel.webview.onDidReceiveMessage(message => { if (message.type === "ready") send(); });
       const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(folder, "*"));
       const changes = watcher.onDidChange(uri => { if (uri.toString() === document.uri.toString()) send(); });

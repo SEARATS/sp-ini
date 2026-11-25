@@ -10,7 +10,7 @@ test("INI and model context commands share the CLI preview and respect the clipb
   const dir = await mkdtemp(path.join(os.tmpdir(),"sp-ini-ui-"));
   try {
     const source = Buffer.from('Objects: {\n Model: 1,"Model::Hull","Null" {\n }\n Model: 2,"Model::Hull_Col","Mesh" {\n }\n}\nConnections: {\n C: "OO",2,1\n}\n');
-    const model = {path:path.join(dir,"ship.fbx"),fsPath:path.join(dir,"ship.fbx")};
+    const model = {scheme:"file",path:path.join(dir,"ship.fbx"),fsPath:path.join(dir,"ship.fbx")};
     const ini = {path:path.join(dir,"ship.ini"),fsPath:path.join(dir,"ship.ini")};
     await writeFile(model.fsPath,source);
     const before = "[Models]\nResourcesRoot=ship.fbx\n";
@@ -21,7 +21,7 @@ test("INI and model context commands share the CLI preview and respect the clipb
     const noop = ()=>{};
     class Input { constructor(public uri) {} }
     const vscode = {
-      Uri:{from: value=>({...value,toString:()=>value.path+"?"+value.query})},
+      Uri:{parse: () => model, from: value=>({...value,toString:()=>value.path+"?"+value.query})},
       TabInputCustom:Input,TabInputText:class {},Position:class {},Range:class {},
       EventEmitter:class {fire() {}}, WorkspaceEdit:class {text: string; replace(uri,range,text){this.text=text;}},
       commands:{registerCommand:(id,fn)=>commands.set(id,fn),executeCommand:()=>[{uri:model}]},
@@ -53,6 +53,11 @@ test("INI and model context commands share the CLI preview and respect the clipb
     assert.equal(visible,copied);
     assert.equal(applied,undefined);
     assert.equal(await readFile(ini.fsPath,"utf8"),before);
+    for (const target of [model,{spIniFbxUri:"file:///ship.fbx"},root]) {
+      copied = undefined;
+      await commands.get("seapower-ini.copyHierarchy")(target);
+      assert.equal(copied,snippet("ship.fbx",root));
+    }
     const after=generate(before,"ship.fbx",root);
     picks=["INI file","Preview Changes",undefined];
     await commands.get("seapower-ini.generateFromModel")(root);

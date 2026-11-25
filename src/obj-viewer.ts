@@ -53,6 +53,7 @@ async function load(data) {
   try {
     let next;
     if (data.type === "fbx") {
+      document.body.dataset.vscodeContext = JSON.stringify({spIniFbxUri: data.uri});
       const manager = new LoadingManager();
       manager.onLoad = () => { if (current === revision) draw(); };
       const response = await fetch(data.url, { cache: "no-store" });
@@ -84,6 +85,15 @@ async function load(data) {
 try {
   renderer = new WebGLRenderer({ canvas, antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  canvas.addEventListener("contextmenu", event => {
+    if (!document.body.dataset.vscodeContext) return;
+    // OrbitControls consumes the canvas event. Forward it to VS Code outside the controls.
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    document.body.dispatchEvent(new MouseEvent("contextmenu", {
+      bubbles: true, cancelable: true, clientX: event.clientX, clientY: event.clientY, button: event.button
+    }));
+  });
   controls = new OrbitControls(camera, canvas);
   controls.addEventListener("change", draw);
   const light = new DirectionalLight(0xffffff, 2);

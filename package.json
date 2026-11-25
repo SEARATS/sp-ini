@@ -2,7 +2,7 @@
   "name": "seapower-ini",
   "displayName": "Sea Power INI",
   "description": "Autocomplete, error checking and Go to Definition for Sea Power INI files.",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "publisher": "searats",
   "private": true,
   "repository": {
@@ -119,6 +119,11 @@
         "command": "seapower-ini.generateFromIni",
         "title": "Generate from Model Hierarchy…",
         "category": "Sea Power INI"
+      },
+      {
+        "command": "seapower-ini.copyHierarchy",
+        "title": "Copy Hierarchy as INI",
+        "category": "Sea Power INI"
       }
     ],
     "menus": {
@@ -150,6 +155,10 @@
         {
           "command": "seapower-ini.previewObj",
           "when": "resourceExtname =~ /[.]obj$/i && !explorerResourceIsFolder"
+        },
+        {
+          "command": "seapower-ini.copyHierarchy",
+          "when": "!explorerResourceIsFolder && resourceExtname =~ /[.]fbx$/i"
         }
       ],
       "commandPalette": [
@@ -164,12 +173,32 @@
         {
           "command": "seapower-ini.generateFromIni",
           "when": "false"
+        },
+        {
+          "command": "seapower-ini.copyHierarchy",
+          "when": "false"
         }
       ],
       "view/item/context": [
         {
           "command": "seapower-ini.generateFromModel",
           "when": "view == seapower-ini.hierarchy && viewItem == spIniParent"
+        },
+        {
+          "command": "seapower-ini.copyHierarchy",
+          "when": "view == seapower-ini.hierarchy && viewItem == spIniParent"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "command": "seapower-ini.copyHierarchy",
+          "when": "resourceExtname =~ /[.]fbx$/i"
+        }
+      ],
+      "webview/context": [
+        {
+          "command": "seapower-ini.copyHierarchy",
+          "when": "spIniFbxUri"
         }
       ]
     },

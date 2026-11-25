@@ -25,7 +25,7 @@ export function registerHierarchy(context: vscode.ExtensionContext) {
     getTreeItem: (node: ModelNode) => {
       const item = new vscode.TreeItem(node.name, node.children.length ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None);
       item.id = node.path;
-      item.contextValue = "spIniParent";
+      item.contextValue = node.children.length ? "spIniParent" : "spIniLeaf";
       item.tooltip = node.path;
       return item;
     }
@@ -51,17 +51,27 @@ export function registerHierarchy(context: vscode.ExtensionContext) {
     const candidate = vscode.Uri.file(resolve(dirname(document.uri.fsPath),root.value));
     if (/\.fbx$/i.test(candidate.path) && await vscode.workspace.fs.stat(candidate).then(()=>true,()=>false)) return candidate;
   }
-  async function run(from: string,node?: ModelNode) {
+  async function run(from: string,node?: ModelNode,resource?: vscode.Uri) {
     const editor = vscode.window.activeTextEditor;
     const existing = from==="ini" ? editor?.document : undefined;
-    const model = (node ? file : existing ? await referenced(existing,editor.selection.active.line) : undefined)
+    const model = resource || (node ? file : existing ? await referenced(existing,editor.selection.active.line) : undefined)
       || await pickFile("Choose model","fbx");
     if (!model) return;
     const nodes = flatten(hierarchy(await readFile(model.fsPath)));
-    const root = node ? nodes.find(n=>n.path===node.path) : (await vscode.window.showQuickPick(
-      nodes.filter(n=>n.children.length).map(n=>({label:n.name,description:n.path,node:n})),{title:"Choose the parent to export",matchOnDescription:true}
+    const parents = nodes.filter(n=>n.children.length);
+    if (!parents.length) {
+      void vscode.window.showInformationMessage("This FBX has no child objects to export.");
+      return;
+    }
+    const root = node ? parents.find(n=>n.path===node.path) : from==="copy" && parents.length===1 ? parents[0] : (await vscode.window.showQuickPick(
+      parents.map(n=>({label:n.name,description:n.path,node:n})),{title:"Choose the parent to export",matchOnDescription:true}
     ))?.node;
     if (!root) return;
+    if (from==="copy") {
+      await vscode.env.clipboard.writeText(snippet(basename(model.fsPath),root));
+      void vscode.window.showInformationMessage("Copied the INI hierarchy for " + root.name + ".");
+      return;
+    }
     const destination = await vscode.window.showQuickPick([existing ? "Current INI" : "INI file","Clipboard"],{title:"Send generated INI to"});
     if (!destination) return;
     const clipboard = destination === "Clipboard";
@@ -107,7 +117,15 @@ export function registerHierarchy(context: vscode.ExtensionContext) {
   }
   const command = (name:string,from:string) => vscode.commands.registerCommand("seapower-ini."+name,(node?:ModelNode)=>
     run(from,from==="model" ? node : undefined).catch(e=>vscode.window.showErrorMessage(String(e))));
-  context.subscriptions.push(changed,tree,preview,command("generate","palette"),command("generateFromModel","model"),
+  type CopyTarget = vscode.Uri | ModelNode | {spIniFbxUri?: string};
+  const copy = vscode.commands.registerCommand("seapower-ini.copyHierarchy", (target?: CopyTarget) => {
+    if (!target) return;
+    if ("children" in target) return run("copy",target).catch(e=>vscode.window.showErrorMessage(String(e)));
+    const uri = "fsPath" in target ? target : target.spIniFbxUri && vscode.Uri.parse(target.spIniFbxUri);
+    if (uri?.scheme==="file" && /\.fbx$/i.test(uri.path))
+      return run("copy",undefined,uri).catch(e=>vscode.window.showErrorMessage(String(e)));
+  });
+  context.subscriptions.push(copy,changed,tree,preview,command("generate","palette"),command("generateFromModel","model"),
     command("generateFromIni","ini"),vscode.window.tabGroups.onDidChangeTabs(active),
     vscode.workspace.onDidCloseTextDocument(d=>previews.delete(d.uri.toString())));
   active();

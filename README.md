@@ -16,7 +16,7 @@ Ctrl+click an underlined mesh or mesh collider to open its OBJ declaration. Hove
 
 The Windows x64 extension reads stock meshes and materials directly from your installed game. Loose overrides take priority. Objects tagged `_col` appear orange in the OBJ viewer and rank first among matching mesh suggestions.
 
-Right-click a parent in **FBX hierarchy** and choose **Generate Submodels and Colliders…**. Review object roles, then apply the diff to an INI or copy the generated text to your clipboard.
+Right-click an FBX in the Explorer or its 3D preview and choose **Copy Hierarchy as INI** to copy submodels and colliders. For custom object roles, right-click a parent in **FBX hierarchy** and choose **Generate Submodels and Colliders…**. Review object roles, then apply the diff to an INI or copy the generated text to your clipboard.
 
 Hover over a collider reference to see its shape. `ContainerBase` and numbered `Gun` references link to the unit's declared model parts.
 
