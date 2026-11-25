@@ -10,6 +10,13 @@ try {
     if ($LASTEXITCODE) { throw 'Build failed.' }
     $watcher = Start-Process node -ArgumentList 'scripts/build.js --watch' -WorkingDirectory $root -WindowStyle Hidden -PassThru
     try {
-        code --user-data-dir "$profile" --extensionDevelopmentPath "$root" --new-window --wait "$folder"
+        code --user-data-dir "$profile" --extensionDevelopmentPath "$root" --reuse-window "$folder"
+        if ($LASTEXITCODE) { throw 'VS Code failed to open the development window.' }
+        # A window reload releases the CLI's --wait marker. The profile process survives it.
+        $app = Get-CimInstance Win32_Process -Filter "Name = 'Code.exe'" | Where-Object {
+            $_.CommandLine -like "*$profile*" -and $_.CommandLine -notlike '*--type=*'
+        } | Select-Object -First 1
+        if (!$app) { throw 'The VS Code development profile did not start.' }
+        Wait-Process -Id $app.ProcessId -ErrorAction SilentlyContinue
     } finally { if (!$watcher.HasExited) { $watcher.Kill() } }
 } finally { Pop-Location }
