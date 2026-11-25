@@ -2,6 +2,14 @@ const {test} = require("node:test");
 const assert = require("node:assert/strict");
 const {generate,snippet,hierarchy,selectParent} = require("../src/hierarchy");
 const {isColliderName} = require("../src/mesh-names");
+test("OBJ preview highlights collider groups sharing the same material with the hull",async()=>{
+  const {previewObj} = require("../src/obj-geometry");
+  const m = previewObj("v 0 0 0\nv 1 0 0\nv 0 1 0\no Hull\nusemtl common\nf 1 2 3\no Hull_Col\ng sides\nusemtl common\nf 1 3 2");
+  const meshes = m.children.filter(o=>o.isMesh);
+  assert.equal(meshes.length,2);
+  assert.equal(meshes[1].material.color.getHex(),0xff833d);
+  assert.notEqual(meshes[0].material.color.getHex(),meshes[1].material.color.getHex());
+});
 const source = `Objects: {
  Model: 1, "Model::Hull", "Null" {
  }

@@ -1,6 +1,5 @@
-import { isColliderName } from './mesh-names';
+import { previewObj } from "./obj-geometry";
 import { Texture, Box3, DirectionalLight, HemisphereLight, LoadingManager, PerspectiveCamera, Scene, Sphere, WebGLRenderer } from "three";
-import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
@@ -62,16 +61,7 @@ async function load(data) {
       if (current !== revision) return;
       next = new FBXLoader(manager).parse(buffer, new URL(".", data.url).href);
     } else {
-      next = new OBJLoader().parse(data.text);
-      next.traverse(child => {
-        if (!child.isMesh || !isColliderName(child.name)) return;
-        const tint = material => {
-          const copy = material.clone();
-          copy.color.setHex(0xff833d);
-          return copy;
-        };
-        child.material = Array.isArray(child.material) ? child.material.map(tint) : tint(child.material);
-      });
+      next = previewObj(data.text);
     }
     model = next;
     new Box3().setFromObject(model).getBoundingSphere(bounds);

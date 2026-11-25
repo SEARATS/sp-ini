@@ -11,8 +11,8 @@ Set-Content -LiteralPath "$workshop/workshop_sample.ini" -Value @('[General]', '
 Set-Content -LiteralPath "$mod/missions/demo.ini" -Value @('[Mission]', '[Taskforce1Vessel1]', 'Type=stock_sample', '[Taskforce1Vessel2]', 'Type=workshop_sample')
 New-Item -ItemType Directory -Path "$mod/.vscode" | Out-Null
 New-Item -ItemType Directory -Path "$mod/vessels" | Out-Null
-Set-Content -LiteralPath "$mod/vessels/mesh.ini" -Value @('[Models]', 'ResourcesFolder=.', 'ResourcesRoot=mesh.obj', '[Part]', 'Mesh=Part', '[General]', 'ArmorType=Typo')
-Set-Content -LiteralPath "$mod/mesh.obj" -Value @('v 0 0 0', 'v 1 0 0', 'v 0 1 0', 'o Part', 'f 1 2 3')
+Set-Content -LiteralPath "$mod/vessels/mesh.ini" -Value @('[Models]', 'ResourcesFolder=.', 'ResourcesRoot=mesh.obj', '[Part]', 'Mesh=Part', '[General]', 'ArmorType=Typo', '[HullPart]', 'Mesh=Hull')
+Set-Content -LiteralPath "$mod/mesh.obj" -Value @('v 0 0 0', 'v 1 0 0', 'v 0 1 0', 'o Part', 'f 1 2 3','o Hull','f 1 2 3','o Hull_Col','f 1 2 3')
 New-Item -ItemType Directory -Path "$mod/nested-mod" | Out-Null
 Set-Content -LiteralPath "$mod/nested-mod/_info.ini" -Value '[General]'
 Set-Content -LiteralPath "$mod/nested-mod/sonar.ini" -Value @('[SensorData]', "BladesCount=5  //number of blades on vessel's propulsion systems", 'MinNoiseClassificationTreshold=5 //in dBs, the minimal value of noise on sonar system')

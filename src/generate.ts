@@ -1,4 +1,5 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, realpathSync, renameSync, rmSync, statSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { basename } from "node:path";
 import { spawnSync } from "node:child_process";
 import { parseArgs } from "node:util";
@@ -21,9 +22,17 @@ try {
       if (copy.error || copy.status!==0) throw Error(copy.error?.message || copy.stderr || "Clipboard write failed");
     }
   } else {
-  const before = readFileSync(values.ini,"utf8");
-  const after = generate(before,basename(values.model),root,roles);
-  if (values["dry-run"]) process.stdout.write(changes(basename(values.ini),before,after));
-  else if (before !== after) writeFileSync(values.ini,after,"utf8");
+    const target = realpathSync(values.ini);
+    const before = readFileSync(target,"utf8");
+    const after = generate(before,basename(values.model),root,roles);
+    if (values["dry-run"]) process.stdout.write(changes(basename(target),before,after));
+    else if (before !== after) {
+      const temp = target + "." + randomUUID() + ".tmp";
+      try {
+        writeFileSync(temp,after,{mode:statSync(target).mode,flag:"wx"});
+        if (readFileSync(target,"utf8")!==before) throw Error("The INI changed during generation.");
+        renameSync(temp,target);
+      } finally { rmSync(temp,{force:true}); }
+    }
   }
 } catch (e) { console.error(String(e)); process.exitCode=1; }

@@ -1,0 +1,63 @@
+const { test } = require("node:test");
+const assert = require("node:assert/strict");
+const { mkdtemp, writeFile, readFile, rm } = require("node:fs/promises");
+const os = require("node:os"), path = require("node:path"), Module = require("node:module");
+const { hierarchy, generate, snippet, changes } = require("../src/hierarchy");
+
+test("INI and model context commands share the CLI preview and respect the clipboard destination", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(),"sp-ini-ui-"));
+  try {
+    const source = Buffer.from('Objects: {\n Model: 1,"Model::Hull","Null" {\n }\n Model: 2,"Model::Hull_Col","Mesh" {\n }\n}\nConnections: {\n C: "OO",2,1\n}\n');
+    const model = {path:path.join(dir,"ship.fbx"),fsPath:path.join(dir,"ship.fbx")};
+    const ini = {path:path.join(dir,"ship.ini"),fsPath:path.join(dir,"ship.ini")};
+    await writeFile(model.fsPath,source);
+    const before = "[Models]\nResourcesRoot=ship.fbx\n";
+    await writeFile(ini.fsPath,before);
+    const doc = {uri:ini,getText:()=>before,version:1,positionAt:n=>n};
+    let chooser, provider, visible, copied, applied, picks;
+    const commands = new Map();
+    const noop = ()=>{};
+    class Input { constructor(uri) {this.uri=uri;} }
+    const vscode = {
+      Uri:{from: value=>({...value,toString:()=>value.path+"?"+value.query})},
+      TabInputCustom:Input,TabInputText:class {},Position:class {},Range:class {},
+      EventEmitter:class {fire() {}}, WorkspaceEdit:class {replace(uri,range,text){this.text=text;}},
+      commands:{registerCommand:(id,fn)=>commands.set(id,fn),executeCommand:()=>[{uri:model}]},
+      env:{clipboard:{writeText:text=>{copied=text;}}},
+      window:{activeTextEditor:{document:doc,selection:{active:{line:1}}},
+        tabGroups:{activeTabGroup:{activeTab:{input:new Input(model)}},onDidChangeTabs:noop},
+        createTreeView:()=>({}),showOpenDialog:()=>[ini],
+        showQuickPick:items=>chooser(items,picks.shift()),showTextDocument:d=>{visible=d;},
+        showInformationMessage:noop,showErrorMessage:message=>assert.fail(message)},
+      workspace:{registerTextDocumentContentProvider:(scheme,p)=>{provider=p;},onDidCloseTextDocument:noop,
+        openTextDocument:uri=>uri===ini ? doc : provider.provideTextDocumentContent(uri),
+        applyEdit:e=>{applied=e.text;return true;}}
+    };
+    const native = Module.prototype.require;
+    let registerHierarchy;
+    try {
+      Module.prototype.require = function(id) {return id==="vscode" ? vscode : native.apply(this,arguments);};
+      ({registerHierarchy}=require("../src/hierarchy-ui"));
+    } finally {Module.prototype.require=native;}
+    registerHierarchy({subscriptions:[]});
+    chooser=(items,wanted)=>{
+      if (wanted==="parent") return items[0];
+      return items.find(i=>typeof i==="string" ? i===wanted : i.label.includes(wanted));
+    };
+    const root = hierarchy(source)[0];
+    picks=["parent","Clipboard","Preview INI","Copy to Clipboard"];
+    await commands.get("seapower-ini.generateFromIni")();
+    assert.equal(copied,snippet("ship.fbx",root));
+    assert.equal(visible,copied);
+    assert.equal(applied,undefined);
+    assert.equal(await readFile(ini.fsPath,"utf8"),before);
+    const after=generate(before,"ship.fbx",root);
+    picks=["INI file","Preview Changes",undefined];
+    await commands.get("seapower-ini.generateFromModel")(root);
+    assert.equal(visible,changes("ship.ini",before,after));
+    assert.equal(applied,undefined);
+    picks=["INI file","Preview Changes","Apply"];
+    await commands.get("seapower-ini.generateFromModel")(root);
+    assert.equal(applied,after);
+  } finally {await rm(dir,{recursive:true,force:true});}
+});

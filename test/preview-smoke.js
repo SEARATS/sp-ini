@@ -50,6 +50,10 @@ exports.run = async () => {
   await vscode.commands.executeCommand("workbench.action.files.revert");
   const meshIni = await vscode.workspace.openTextDocument(vscode.Uri.joinPath(root, "vessels/mesh.ini"));
   const meshEditor = await vscode.window.showTextDocument(meshIni);
+  const hullLine = meshIni.getText().split(/\r?\n/).findIndex(line => line === "Mesh=Hull");
+  const list = await vscode.commands.executeCommand("vscode.executeCompletionItemProvider",meshIni.uri,new vscode.Position(hullLine,9));
+  const hull = list.items.filter(i=>["Hull","Hull_Col"].includes(i.label)).sort((a,b)=>a.sortText.localeCompare(b.sortText));
+  assert.deepEqual(hull.map(i=>i.label),["Hull_Col","Hull"]);
   meshEditor.selection = new vscode.Selection(4, 6, 4, 6);
   const definitions = await vscode.commands.executeCommand("vscode.executeDefinitionProvider", meshIni.uri, meshEditor.selection.active);
   assert.ok(definitions.some(d => d.uri?.path.endsWith("/mesh.obj") && d.range.start.line === 3), JSON.stringify(definitions));
