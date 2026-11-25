@@ -5,7 +5,7 @@ import { Texture, Box3, DirectionalLight, HemisphereLight, LoadingManager, Persp
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
-type SavedDisplay = DisplaySettings & {hidden: string[]};
+type SavedDisplay = Partial<DisplaySettings> & {hidden?: string[]; wireframe?: boolean};
 declare function acquireVsCodeApi(): { postMessage(message: unknown): void; getState(): SavedDisplay | undefined; setState(value: SavedDisplay): void };
 const vscode = acquireVsCodeApi();
 const status = document.querySelector("[role=status]");
@@ -17,7 +17,10 @@ const camera = new PerspectiveCamera(42, 1, 0.01, 10000);
 const bounds = new Sphere();
 let renderer, controls, model;
 const saved = vscode.getState();
-const settings: DisplaySettings = {meshes: saved?.meshes ?? true, colliders: saved?.colliders ?? true, wireframe: saved?.wireframe ?? false};
+const settings: DisplaySettings = {
+  meshes: saved?.meshes ?? true, colliders: saved?.colliders ?? true,
+  meshWireframe: saved?.meshWireframe ?? saved?.wireframe ?? false, colliderWireframe: saved?.colliderWireframe ?? true
+};
 const hidden = new Set<string>(saved?.hidden);
 const categories = new Map<string, boolean>();
 let updateRows: (() => void)[] = [];
@@ -35,9 +38,11 @@ for (const category of ["meshes","colliders"] as const) {
   input.checked = settings[category];
   input.onchange = () => { settings[category] = input.checked; changed(); };
 }
-const shading = document.querySelector<HTMLSelectElement>("#shading");
-shading.value = settings.wireframe ? "wireframe" : "shaded";
-shading.onchange = () => { settings.wireframe = shading.value === "wireframe"; changed(); };
+for (const key of ["meshWireframe","colliderWireframe"] as const) {
+  const mode = document.querySelector<HTMLSelectElement>("#"+key);
+  mode.value = settings[key] ? "wireframe" : "shaded";
+  mode.onchange = () => { settings[key] = mode.value === "wireframe"; changed(); };
+}
 
 function showOutline(nodes: OutlineNode[], note: string, uri?: string) {
   outline.querySelector("p").textContent = note;

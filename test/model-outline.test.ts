@@ -22,7 +22,7 @@ test("OBJ row visibility distinguishes repeated names and overlapping groups", (
   assert.notEqual(a.parts[0].id,b.parts[0].id);
   const categories = new Map(layout.nodes.flatMap(n => n.parts.map(p => [p.id,p.collider] as const)));
   const hidden = new Set([a.parts[0].id]);
-  const settings = {meshes:true,colliders:false,wireframe:true};
+  const settings = {meshes:true,colliders:false,meshWireframe:false,colliderWireframe:true};
   applyDisplay(model,categories,hidden,settings);
   assert.deepEqual(model.children.map(m=>m.layers.isEnabled(0)),[false,false]);
   applyDisplay(model,categories,hidden,{...settings,colliders:true});
@@ -35,12 +35,16 @@ test("FBX parent visibility and wireframe can change independently of child visi
   const child = Object.assign(new Mesh(undefined,[material]),{ID:2});
   parent.add(child);
   const categories = new Map([["1",false],["2",true]]);
-  applyDisplay(parent,categories,new Set(),{meshes:false,colliders:true,wireframe:true});
-  assert.equal(material.wireframe,true);
+  applyDisplay(parent,categories,new Set(),{meshes:false,colliders:true,meshWireframe:false,colliderWireframe:true});
+  const colliderMaterial = child.material[0];
+  assert.equal(parent.material.wireframe,false);
+  assert.equal(colliderMaterial.wireframe,true);
   assert.ok(child.layers.isEnabled(0) && !parent.layers.isEnabled(0) && parent.visible);
-  applyDisplay(parent,categories,new Set(["2"]),{meshes:true,colliders:true,wireframe:false});
+  applyDisplay(parent,categories,new Set(["2"]),{meshes:true,colliders:true,meshWireframe:true,colliderWireframe:false});
   assert.ok(parent.layers.isEnabled(0) && !child.layers.isEnabled(0));
-  assert.equal(material.wireframe,false);
+  assert.equal(parent.material.wireframe,true);
+  assert.equal(colliderMaterial.wireframe,false);
+  assert.equal(child.material[0],colliderMaterial);
 });
 
 test("FBX outline preserves separate model IDs and collider export uses its immediate parent's space", () => {

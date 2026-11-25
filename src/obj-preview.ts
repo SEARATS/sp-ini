@@ -89,7 +89,7 @@ function registerObjPreview(context) {
       #outline li { line-height:1.55; white-space:nowrap; }
       #outline li > span { padding-left:1em; }
       #outline p { margin:4px 0; color:var(--vscode-descriptionForeground); }
-      #filters { display:flex; align-items:center; flex-wrap:wrap; gap:4px 8px; margin:6px 0; }
+      #filters { display:grid; grid-template-columns:auto auto; align-items:center; gap:4px 8px; margin:6px 0; }
       #filters label, .row { display:inline-flex; align-items:center; gap:4px; }
       input[type=checkbox] { margin:0; accent-color:var(--vscode-focusBorder); }
       .collider-icon { width:1em; height:1em; color:var(--vscode-charts-orange); vertical-align:middle; }
@@ -99,8 +99,9 @@ function registerObjPreview(context) {
       <canvas aria-label="3D model"></canvas><aside><button hidden>Fit model</button> <span role="status">Opening model…</span></aside>
       <details id="outline" open><summary>Model hierarchy</summary>
       <div id="filters"><label><input id="meshes" type="checkbox" checked>Meshes</label>
+      <select id="meshWireframe" aria-label="Mesh render mode"><option value="shaded">Shaded</option><option value="wireframe">Wireframe</option></select>
       <label><input id="colliders" type="checkbox" checked>Colliders</label>
-      <select id="shading" aria-label="Render mode"><option value="shaded">Shaded</option><option value="wireframe">Wireframe</option></select></div>
+      <select id="colliderWireframe" aria-label="Collider render mode"><option value="shaded">Shaded</option><option value="wireframe" selected>Wireframe</option></select></div>
       <p></p><ul></ul></details>
       <template id="box"><svg class="collider-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-linejoin="round" role="img" aria-label="Likely collider"><title>Likely collider</title><path d="M8 1 14.5 4.5v7L8 15l-6.5-3.5v-7z M1.5 4.5 8 8l6.5-3.5 M8 8v7"/></svg></template>
       <script nonce="${nonce}" src="${script}"></script></body></html>`;

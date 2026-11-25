@@ -10,7 +10,14 @@ function checkPreviewControls() {
   const row = icon.closest("li"), part = icon.closest(".row").querySelector("input");
   const meshes = document.querySelector<HTMLInputElement>("#meshes");
   const colliders = document.querySelector<HTMLInputElement>("#colliders");
-  const shading = document.querySelector<HTMLSelectElement>("#shading");
+  const meshMode = document.querySelector<HTMLSelectElement>("#meshWireframe");
+  const colliderMode = document.querySelector<HTMLSelectElement>("#colliderWireframe");
+  if (meshMode.value !== "shaded" || colliderMode.value !== "wireframe") return "incorrect default modes";
+  function render(select: HTMLSelectElement, mode: string) {
+    select.value = mode;
+    select.dispatchEvent(new Event("change"));
+    return canvas.toDataURL();
+  }
   part.click();
   colliders.click();
   const filtered = row.hidden;
@@ -19,17 +26,17 @@ function checkPreviewControls() {
   part.click();
   meshes.click();
   const onlyColliders = canvas.toDataURL();
+  const sameColliders = render(meshMode, "wireframe");
+  const solidColliders = render(colliderMode, "shaded");
   colliders.click();
   const empty = canvas.toDataURL();
   meshes.click();
+  const wireMesh = canvas.toDataURL();
+  const sameMesh = render(colliderMode, "wireframe");
+  const shadedMesh = render(meshMode, "shaded");
   colliders.click();
-  shading.value = "wireframe";
-  shading.dispatchEvent(new Event("change"));
-  const wireframe = canvas.toDataURL();
-  shading.value = "shaded";
-  shading.dispatchEvent(new Event("change"));
-  const shaded = canvas.toDataURL();
-  return filtered && remembered && !row.hidden && onlyColliders !== empty && wireframe !== shaded ? "verified controls" : "display check failed";
+  const independentModes = onlyColliders === sameColliders && onlyColliders !== solidColliders && wireMesh === sameMesh && wireMesh !== shadedMesh;
+  return filtered && remembered && !row.hidden && onlyColliders !== empty && independentModes ? "verified controls" : "display check failed";
 }
 async function renderedModel(port: number) {
   const seen = new Set<string>();

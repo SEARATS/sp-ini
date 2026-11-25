@@ -14,7 +14,7 @@ OBJ source opens with each object (`o`) collapsed. Click the arrow beside a name
 
 Expand **Model hierarchy** in an FBX preview to check each object's parent. In an OBJ preview, **Objects and groups** shows group membership. OBJ files have no transform hierarchy.
 
-A box icon marks likely colliders. Use the row checkboxes to show or hide parts. **Meshes** and **Colliders** filter the tree and the 3D view. Switch **Shaded** to **Wireframe** to inspect the triangles.
+A box icon marks likely colliders. Use the row checkboxes to show or hide parts. **Meshes** and **Colliders** filter the tree and the 3D view. Meshes start shaded and colliders start in wireframe. Each filter has its own render mode dropdown.
 
 Ctrl+click an underlined mesh or mesh collider to open its OBJ declaration. Hover over the INI value or OBJ name to see the wireframe and, when UVs and a diffuse map are available, the textured mesh. Material hovers show a lit plane covering the full texture, followed by each texture. The swatch approximates lighting and supports PNG and JPEG textures.
 
