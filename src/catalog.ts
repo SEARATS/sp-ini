@@ -42,6 +42,7 @@ function getOrCreate(map, key, make) {
 
 class Catalog {
   mirrorModels = new Map();
+  mirrorMeshes = new Map();
   mirrorTextures = new Map();
   modelParts = new Map();
   objOwners = new Map();
@@ -141,13 +142,32 @@ async function buildCatalog(roots) {
     }
   }
   for (const { dir, source } of roots) {
-    await walk(dir, dir, source);
-    if (source !== "Workspace") continue;
-    const manifest = await fs.readFile(path.join(dir,"sp-ini-models.json"),"utf8").then(JSON.parse,()=>null);
+    const manifest = source === "Workspace" && await fs.readFile(path.join(dir,"sp-ini-models.json"),"utf8").then(JSON.parse).catch(()=>null);
+    if (Array.isArray(manifest?.materials)) {
+      // Generated Unity projects contain thousands of prefab, shader and metadata files.
+      // The manifest already names the loose assets that an INI can reference.
+      for (const rel of new Set([...Object.keys(manifest.models || {}), ...Object.keys(manifest.standalone || {}),
+          ...Object.values(manifest.textures || {}), ...manifest.materials])) {
+        if (typeof rel !== "string" || !rel.startsWith("Assets/") || rel.split(/[\\/]/).includes("..") || rel.includes("\\")) continue;
+        const full = path.join(dir,rel), file = {full,rel,uri:pathToFileURL(full).href,source};
+        catalog.filesByUri.set(uriKey(file.uri),file);
+        getOrCreate(catalog.assets, normalize(rel), ()=>[]).push({file,name:rel,line:0,start:0});
+      }
+      const streaming = path.join(dir,"Assets","StreamingAssets");
+      for (const item of await children(streaming)) {
+        if (item.isDirectory()) await walk(path.join(streaming,item.name),path.join(streaming,item.name),source);
+      }
+    } else {
+      await walk(dir, dir, source);
+    }
     if (!manifest) continue;
     for (const [rel,name] of Object.entries(manifest.models || {})) {
       const refs = catalog.assets.get(normalize(rel));
       if (refs && typeof name === "string") getOrCreate(catalog.mirrorModels,normalize(name),()=>[]).push(...refs);
+    }
+    for (const [rel,mesh] of Object.entries<{name:string}>(manifest.standalone || {})) {
+      const refs = catalog.assets.get(normalize(rel));
+      if (refs && typeof mesh?.name==="string") getOrCreate(catalog.mirrorMeshes,normalize(mesh.name),()=>[]).push(...refs);
     }
     for (const [guid,rel] of Object.entries(manifest.textures || {})) {
       if (typeof rel === "string") catalog.mirrorTextures.set(guid,catalog.assets.get(normalize(rel))?.[0]?.file);

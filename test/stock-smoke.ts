@@ -2,6 +2,38 @@
 import * as vscode from "vscode";
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
+async function renderedModel(port: number) {
+  const seen = new Set<string>();
+  for (let attempt=0; attempt<40; attempt++) {
+    const targets = await (await fetch("http://127.0.0.1:"+port+"/json/list")).json();
+    for (const target of targets.filter(t=>t.type==="iframe" || t.type==="page")) {
+      const statuses = await new Promise<string[]>(resolve=>{
+        const ws = new WebSocket(target.webSocketDebuggerUrl), contexts = new Set<number>(), values: string[] = [];
+        const timer = setTimeout(finish,1200);
+        function finish() { clearTimeout(timer); ws.close(); resolve(values); }
+        ws.onerror=finish;
+        ws.onopen=()=>ws.send(JSON.stringify({id:1,method:"Runtime.enable"}));
+        ws.onmessage=event=>{
+          const msg=JSON.parse(String(event.data));
+          if (msg.method==="Runtime.executionContextCreated") contexts.add(msg.params.context.id);
+          if (msg.id===1) {
+            if (!contexts.size) return finish();
+            for (const id of contexts) ws.send(JSON.stringify({id:id+2,method:"Runtime.evaluate",params:{contextId:id,
+              returnByValue:true,expression:'Array.from(document.querySelectorAll("canvas")).some(c=>c.getAttribute("aria-label")==="3D model") ? document.querySelector("[role=status]").textContent : location.protocol'}}));
+          } else if (msg.id>1) {
+            values.push(msg.result?.result?.value || "empty");
+            if (values.length>=contexts.size) finish();
+          }
+        };
+      });
+      statuses.forEach(status=>seen.add(target.type+" "+status));
+      if (statuses.some(status=>status.includes("Drag to orbit"))) return;
+    }
+    await new Promise(resolve=>setTimeout(resolve,250));
+  }
+  assert.fail("FBX webview did not finish drawing its model: "+[...seen].join(", "));
+}
+
 export const run = async () => {
   const ini = vscode.Uri.file(process.env.SP_INI_STOCK_INI);
   const doc = await vscode.workspace.openTextDocument(ini);
@@ -28,6 +60,11 @@ export const run = async () => {
       if (key==="Mesh") {
         await vscode.commands.executeCommand("vscode.openWith",target,"seapower-ini.fbx");
         assert.ok(vscode.window.tabGroups.all.some(g=>g.tabs.some(t=>(t.input instanceof vscode.TabInputCustom && t.input.viewType)==="seapower-ini.fbx")));
+        outcomes.push("FBX preview opened");
+        if (process.env.SP_INI_CDP_PORT) {
+          await renderedModel(Number(process.env.SP_INI_CDP_PORT));
+          outcomes.push("FBX WebGL model rendered");
+        }
       }
     }
   }

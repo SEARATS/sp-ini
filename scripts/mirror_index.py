@@ -13,24 +13,36 @@ def object_names(path):
         wide = struct.unpack("<I", f.read(4))[0] >= 7500
         fmt = "<QQQB" if wide else "<IIIB"
         size = struct.calcsize(fmt)
+        models, geometries, links = {}, {}, {}
         def nodes(limit):
             while f.tell() + size <= limit:
                 end, _, plen, n = struct.unpack(fmt, f.read(size))
                 if not end:
                     break
                 name = f.read(n)
-                if name == b"Objects":
+                if name in (b"Objects", b"Connections"):
                     f.seek(plen, 1)
-                    yield from nodes(end)
+                    nodes(end)
                 elif name in (b"Model", b"Geometry"):
-                    data = f.read(plen)
-                    if data[:1] == b"L" and data[9:10] == b"S":
-                        length = struct.unpack("<I", data[10:14])[0]
-                        label = data[14:14+length].split(b"\0",1)[0].decode("utf8",errors="replace")
-                        if label:
-                            yield label.casefold()
+                    blob = f.read(plen)
+                    if blob[:1] == b"L" and blob[9:10] == b"S":
+                        identity, length = struct.unpack("<q", blob[1:9])[0], struct.unpack("<I", blob[10:14])[0]
+                        label = blob[14:14+length].split(b"\0",1)[0].decode("utf8",errors="replace")
+                        (models if name == b"Model" else geometries)[identity] = label.casefold()
+                elif name == b"C":
+                    blob = f.read(plen)
+                    if blob.startswith(b"S\x02\x00\x00\x00OOL") and blob[16:17] == b"L":
+                        child, parent = struct.unpack("<q",blob[8:16])[0], struct.unpack("<q",blob[17:25])[0]
+                        links[child] = parent
                 f.seek(end)
-        yield from nodes(path.stat().st_size)
+        nodes(path.stat().st_size)
+        for identity, label in geometries.items():
+            if label:
+                yield label
+            owner = models.get(links.get(identity))
+            if owner:
+                yield owner
+
 
 def standalone_fbx(mesh, target):
     """Create an FBX for a mesh with no recoverable prefab binding."""
@@ -74,13 +86,14 @@ def index_project(project, data, workspace):
         with meta.open(encoding="utf8") as src:
             guid = re.search(r"^guid: ([0-9a-f]+)",src.read(256),re.M)
         if guid: textures[guid[1]] = meta.with_suffix("").relative_to(project).as_posix()
+    known = set()
+    for fbx in (assets/"SeaPowerFBX"/"prefabs").rglob("*.fbx"):
+        models[fbx.relative_to(project).as_posix()] = fbx.stem
+        known.update(object_names(fbx))
     for archive in sorted(data.glob("*.assets")):
-        known = set()
-        for fbx in (assets/"SeaPowerFBX"/archive.stem).rglob("*.fbx"):
-            models[fbx.relative_to(project).as_posix()] = fbx.stem
-            known.update(object_names(fbx))
+        print(f"Checking standalone meshes in {archive.name}", flush=True)
         env = UnityPy.load(str(archive))
-        meshes = [(obj,(obj.peek_name() or "")) for obj in env.objects if obj.type.name == "Mesh"]
+        meshes = [(obj,(obj.peek_name() or "")) for obj in env.objects if obj.type.name == "Mesh" and Path(obj.assets_file.name).name.casefold() == archive.name.casefold()]
         counts = Counter(name.casefold() for _,name in meshes)
         for obj,name in meshes:
             if name.casefold() in known and counts[name.casefold()] == 1: continue
@@ -91,8 +104,23 @@ def index_project(project, data, workspace):
                 standalone[target.relative_to(project).as_posix()] = {"archive":archive.name,"pathID":obj.path_id,"name":name}
             except Exception as exc:
                 errors.append({"archive":archive.name,"pathID":obj.path_id,"name":name,"error":str(exc)})
-    (project/"sp-ini-models.json").write_text(json.dumps({"models":models,"textures":textures,"standalone":standalone,
-        "unrecoverable":errors},indent=2),encoding="utf8")
+    write_manifest(project, {"models": models, "textures": textures, "standalone": standalone, "unrecoverable": errors})
     (workspace/"Sea Power.code-workspace").write_text(json.dumps({"folders":[{"path":project.relative_to(workspace).as_posix()}],
         "settings":{"files.associations":{"*.ini":"seapower-ini"},"seapowerIni.gameDirectory":str(data.parent)}},indent=2),encoding="utf8")
     print(f"{len(models)} hierarchy FBXs, {len(standalone)} standalone meshes, {len(textures)} textures, {len(errors)} unreadable meshes.")
+
+
+
+def write_manifest(project, manifest):
+    assets = project / "Assets"
+    candidates = {}
+    resources = assets / "Resources"
+    for prefab in resources.rglob("*.prefab"):
+        candidates.setdefault(prefab.stem.casefold(), []).append(prefab.relative_to(resources).with_suffix("").as_posix())
+    materials = sorted(p.relative_to(project).as_posix() for p in assets.rglob("*.mat"))
+    manifest["materials"] = materials
+    manifest["resourceCandidates"] = {rel: candidates.get(name.casefold(), []) for rel, name in manifest["models"].items()}
+    manifest_path = project / "sp-ini-models.json"
+    temporary = manifest_path.with_suffix(".tmp")
+    temporary.write_text(json.dumps(manifest, indent=2), encoding="utf8")
+    temporary.replace(manifest_path)

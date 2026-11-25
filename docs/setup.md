@@ -32,7 +32,9 @@ python scripts/export_vanilla_project.py "C:\Games\Sea Power" "D:\SeaPowerMirror
 code "D:\SeaPowerMirror\Sea Power.code-workspace"
 ```
 
-AssetRipper restores Unity resources and prefabs. AssetStudio exports FBX hierarchies. The script copies the stock INIs, exports remaining meshes individually and records inferred FBX paths, texture GUIDs and unreadable meshes in `sp-ini-models.json`. Keep the generated project local.
+AssetRipper restores Unity resources and prefabs. AssetStudio exports FBX hierarchies. It reads staged copies for archives with slashes in texture names so it can write the texture files. The script copies the stock INIs, exports remaining meshes individually and records inferred FBX paths, texture GUIDs and unreadable meshes in `sp-ini-models.json`. The manifest lists candidate resource paths for each FBX by prefab name. Keep the generated project local.
+
+The stock Spruance VLS check resolved the deck to its FBX and its material to the Unity `.mat`, rendered the FBX in VS Code, and displayed a textured 303-face mesh plus the three material maps. To repeat it, run `./test/stock.ps1 -Mirror D:/SeaPowerMirror` from the checkout. Run it without `-Mirror` to test the installed archive.
 
 ## Build
 
