@@ -10,13 +10,11 @@ Ctrl+click an underlined INI value to open its source. Hover over a mesh to see 
 
 Click **Preview Entity** in the upper-right corner of a unit INI to see the assembled model beside its source.
 
-[![Spruance VLS in the entity preview][entity-overview]][entity-overview]
+[![Spruance VLS with wireframe colliders and system arcs][entity-overview]][entity-overview]
 
 Use the **Meshes**, **Colliders**, and **Objects** trees to show or hide parts. Tooltips list the colliders under your pointer. Ctrl+click a mesh or system to open its INI section. On a collider, Ctrl+click opens its system and Shift+click opens its definition. On macOS, use Command instead of Ctrl.
 
 Firing and elevation arcs appear by default. Select a system to see its angles.
-
-[![Firing and elevation arcs on the Spruance][system-arcs]][system-arcs]
 
 Click **Preview Unit Card** to see the unit's profile, specifications and equipment. Use the selectors to switch units, ship variants or aircraft squadrons.
 
@@ -92,6 +90,5 @@ The examples use the stock Spruance VLS destroyer. Select a screenshot to view i
 [hierarchy-definition]: https://raw.githubusercontent.com/SEARATS/binaries/e91f936c5d8f2e3addd7dbca97da93c60213503a/sp-ini/21-hierarchy-definition.png
 [entity-trees]: https://raw.githubusercontent.com/SEARATS/binaries/0fac4c86b369cc7f1e05f21a26d11843b938a95b/sp-ini/22-entity-trees.png
 [collider-highlight]: https://raw.githubusercontent.com/SEARATS/binaries/c7fa4552f83481e42155c44ee9926fe21dc8ac26/sp-ini/23-collider-highlight.png
-[system-arcs]: https://raw.githubusercontent.com/SEARATS/binaries/0fac4c86b369cc7f1e05f21a26d11843b938a95b/sp-ini/25-system-arcs.png
 [unit-card]: https://raw.githubusercontent.com/SEARATS/binaries/0fac4c86b369cc7f1e05f21a26d11843b938a95b/sp-ini/24-unit-card.png
-[entity-overview]: https://raw.githubusercontent.com/SEARATS/binaries/0fac4c86b369cc7f1e05f21a26d11843b938a95b/sp-ini/26-entity-preview.png
+[entity-overview]: https://raw.githubusercontent.com/SEARATS/binaries/aa0c3ffa825af9531775e75a6387c5add3d60460/sp-ini/26-entity-preview.png

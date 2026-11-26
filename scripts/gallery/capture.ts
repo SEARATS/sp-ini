@@ -136,15 +136,13 @@ async function capture(screen) {
   await screen.resize(920, 600);
   await command("vscode.openWith", stock, "seapower-ini.entity", vscode.ViewColumn.One);
   const port = Number(process.env.SP_GALLERY_PORT);
-  await renderedModel(port, inspectSpruance, "overview");
-  await screen.pan(470,310,-25,-85);
-  await screen.capture("26-entity-preview","Spruance VLS in the entity preview",{preview:true});
   await renderedModel(port, inspectSpruance, "mesh");
   await screen.capture("18-entity-mesh-hover", "Mesh tooltip on the assembled Spruance", { preview: [0,0.40,0.85,1] });
   await renderedModel(port, inspectSpruance, "trees");
   await screen.capture("22-entity-trees", "Meshes, colliders and system markers on the Spruance", { preview: [0,0,0.82,0.92] });
-  await renderedModel(port, inspectSpruance, "arcs");
-  await screen.capture("25-system-arcs", "Selected system firing and elevation arcs", {preview:[0,0.36,0.9,1]});
+  await renderedModel(port, inspectSpruance, "overview");
+  await screen.pan(470,310,-40,-119);
+  await screen.capture("26-entity-preview","Spruance VLS with wireframe colliders and system arcs",{preview:true});
   await renderedModel(port, inspectSpruance, "overlap");
   await screen.capture("23-collider-highlight", "Highlighted colliders with the weapon system first in the tooltip", { preview: [0,0.44,1,1] });
   await renderedModel(port, inspectSpruance, "sphere");
