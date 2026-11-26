@@ -2,11 +2,13 @@ import { build } from "esbuild";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { watch } from "node:fs";
+import { generateIcon } from "./icon";
 const root = path.resolve(__dirname, "..");
 process.chdir(root);
 
 async function compile() {
   await Promise.all([
+    generateIcon(),
     build({ entryPoints: ["src/extension.ts", "src/server.ts", "src/pspad.ts", "src/generate.ts"], outdir: "dist",
       bundle: true, platform: "node", target: "node18", external: ["vscode"] }),
     build({ entryPoints: ["test/preview-smoke.ts", "test/stock-smoke.ts", "test/vscode-smoke.ts", "scripts/gallery/capture.ts"],

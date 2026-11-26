@@ -2,7 +2,8 @@
   "name": "seapower-ini",
   "displayName": "Sea Power INI",
   "description": "Autocomplete, error checking and Go to Definition for Sea Power INI files.",
-  "version": "0.9.6",
+  "version": "0.9.7",
+  "icon": "dist/icon.png",
   "publisher": "searats",
   "private": true,
   "repository": {
@@ -450,12 +451,14 @@
     }
   },
   "scripts": {
+    "icon": "tsx scripts/icon.ts",
     "build": "tsx scripts/build.ts",
     "test": "pnpm run typecheck && tsx --test test/*.test.ts",
     "package": "pnpm run build && vsce package --no-dependencies --skip-license",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "2.6.2",
     "@types/node": "^22.20.5",
     "@types/pngjs": "^6.0.5",
     "@types/three": "0.183.1",
