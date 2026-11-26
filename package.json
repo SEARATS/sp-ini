@@ -2,7 +2,7 @@
   "name": "seapower-ini",
   "displayName": "Sea Power INI",
   "description": "Autocomplete, error checking and Go to Definition for Sea Power INI files.",
-  "version": "0.9.7",
+  "version": "0.9.8",
   "icon": "dist/icon.png",
   "publisher": "searats",
   "private": true,
@@ -289,6 +289,12 @@
     "configuration": {
       "title": "Sea Power INI",
       "properties": {
+        "seapowerIni.unitHints.enabled": {
+          "type": "boolean",
+          "default": true,
+          "scope": "window",
+          "description": "Show known Sea Power units beside numeric INI values as inlay hints."
+        },
         "seapowerIni.obj.collapseObjectsOnOpen": {
           "type": "boolean",
           "default": true,
@@ -452,6 +458,7 @@
   },
   "scripts": {
     "icon": "tsx scripts/icon.ts",
+    "scan:units": "tsx scripts/scan-unit-hints.ts",
     "build": "tsx scripts/build.ts",
     "test": "pnpm run typecheck && tsx --test test/*.test.ts",
     "package": "pnpm run build && vsce package --no-dependencies --skip-license",

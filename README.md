@@ -67,6 +67,7 @@ The examples use the stock Spruance VLS destroyer. Select a screenshot to view i
 | Value completion<br>[![Value completion][completion]][completion] | Duplicate warning and conflicting-value error<br>[![Duplicate warning and conflicting-value error][duplicate-diagnostics]][duplicate-diagnostics] |
 | Collapsed INI section<br>[![Collapsed INI section][ini-folding]][ini-folding] | Diagnostic quick fix<br>[![Diagnostic quick fix][quick-fix]][quick-fix] |
 | Commented INI section<br>[![Commented INI section][section-toggle]][section-toggle] | Same-line diagnostic suppression<br>[![Same-line diagnostic suppression][inline-suppression]][inline-suppression] |
+| Units beside values in the stock Victor K2 INI<br>[![Inline units on the Victor K2][unit-hints]][unit-hints] | |
 
 | Go to Definition | Reference files |
 | --- | --- |
@@ -104,5 +105,6 @@ The examples use the stock Spruance VLS destroyer. Select a screenshot to view i
 [entity-trees]: https://raw.githubusercontent.com/SEARATS/binaries/8e825c667761c3d323d7b1facdc1870f76e1d300/sp-ini/22-entity-trees.png
 [collider-highlight]: https://raw.githubusercontent.com/SEARATS/binaries/c7fa4552f83481e42155c44ee9926fe21dc8ac26/sp-ini/23-collider-highlight.png
 [unit-card]: https://raw.githubusercontent.com/SEARATS/binaries/d3c7f1d94c0459cdf9137c0940ae3e925cf5837e/sp-ini/24-unit-card.png
+[unit-hints]: https://raw.githubusercontent.com/SEARATS/binaries/9ba4ee59a3e5e838c6eccb9c7b9363c87011f765/sp-ini/28-unit-hints.png
 [sensor-card]: https://raw.githubusercontent.com/SEARATS/binaries/d3c7f1d94c0459cdf9137c0940ae3e925cf5837e/sp-ini/27-sensor-card.png
 [entity-overview]: https://raw.githubusercontent.com/SEARATS/binaries/8e825c667761c3d323d7b1facdc1870f76e1d300/sp-ini/26-entity-preview.png

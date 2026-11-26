@@ -23,7 +23,9 @@ const unitFolder = rel => normalize(rel).split("/").at(-2);
 
 function family(rel, doc) {
   const target = doc.modifiers.find(m => ["extend", "prepend", "copy", "alias"].includes(m.name))?.args.split(",")[0].trim();
-  const parts = normalize(target || rel).split("/");
+  let file = normalize(target || rel);
+  if (target && !file.includes("/")) file = path.posix.join(path.posix.dirname(normalize(rel)), file);
+  const parts = file.split("/");
   const name = parts.pop();
   if (name === "_info.ini") return "mod metadata";
   if (doc.sections.some(s => s.name.toLowerCase() === "mission") || parts.includes("missions")) return "mission";

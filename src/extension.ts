@@ -53,7 +53,7 @@ function registerObjFolding() {
 
 function options() {
   const config = vscode.workspace.getConfiguration("seapowerIni");
-  return { search: config.get("search"), searchPaths: config.get("searchPaths"),
+  return { unitHints: config.get("unitHints.enabled"), search: config.get("search"), searchPaths: config.get("searchPaths"),
     gameDirectory: config.get("gameDirectory"), localModDirectories: config.get("localModDirectories"),
     workshopDirectories: config.get("workshopDirectories") };
 }
@@ -133,7 +133,12 @@ async function activate(context) {
       }
     }),
     vscode.commands.registerCommand("seapower-ini.refresh", async () => { void vscode.window.showInformationMessage(await rebuild()); }),
-    vscode.workspace.onDidChangeConfiguration(event => { if (event.affectsConfiguration("seapowerIni")) update(); }),
+    vscode.workspace.onDidChangeConfiguration(event => {
+      if (event.affectsConfiguration("seapowerIni.unitHints.enabled"))
+        void client.sendNotification("seapower/unitHints", options().unitHints);
+      if (["search", "searchPaths", "gameDirectory", "localModDirectories", "workshopDirectories"]
+        .some(key => event.affectsConfiguration("seapowerIni." + key))) update();
+    }),
     vscode.workspace.onDidChangeWorkspaceFolders(update)
   );
 }

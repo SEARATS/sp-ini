@@ -426,6 +426,29 @@ export const run = async () => {
     const defs = await vscode.commands.executeCommand<(vscode.Location|vscode.LocationLink)[]>("vscode.executeDefinitionProvider",nationDoc.uri,new vscode.Position(nationLine,9));
     assert.ok(defs.some(d=>/nations\.ini$/i.test(("uri" in d ? d.uri : d.targetUri).path)));
     outcomes.push("South_Africa links to the vanilla nations dictionary");
+    const victor = await vscode.workspace.openTextDocument(vscode.Uri.joinPath(ini,"../../aircraft/raf_victor_k2.ini"));
+    await vscode.languages.setTextDocumentLanguage(victor,"seapower-ini");
+    const performance = victor.getText().split(/\r?\n/).findIndex(line => line.trim() === "[Performance]");
+    const hintRange = new vscode.Range(performance,0,performance+6,0);
+    const hintConfig = vscode.workspace.getConfiguration("seapowerIni");
+    const original = hintConfig.inspect<boolean>("unitHints.enabled")?.globalValue;
+    async function hintLabels() {
+      const hints = await vscode.commands.executeCommand<vscode.InlayHint[]>("vscode.executeInlayHintProvider",victor.uri,hintRange);
+      return hints.map(h => h.label);
+    }
+    try {
+      assert.deepEqual(await hintLabels(), ["kg","kg","N","Mach","nmi"]);
+      for (const enabled of [false,true]) {
+        await hintConfig.update("unitHints.enabled",enabled,vscode.ConfigurationTarget.Global);
+        let labels = await hintLabels();
+        for (let i=0;i<30 && !!labels.length!==enabled;i++) {
+          await new Promise(resolve=>setTimeout(resolve,100));
+          labels=await hintLabels();
+        }
+        assert.deepEqual(labels,enabled ? ["kg","kg","N","Mach","nmi"] : []);
+      }
+    } finally { await hintConfig.update("unitHints.enabled",original,vscode.ConfigurationTarget.Global); }
+    outcomes.push("Verified the Victor K2 unit hints and toggled them off and on");
     await vscode.commands.executeCommand("workbench.action.openSettings","@id:seapowerIni.search.order");
     await renderedModel(port,()=>{
       const list=document.querySelector<HTMLElement>(".settings-editor .settings-tree-container");

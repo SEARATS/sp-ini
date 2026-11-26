@@ -177,6 +177,15 @@ async function capture(screen) {
     return document.querySelector<HTMLElement>("#entry-source")?.offsetHeight && document.querySelector("#entry-title")?.textContent==="SPS-40" ? "verified controls" : "waiting for sensor reference";
   });
   await screen.capture("27-sensor-card","Sensor reference linked from the Spruance unit card",{preview:true});
+  await command("workbench.action.closeAllEditors");
+  await screen.resize(940,460);
+  const victor=await vscode.workspace.openTextDocument(vscode.Uri.joinPath(stock,"../../aircraft/raf_victor_k2.ini"));
+  const text=await vscode.window.showTextDocument(victor);
+  const line=victor.getText().split(/\r?\n/).findIndex(l=>l.startsWith("EmptyMass="));
+  select(text,new vscode.Position(line,0));
+  const hints=await command<vscode.InlayHint[]>("vscode.executeInlayHintProvider",victor.uri,new vscode.Range(line,0,line+5,0));
+  assert.deepEqual(hints.map(h=>h.label),["kg","kg","N","Mach","nmi"]);
+  await screen.capture("28-unit-hints","Unit hints on the stock Victor K2",{lines:["EmptyMass=51710","SpeedAndRange_Cruise=0.8"]});
   await screen.finish();
 }
 

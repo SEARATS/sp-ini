@@ -11,9 +11,10 @@ import { isColliderName } from "./mesh-names";
 import { Materials, imageMarkdown, resize } from "./materials";
 import { colliderSection, primitiveHover } from "./colliders";
 import { parse } from "./ini";
+import { unitHints } from "./unit-hints";
 import { moveMisplacedKey } from "./section-placement";
 import { entityAssets } from "./entity-assets";
-import { selectEntity, type PreviewRequest } from "./entity-selection";
+import { entityDocument, selectEntity, type PreviewRequest } from "./entity-selection";
 import {unitCard} from "./unit-card";
 import { iniFolds, objFolds } from "./folding";
 import { completions, diagnostics, documentLinks, exact, inspect, location, source, symbols } from "./features";
@@ -32,6 +33,7 @@ const materials = new Materials(uri => {
 let catalog = new Catalog(), options, folders;
 let building, requested = 0;
 let versionedEdits = false;
+let canRefreshHints = false;
 
 function publish(uri) {
   if (parsed.has(uri)) connection.sendDiagnostics({ uri, version: documents.get(uri)?.version, diagnostics: diagnostics(parsed.get(uri), catalog, uri) });
@@ -62,13 +64,30 @@ function refresh() {
 }
 
 connection.onInitialize(params => {
+  canRefreshHints = !!params.capabilities.workspace?.inlayHint?.refreshSupport;
   versionedEdits = !!params.capabilities.workspace?.workspaceEdit?.documentChanges;
   options = params.initializationOptions || {};
   folders = params.workspaceFolders || (params.rootUri ? [{ uri: params.rootUri }] : []);
   return { capabilities: { textDocumentSync: TextDocumentSyncKind.Incremental,
     completionProvider: { triggerCharacters: ["[", "=", "/", "!"] }, hoverProvider: true,
-    definitionProvider: true, documentLinkProvider: {}, documentSymbolProvider: true, foldingRangeProvider: true,
+    definitionProvider: true, documentLinkProvider: {}, documentSymbolProvider: true, foldingRangeProvider: true, inlayHintProvider: true,
     codeActionProvider: { codeActionKinds: ["quickfix"] } } };
+});
+connection.languages.inlayHint.on(({ textDocument, range }, token) => {
+  const doc = parsed.get(textDocument.uri);
+  if (!doc || options.unitHints === false) return [];
+  return unitHints(doc, decodeURIComponent(new URL(textDocument.uri).pathname), range, async () => {
+    await building;
+    if (token.isCancellationRequested) return;
+    const effective = await entityDocument(doc.lines.join("\n"), textDocument.uri, catalog, materials).catch(() => undefined);
+    if (!effective) return;
+    const performance = effective.sections.find(s => s.name.toLowerCase() === "performance");
+    return performance?.keys.find(k => k.name.toLowerCase() === "rangeunits")?.value ?? "Nmi";
+  });
+});
+connection.onNotification("seapower/unitHints", async (enabled: boolean) => {
+  options.unitHints = enabled;
+  if (canRefreshHints) await connection.languages.inlayHint.refresh();
 });
 connection.onCodeAction(({ textDocument, context }) => {
   const document = documents.get(textDocument.uri), doc = parsed.get(textDocument.uri);
