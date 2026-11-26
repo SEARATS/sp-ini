@@ -137,9 +137,13 @@ async function capture(screen) {
   await command("vscode.openWith", stock, "seapower-ini.entity", vscode.ViewColumn.One);
   const port = Number(process.env.SP_GALLERY_PORT);
   await renderedModel(port, inspectSpruance, "mesh");
-  await screen.capture("18-entity-mesh-hover", "Mesh tooltip on the assembled Spruance", { preview: [0,0.22,0.85,1] });
+  await screen.capture("18-entity-mesh-hover", "Mesh tooltip on the assembled Spruance", { preview: [0,0.40,0.85,1] });
+  await renderedModel(port, inspectSpruance, "trees");
+  await screen.capture("22-entity-trees", "Meshes, colliders and system markers on the Spruance", { preview: [0,0,0.82,0.92] });
+  await renderedModel(port, inspectSpruance, "overlap");
+  await screen.capture("23-collider-highlight", "Highlighted colliders with the weapon system first in the tooltip", { preview: [0,0.44,1,1] });
   await renderedModel(port, inspectSpruance, "sphere");
-  await screen.capture("19-sphere-colliders", "Sphere collider wireframes and INI source tooltip", { preview: [0.12,0.18,0.91,0.86] });
+  await screen.capture("19-sphere-colliders", "Sphere collider wireframes and INI source tooltip", { preview: [0,0.40,0.95,1] });
   await renderedModel(port, inspectSpruance, "open");
   await waitFor(() => {
     const target = vscode.window.activeTextEditor;

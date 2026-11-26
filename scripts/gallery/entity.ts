@@ -1,5 +1,5 @@
 // Runs inside the actual preview. Find the part under a painted pixel using its normal hover handler.
-export async function inspectSpruance(mode: "mesh" | "sphere" | "open" | "hierarchy") {
+export async function inspectSpruance(mode: "mesh" | "sphere" | "overlap" | "trees" | "open" | "hierarchy") {
   const canvas = document.querySelector<HTMLCanvasElement>('canvas[aria-label*="spruance"]');
   if (!canvas || !document.querySelector("[role=status]")?.textContent.includes("Drag to orbit")) return "waiting for Spruance";
   const tip = document.querySelector<HTMLElement>("#part-tip");
@@ -21,33 +21,51 @@ export async function inspectSpruance(mode: "mesh" | "sphere" | "open" | "hierar
     label.dispatchEvent(new MouseEvent("click",{ctrlKey:true,bubbles:true,cancelable:true}));
     return "verified controls";
   }
-  document.querySelector<HTMLDetailsElement>("#outline").open = false;
-  for (const id of ["meshes","colliders"]) {
+  const outline=document.querySelector<HTMLDetailsElement>("#outline");
+  outline.open = mode === "trees";
+  for (const id of ["meshes","colliders","objects"]) {
     const control = document.querySelector<HTMLInputElement>("#"+id);
-    if (control.checked !== (mode === "mesh" ? id === "meshes" : id === "colliders")) control.click();
+    const on=id==="objects" ? mode==="trees" : id==="meshes" ? mode!=="sphere" : mode!=="mesh";
+    if (control.checked !== on) control.click();
   }
   document.querySelector("button").click(); // Fit before each capture so retries use the same camera.
   canvas.dispatchEvent(new WheelEvent("wheel",{deltaY:mode === "sphere" ? -2200 : -970,cancelable:true}));
+  if (mode === "trees") {
+    for (const branch of outline.querySelectorAll<HTMLDetailsElement>("details[data-branch]"))
+      branch.open=branch.dataset.branch==="Objects";
+    outline.scrollTop=0;
+    return "verified controls";
+  }
   const sample = document.createElement("canvas");
   sample.width = canvas.clientWidth;
   sample.height = canvas.clientHeight;
   const ctx = sample.getContext("2d");
+  const style=document.querySelector<HTMLSelectElement>("#colliderWireframe");
+  if (mode==="overlap") { style.value="shaded"; style.dispatchEvent(new Event("change")); }
   document.querySelector("#meshWireframe").dispatchEvent(new Event("change"));
   ctx.drawImage(canvas,0,0,sample.width,sample.height);
+  if (mode==="overlap") { style.value="wireframe"; style.dispatchEvent(new Event("change")); }
   const pixels = ctx.getImageData(0,0,sample.width,sample.height).data;
   const points: {clientX:number; clientY:number}[] = [];
-  for (let y=8; y<sample.height-15; y+=4) for (let x=15; x<sample.width-15; x+=4) {
+  const step=mode==="overlap" ? 1 : 4;
+  for (let y=8; y<sample.height-15; y+=step) for (let x=15; x<sample.width-15; x+=step) {
     const i = 4*(y*sample.width+x);
+    if (mode==="overlap" && !(pixels[i]>190 && pixels[i+1]<115 && pixels[i+2]<115)) continue;
     if (pixels[i+3] > 128) points.push({clientX:x,clientY:y});
   }
   if (mode === "mesh") {
     const distance = p => Math.hypot(p.clientX-sample.width*0.47,p.clientY-sample.height*0.5);
     points.sort((a,b)=>distance(a)-distance(b));
   }
-  for (const point of points.slice(0,100)) {
+  const candidates=mode==="overlap" ? points.filter((_,i)=>i%Math.max(1,Math.floor(points.length/60))===0) : points;
+  for (const point of candidates.slice(0,100)) {
     canvas.dispatchEvent(new PointerEvent("pointermove",{...point,ctrlKey:true}));
     await new Promise<void>(resolve => requestAnimationFrame(()=>resolve()));
-    if (tip.hidden || !tip.textContent.includes(mode === "sphere" ? "Collider=Sphere" : "Mesh=")) continue;
+    if (tip.hidden) continue;
+    const entries=tip.textContent.split("\n\n");
+    if (mode==="overlap" && !(entries.length>=2 && /Used by .*WeaponSystem/i.test(entries[0]))) continue;
+    if (mode==="sphere" && !/^\[coll_[^\n]+\]\nSphere\n/i.test(entries[0])) continue;
+    if (mode==="mesh" && !entries[0].includes("Mesh=")) continue;
     canvas.dataset.galleryPoint = JSON.stringify(point);
     return "verified controls";
   }

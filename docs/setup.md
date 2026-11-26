@@ -97,7 +97,7 @@ On Windows, install the project dependencies with `pnpm install --frozen-lockfil
 
 Blender adds a screenshot of the same stock exterior in FBX format. Pass `-BlenderPath` if it is installed outside the default location.
 
-The entity preview screenshots use the installed ship INI. The script hovers over the ship and a sphere collider, then follows links from the viewport and hierarchy to their INI sections.
+The entity preview screenshots use the installed Spruance INI. The script captures the hierarchy, system markers, sphere detail and overlapping collider highlights. It follows links from the viewport and hierarchy to their INI sections.
 
 Pass `-GameDirectory` for a different Steam library. The script opens an isolated VS Code window, exports selected stock Spruance VLS meshes and textures into a temporary workspace, and exercises the extension on a copy of the ship INI. It crops the rendered widgets and relevant source lines, then writes the PNGs, a Markdown gallery and `index.html` to the output folder.
 
