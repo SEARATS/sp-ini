@@ -9,6 +9,7 @@ import { assembledEntity } from "../src/entity-viewer";
 import { Box3, LoadingManager, Mesh, MeshBasicMaterial, Vector3 } from "three";
 import type { EntityPart, Vector } from "../src/entity-model";
 import { applyDisplay, previewLayer } from "../src/preview-display";
+import { preferredHover } from "../src/entity-inspect";
 
 test("INI trees separate display categories while widgets follow their runtime mounts",()=>{
   const text = ["[Models]","ResourcesMesh=hull","[Submodels]","Sensors_1=Mast","[Mast]","Mesh=Dummy","Position=1,2,3",
@@ -58,6 +59,10 @@ test("referenced colliders use their owners' colors and replace markers only whi
   const categories=new Map(parts.map(p=>[p.id,p.collider]));
   applyDisplay(model,categories,new Set(),settings);
   assert.equal(widgets.get("object:sensorsystem1").layers.mask,0);
+  const hit = (name:string) => ({object:model.getObjectByName(name).children[0]});
+  const byId = new Map(parts.map(part=>[part.id,part]));
+  assert.equal(preferredHover([hit("C"),hit("B"),hit("A")],byId)?.id,"b");
+  assert.equal(preferredHover([hit("C"),hit("A"),hit("B")],byId)?.id,"a");
   applyDisplay(model,categories,new Set(["b"]),settings);
   assert.equal(widgets.get("object:sensorsystem1").layers.mask,0);
   assert.ok(widgets.get("object:weaponsystem1").layers.isEnabled(previewLayer.widget));
@@ -109,7 +114,7 @@ test("sphere colliders use their scaled in-game size and keep their full extents
   const {model} = assembledEntity({parts,geometry:[],textures:[],warnings:[]},new LoadingManager());
   const surface = (name: string) => model.getObjectByName(name).children[0] as Mesh;
   const triangles = (name: string) => surface(name).geometry.getAttribute("position").count / 3;
-  assert.deepEqual(["small","nested","large","oversized","flat"].map(triangles),[32,128,512,512,32]);
+  assert.deepEqual(["small","nested","large","oversized","flat"].map(triangles),[8,32,128,128,8]);
   const size = new Box3().setFromObject(surface("nested"),true).getSize(new Vector3());
   assert.ok(size.distanceTo(new Vector3(0.1,0.05,0.025)) < 1e-6);
 });

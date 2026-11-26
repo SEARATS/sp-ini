@@ -12,6 +12,8 @@ Click **Preview Entity** in the upper-right corner of the INI editor to open the
 
 The INI preview has separate **Meshes**, **Colliders**, and **Objects** trees. Enable **Colliders** to draw them over the model. The main hull is white. Unassigned structures such as the superstructure are light grey. Sensors are blue, weapons red, magazines orange, and other linked objects purple. A collider shared with a weapon is red. Hover over a collider to see which sections use it. Objects show a separate marker when their linked colliders are hidden or unavailable. Select a marker to reveal its row, or Ctrl+click it to open its INI section.
 
+Where parts overlap, hover and Ctrl+click pick the nearest system marker or system collider first. Sphere collider detail follows its in-game size.
+
 Open an OBJ or FBX for a 3D preview. Use the tree to show or hide parts and switch between shaded and wireframe views. You can collapse branches in the FBX hierarchy and fold objects and groups in OBJ text view.
 
 Mesh names containing `coll` or tagged `_col` are marked as likely colliders. Matching is case-insensitive.

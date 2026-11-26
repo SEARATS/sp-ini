@@ -156,7 +156,7 @@ export const run = async () => {
       assert.fail("Did not navigate to "+expected);
     }
     await selectedSection(/^\[VLS_Module_Fwd_\{lr\}_\{rm\}\]$/i);
-    await renderedModel(port,()=>{
+    await renderedModel(port,async()=>{
       const canvas=document.querySelector<HTMLCanvasElement>('canvas[aria-label*="spruance"]');
       if (!canvas) return "waiting for Spruance";
       const control=(id:string)=>document.querySelector<HTMLInputElement>("#"+id);
@@ -178,15 +178,27 @@ export const run = async () => {
       toggle("meshes",true);
       const combined=pixels();
       let overlap=0, obscured=0;
+      const candidates:number[]=[];
       for (let i=0;i<hull.length;i+=4) {
         if (hull[i+3]!==255 || overlay[i+3]!==255 || overlay[i]!==255 || overlay[i+1]!==68 || overlay[i+2]!==68) continue;
         overlap++;
+        candidates.push(i/4);
         if (combined[i]!==255 || combined[i+1]!==68 || combined[i+2]!==68) obscured++;
+      }
+      const rect=canvas.getBoundingClientRect(), tip=document.querySelector<HTMLElement>("#part-tip");
+      let picked=false;
+      for (let n=0;n<candidates.length && !picked;n+=Math.max(1,Math.floor(candidates.length/12))) {
+        const pixel=candidates[n];
+        canvas.dispatchEvent(new PointerEvent("pointermove",{
+          clientX:rect.left+(pixel%sample.width+0.5)*rect.width/sample.width,
+          clientY:rect.top+(Math.floor(pixel/sample.width)+0.5)*rect.height/sample.height}));
+        await new Promise(requestAnimationFrame);
+        picked=!tip.hidden && /Used by .*WeaponSystem\d+ \(/.test(tip.textContent);
       }
       control("colliderWireframe").value="wireframe";
       control("colliderWireframe").dispatchEvent(new Event("change"));
       toggle("objects",true);
-      return overlap && !obscured ? "verified controls" : "Red collider overlap "+overlap+", obscured "+obscured;
+      return picked && overlap && !obscured ? "verified controls" : "Weapon tooltip "+picked+", red overlap "+overlap+", obscured "+obscured;
     });
     await renderedModel(port,async()=>{
       if (!document.querySelector('canvas[aria-label*="spruance"]')) return "waiting for entity";

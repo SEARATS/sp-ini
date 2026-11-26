@@ -69,7 +69,7 @@ export function assembledEntity(scene: EntityScene, manager: LoadingManager) {
     if (part.primitive === "sphere") {
       // The unit sphere has diameter 1. Use the scaled diameter in Sea Power model units.
       const diameter = node.matrixWorld.getMaxScaleOnAxis();
-      const divisions = MathUtils.clamp(Math.round(diameter / 0.025), 2, 8);
+      const divisions = MathUtils.clamp(Math.round(diameter / 0.05), 1, 4);
       if (!spheres.has(divisions)) spheres.set(divisions,new OctahedronGeometry(0.5,divisions-1));
       shape = spheres.get(divisions);
     }
@@ -87,6 +87,7 @@ export function assembledEntity(scene: EntityScene, manager: LoadingManager) {
     }
     surface.name = part.name;
     surface.userData.partId = part.id;
+    surface.userData.systemTarget = !!part.referencedBy?.length || rows.get(part.id).colliderStyle === "magazine";
     node.add(surface);
     rows.get(part.id).parts.push({id:part.id,collider:part.collider});
   }
