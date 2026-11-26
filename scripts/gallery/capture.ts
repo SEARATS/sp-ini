@@ -162,14 +162,21 @@ async function capture(screen) {
   target.revealRange(target.selection, vscode.TextEditorRevealType.InCenter);
   await screen.capture("21-hierarchy-definition", "Repeated mesh and its source template", { preview: true });
   await command("workbench.action.closeAllEditors");
-  await screen.resize(850,655);
+  await screen.resize(850,805);
   await command("vscode.openWith",stock,"seapower-ini.card",vscode.ViewColumn.One);
   await renderedModel(port,()=>{
     const profile=document.querySelector<HTMLImageElement>("#profile"), flag=document.querySelector<HTMLImageElement>("#flag");
-    return profile?.getBoundingClientRect().height>0 && profile.naturalWidth && flag?.naturalWidth && document.querySelector("#groups")?.textContent.includes("SPS-40") && document.querySelector("h1")?.textContent.includes("Spruance")
+    return profile?.getBoundingClientRect().height>0 && profile.naturalWidth && flag?.naturalWidth && document.querySelector("#reach-bars")?.textContent.includes("Anti-surface") && document.querySelector("#groups")?.textContent.includes("SPS-40") && document.querySelector("h1")?.textContent.includes("Spruance")
       ? "verified controls" : [document.querySelector("h1")?.textContent,profile?.naturalWidth,flag?.naturalWidth,document.querySelector("[role=status]")?.textContent].join(" / ");
   });
   await screen.capture("24-unit-card","Spruance VLS unit reference card",{preview:true});
+  await screen.resize(720,435);
+  await renderedModel(port,()=>{
+    document.querySelector<HTMLButtonElement>("#tab-sensors")?.click();
+    document.querySelector<HTMLButtonElement>('#sensors [data-topic="sensors/sps-40/"]')?.click();
+    return document.querySelector<HTMLElement>("#entry-source")?.offsetHeight && document.querySelector("#entry-title")?.textContent==="SPS-40" ? "verified controls" : "waiting for sensor reference";
+  });
+  await screen.capture("27-sensor-card","Sensor reference linked from the Spruance unit card",{preview:true});
   await screen.finish();
 }
 

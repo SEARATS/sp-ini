@@ -112,7 +112,7 @@ class Catalog {
     };
     for (const rel of targets) {
       const dir = unitFolder(rel), stem = path.posix.basename(rel, ".ini");
-      if (["ammunition", "animations", "optical_views"].includes(dir) && !target) addRef(dir, ref(stem, 0));
+      if (dir === "ammunition" || (["animations", "optical_views"].includes(dir) && !target)) addRef(dir, ref(stem, 0));
       if (dir === "systems" || /_(variants|squadrons)$/.test(stem)) {
         const domain = dir === "systems" ? stem : dir + "/" + stem;
         for (const s of doc.sections) addRef(domain, ref(s.name, s.line, s.start));

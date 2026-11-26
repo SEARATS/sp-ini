@@ -11,6 +11,7 @@ import type { EntityPart, Vector } from "../src/entity-model";
 import { applyDisplay, previewLayer } from "../src/preview-display";
 import { hoverStack, sourceLocation } from "../src/entity-inspect";
 import {unitCard} from "../src/unit-card";
+import {CardReferences} from "../src/card-references";
 import {StockAssets} from "../src/stock-assets";
 import {placeSystemArcs,systemArcs} from "../src/system-arcs";
 
@@ -65,6 +66,29 @@ test("unit cards use mod names, inherited particulars and variant profile art in
   assert.deepEqual(card.facts,[{label:"Length",value:"123 m"}]);
   assert.deepEqual(paths,["ui/profiles/copy_2","ui/profiles/copy","ui/profiles/base_2"]);
   assert.equal(card.profile,"image");
+});
+
+test("card reach uses the preferred ammunition definition and links each role to its longest configured range",async()=>{
+  const catalog=new Catalog(), docs=new Map<string,ReturnType<typeof parse>>();
+  catalog.sourceRanks=new Map([["Workspace",0],["Vanilla",1]]);
+  function add(source:string,rel:string,ini:string) {
+    const uri="file:///"+source+"/"+rel, doc=parse(ini);
+    catalog.add({source,rel,uri},doc); docs.set(uri,doc);
+    return uri;
+  }
+  const round=(nm:number)=>"[General]\nTargetType=ASuW\nSecondaryTargetType=AAW\n[Guidance]\nMaxLaunchRange="+nm;
+  add("Vanilla","ammunition/first.ini",round(40));
+  const override=add("Workspace","ammunition/first.ini",round(9));
+  add("Vanilla","ammunition/second.ini",round(16).replace("SecondaryTargetType=AAW",""));
+  const sensor=add("Vanilla","systems/sensors.ini","[Example]\nKind=Radar\nType=Search\nRole=Air\nMaxRange=18.52\n[Invalid]\nKind=Sonar\nPassiveRange=-4");
+  const refs=new CardReferences(catalog,new Materials(uri=>docs.get(uri)));
+  const first=refs.item("ammunition","first","Shared label"), second=refs.item("ammunition","second","Shared label");
+  const radar=refs.item("sensors","Example","Example"); refs.item("sensors","Invalid","Invalid");
+  const ranges=await refs.resolve();
+  assert.deepEqual(ranges.map(r=>[r.label,Math.round(r.nm),r.topic]),[
+    ["Air search",10,radar.topic],["Anti-air",9,first.topic],["Anti-surface",16,second.topic]]);
+  assert.equal(refs.topics[first.topic].source.uri,override);
+  assert.deepEqual(refs.topics[radar.topic].source,{uri:sensor,line:0,header:"Example"});
 });
 
 test("INI trees separate display categories while widgets follow their runtime mounts",()=>{

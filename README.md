@@ -56,6 +56,7 @@ The examples use the stock Spruance VLS destroyer. Select a screenshot to view i
 | --- | --- |
 | Hover over an assembled mesh<br>[![Mesh tooltip on the Spruance][entity-mesh]][entity-mesh] | Ctrl+click a hierarchy row to open its repeat template<br>[![Repeated mesh and its INI template][hierarchy-definition]][hierarchy-definition] |
 | Sphere colliders at different in-game sizes<br>[![Sphere wireframes and collider tooltip][sphere-colliders]][sphere-colliders] | Shift+click a collider to open its definition<br>[![Selected collider section beside the preview][preview-definition]][preview-definition] |
+| | Follow a unit card link to its sensor and source INI<br>[![SPS-40 sensor reference][sensor-card]][sensor-card] |
 
 | System markers | Collider highlights |
 | --- | --- |
@@ -102,5 +103,6 @@ The examples use the stock Spruance VLS destroyer. Select a screenshot to view i
 [hierarchy-definition]: https://raw.githubusercontent.com/SEARATS/binaries/e91f936c5d8f2e3addd7dbca97da93c60213503a/sp-ini/21-hierarchy-definition.png
 [entity-trees]: https://raw.githubusercontent.com/SEARATS/binaries/8e825c667761c3d323d7b1facdc1870f76e1d300/sp-ini/22-entity-trees.png
 [collider-highlight]: https://raw.githubusercontent.com/SEARATS/binaries/c7fa4552f83481e42155c44ee9926fe21dc8ac26/sp-ini/23-collider-highlight.png
-[unit-card]: https://raw.githubusercontent.com/SEARATS/binaries/8e825c667761c3d323d7b1facdc1870f76e1d300/sp-ini/24-unit-card.png
+[unit-card]: https://raw.githubusercontent.com/SEARATS/binaries/d3c7f1d94c0459cdf9137c0940ae3e925cf5837e/sp-ini/24-unit-card.png
+[sensor-card]: https://raw.githubusercontent.com/SEARATS/binaries/d3c7f1d94c0459cdf9137c0940ae3e925cf5837e/sp-ini/27-sensor-card.png
 [entity-overview]: https://raw.githubusercontent.com/SEARATS/binaries/8e825c667761c3d323d7b1facdc1870f76e1d300/sp-ini/26-entity-preview.png

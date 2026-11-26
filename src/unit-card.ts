@@ -1,3 +1,4 @@
+import {CardReferences,type CardItem,type CardRow} from "./card-references";
 import {posix as path} from "node:path";
 import {PNG} from "pngjs";
 import {Catalog, normalize} from "./catalog";
@@ -52,10 +53,11 @@ export async function unitCard(request:PreviewRequest, catalog:Catalog, material
   else fact("Displacement",read("physics","displacement"),"t");
   fact("Max Speed",air ? read(kind==="helicopter" ? "physics" : "performance","maxspeedatsealevel") : read("physics","maxforwardvelocity"),"kts");
   if (!air && Number(read("general","range"))>0) fact("Range",read("general","range"),"nm");
-  const groups:{label:string;values:string[]}[]=[];
-  function group(label:string,names:string[]) {
-    const values=[...new Set(names.filter(Boolean))];
-    groups.push({label,values:values.length ? values : ["None"]});
+  const references=new CardReferences(catalog,materials);
+  const groups:CardRow[]=[];
+  function group(label:string,items:CardItem[]) {
+    const values=[...new Map(items.filter(i=>i.text).map(i=>[i.topic || i.text,i])).values()];
+    groups.push({label,values:values.length ? values : [{text:"None"}]});
   }
   function systems(system:string) {
     const count=Number(read(system+"s","numberof"+system+"s") || 0);
@@ -70,9 +72,13 @@ export async function unitCard(request:PreviewRequest, catalog:Catalog, material
     const names=local("ammunition_names","ammunitionnames",id.toLowerCase())?.split(",");
     return names ? [...new Set(names.slice(0,2).map(n=>n.trim()).filter(Boolean))].join(" ") : id;
   }
+  function systemItem(s:(typeof doc.sections)[number],domain:"sensors"|"weapons"|"decoys") {
+    const id=field(s,"systemname")?.value;
+    const description=id && local("systemgroups","systemnames",id.toLowerCase())?.split("|").slice(1).join("|");
+    return references.item(domain,id,systemName(id),s.source,description);
+  }
   function equipment(s:(typeof doc.sections)[number]) {
-    const mount=systemName(field(s,"systemname")?.value);
-    if (/^(gun|ciws)$/i.test(field(s,"type")?.value)) return [mount];
+    const mount=systemItem(s,"weapons");
     const ammo=field(s,"ammunition")?.value;
     const magazine=sections.get(field(s,"associatedmagazine")?.value.toLowerCase());
     const count=Number(field(magazine,"numberofammunitiontypes")?.value);
@@ -80,26 +86,31 @@ export async function unitCard(request:PreviewRequest, catalog:Catalog, material
       const index=/^ammunition(\d+)$/i.exec(k.name);
       return index && +index[1]>=1 && +index[1]<=count;
     }).map(k=>k.value);
-    return ids.length ? ids.map(ammoName) : [mount];
+    const rounds=ids.map(id=>references.item("ammunition",id,ammoName(id),s.source,
+      local("ammunition_names","ammunitionnames",id.toLowerCase())?.split(",").slice(3).join(",").trim()));
+    return rounds.length && !/^(gun|ciws)$/i.test(field(s,"type")?.value) ? rounds : [mount];
   }
   const mounts=systems("weaponsystem");
   const isDefence=(s:(typeof doc.sections)[number])=>/^(chaff|noisemaker)$/i.test(field(s,"type")?.value);
   group("Weapons",mounts.filter(s=>!isDefence(s)).flatMap(equipment));
-  group("Sensors",systems("sensorsystem").map(s=>systemName(field(s,"systemname")?.value)));
-  group("Defences",[...mounts.filter(isDefence).flatMap(equipment),...systems("decoysystem").map(s=>systemName(field(s,"systemname")?.value))]);
-  const mountCounts=new Map<string,number>();
+  group("Sensors",systems("sensorsystem").map(s=>systemItem(s,"sensors")));
+  group("Defences",[...mounts.filter(isDefence).flatMap(equipment),...systems("decoysystem").map(s=>systemItem(s,"decoys"))]);
+  const mountCounts=new Map<string,{item:CardItem;count:number}>();
   for (const section of mounts) {
-    const label=systemName(field(section,"systemname")?.value);
-    if (label) mountCounts.set(label,(mountCounts.get(label) || 0)+1);
+    const item=systemItem(section,"weapons");
+    if (!item.topic) continue;
+    const count=mountCounts.get(item.topic);
+    if (count) count.count++; else mountCounts.set(item.topic,{item,count:1});
   }
-  const installedMounts=[...mountCounts].map(([label,count])=>({label,values:[String(count)]}));
+  const installedMounts=Array.from(mountCounts.values(),({item,count})=>({label:item.text,topic:item.topic,values:[{text:String(count)}]}));
   const customAir=field(paint.selected,"customairgroup")?.value.toLowerCase()==="true";
   const airGroup=customAir ? paint.selected : sections.get("airgroup");
   group("Aircraft",(airGroup?.keys || []).filter(k=>!customAir || /^\w+,\d+$/.test(k.value)).map(k=>{
     const [squadron,count]=k.value.split(",").map(v=>v.trim());
     const aircraft=k.name.toLowerCase();
     const label=local("aircraft_names",aircraft,squadron.toLowerCase()) || local("aircraft_names",aircraft,"default") || k.name;
-    return [count && count+" ×",label.split(",")[0]].filter(Boolean).join(" ");
+    const item=references.item("aircraft",aircraft,label.split(",")[0],undefined,undefined,squadron);
+    return {...item,text:[count && count+" ×",item.text].filter(Boolean).join(" ")};
   }));
   const flagPath=catalog.cardDictionaries.get("ui/default/settings_ui_general")?.get("nationflags")?.get(nation?.toLowerCase());
   async function profileArt() {
@@ -112,10 +123,10 @@ export async function unitCard(request:PreviewRequest, catalog:Catalog, material
       }
     }
   }
-  const [profile,flag]=await Promise.all([profileArt(),artwork(flagPath,catalog,materials,stock)]);
+  const [profile,flag,reach]=await Promise.all([profileArt(),artwork(flagPath,catalog,materials,stock),references.resolve()]);
   const service=(field(paint.selected,"servicedate") || field(paint.defaults,"servicedate"))?.value.split("|");
   const serviceYears=service && /^[1-9]\d{3}$/.test(service[0]) ? service[0]+" - "+(/^[1-9]\d{3}$/.test(service[1]) ? service[1] : "Present") : undefined;
-  return {...choices,serviceYears,installedMounts,title:(name(variant) || name("default") || file).split(",")[0],
+  return {...choices,serviceYears,installedMounts,topics:references.topics,reach,title:(name(variant) || name("default") || file).split(",")[0],
     classification:name("type")?.split(",").at(-1)?.trim() || read("general","unittype"),
     description:(name(variant+"description") || name("defaultdescription"))?.replaceAll("\\n","\n"),
     nation:nation && (local("nations","nations",nation.toLowerCase()) || nation), profile,flag,facts,groups};

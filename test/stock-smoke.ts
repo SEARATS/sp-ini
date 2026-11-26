@@ -372,6 +372,38 @@ export const run = async () => {
       if (variant.value!=="Variant2") {variant.value="Variant2";variant.dispatchEvent(new Event("change"));return "selecting variant";}
       return document.querySelector("h1").textContent.includes("Foster") ? "verified controls" : "waiting for variant name";
     });
+    await renderedModel(port,()=>{
+      const anti=[...document.querySelectorAll<HTMLElement>("#reach-bars .reach-row")].find(r=>r.textContent.startsWith("Anti-surface"));
+      if (!anti?.querySelector("progress")?.value || !anti.querySelector("button")) return "waiting for surface reach";
+      document.querySelector<HTMLButtonElement>("#tab-sensors").click();
+      const sensor=document.querySelector<HTMLButtonElement>('[data-topic="sensors/sps-40/"]');
+      if (!sensor) return "waiting for sensor link";
+      sensor.click();
+      if (document.querySelector<HTMLElement>("#entry").hidden || document.querySelector("#entry-title").textContent!=="SPS-40")
+        return "sensor detail missing";
+      document.querySelector<HTMLButtonElement>("#entry-source").click();
+      return "verified controls";
+    });
+    for (let i=0;i<50 && !vscode.window.activeTextEditor?.document.uri.path.endsWith("/systems/sensors.ini");i++)
+      await new Promise(resolve=>setTimeout(resolve,100));
+    const sensorEditor=vscode.window.activeTextEditor;
+    assert.ok(sensorEditor?.document.uri.path.endsWith("/systems/sensors.ini"));
+    assert.match(sensorEditor.document.getText(sensorEditor.selection),/^\[SPS-40\]$/i);
+    await renderedModel(port,()=>{
+      document.querySelector<HTMLButtonElement>("#back-entry")?.click();
+      const air=document.querySelector<HTMLButtonElement>("#tab-air-wing");
+      if (!air || air.hidden) return "waiting for wing";
+      air.click(); const link=document.querySelector<HTMLButtonElement>('#air-wing [data-topic^="aircraft/"]');
+      if (!link) return "missing aircraft link"; link.click(); return "verified controls";
+    });
+    await renderedModel(port,()=>{
+      const back=document.querySelector<HTMLButtonElement>("#back-unit");
+      if (!back || back.hidden || document.querySelector<HTMLSelectElement>("#appearance")?.value!=="Squadron4") return "waiting for aircraft reference";
+      back.click(); return "verified controls";
+    });
+    await renderedModel(port,()=>document.querySelector("article h1")?.textContent.includes("Foster") &&
+      document.querySelector("#tab-air-wing")?.getAttribute("aria-selected")==="true" ? "verified controls" : "waiting for return to ship");
+    outcomes.push("Verified Reach bars, sensor card and source line, and aircraft navigation back to the ship");
     outcomes.push("Opened the stock Spruance Unit Reference, checked its profile, specifications and sensors, and switched ships");
     await vscode.commands.executeCommand("seapower-ini.previewUnitCard",editFile);
     const length=editDoc.getText().indexOf("Length=172")+"Length=172".length;
