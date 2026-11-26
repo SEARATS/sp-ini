@@ -162,7 +162,7 @@ async function capture(screen) {
   target.revealRange(target.selection, vscode.TextEditorRevealType.InCenter);
   await screen.capture("21-hierarchy-definition", "Repeated mesh and its source template", { preview: true });
   await command("workbench.action.closeAllEditors");
-  await screen.resize(850,745);
+  await screen.resize(850,655);
   await command("vscode.openWith",stock,"seapower-ini.card",vscode.ViewColumn.One);
   await renderedModel(port,()=>{
     const profile=document.querySelector<HTMLImageElement>("#profile"), flag=document.querySelector<HTMLImageElement>("#flag");

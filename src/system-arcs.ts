@@ -69,7 +69,8 @@ export function systemArcs(system:EntityObject) {
 export function placeSystemArcs(arcs:ReturnType<typeof systemArcs>,unit:Object3D,mount:Object3D,radius:number) {
   for (const {frame,line} of arcs) {
     const origin=frame==="unit" ? unit : mount;
-    origin.getWorldPosition(line.position);
+    // Show each sector at its mount while keeping the unit-relative bearing axes.
+    mount.getWorldPosition(line.position);
     origin.getWorldQuaternion(line.quaternion);
     line.scale.setScalar(radius);
   }

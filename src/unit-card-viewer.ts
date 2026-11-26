@@ -1,6 +1,6 @@
 import type {unitCard} from "./unit-card";
 type Card=Awaited<ReturnType<typeof unitCard>>;
-declare function acquireVsCodeApi(): {postMessage(data:unknown):void;getState():{entity?:string;appearance?:string}|undefined;setState(data:unknown):void};
+declare function acquireVsCodeApi(): {postMessage(data:unknown):void;getState():{entity?:string;appearance?:string;tab?:string}|undefined;setState(data:unknown):void};
 const vscode=acquireVsCodeApi();
 const el=<T extends HTMLElement=HTMLElement>(selector:string)=>document.querySelector<T>(selector);
 const entity=el<HTMLSelectElement>("#entity"), appearance=el<HTMLSelectElement>("#appearance");
@@ -30,6 +30,26 @@ function rows(id:string,items:{label:string;values:string[]}[]) {
     row.append(term,text); return row;
   }));
 }
+const tabs=Array.from(document.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+let tabId=vscode.getState()?.tab || "overview";
+function selectTab(id:string) {
+  tabId=tabs.some(t=>!t.hidden && t.getAttribute("aria-controls")===id) ? id : "overview";
+  for (const tab of tabs) {
+    const panel=tab.getAttribute("aria-controls"), selected=panel===tabId;
+    tab.setAttribute("aria-selected",String(selected)); tab.tabIndex=selected ? 0 : -1;
+    document.getElementById(panel).hidden=!selected;
+  }
+  vscode.setState({entity:entity.value,appearance:appearance.value,tab:tabId});
+}
+for (const tab of tabs) {
+  tab.onclick=()=>selectTab(tab.getAttribute("aria-controls"));
+  tab.onkeydown=event=>{
+    const visible=tabs.filter(t=>!t.hidden), index=visible.indexOf(tab);
+    const next={Home:0,End:visible.length-1,ArrowLeft:(index+visible.length-1)%visible.length,ArrowRight:(index+1)%visible.length}[event.key];
+    if (next===undefined) return;
+    event.preventDefault(); visible[next].focus(); visible[next].click();
+  };
+}
 entity.onchange=()=>vscode.postMessage({type:"select",entity:entity.value});
 appearance.onchange=()=>vscode.postMessage({type:"select",entity:entity.value,appearance:appearance.value});
 window.addEventListener("message",({data}:{data:{card?:Card;error?:string}})=>{
@@ -46,9 +66,16 @@ window.addEventListener("message",({data}:{data:{card?:Card;error?:string}})=>{
   picture("#flag",card.flag,card.nation || ""); el("#flag").title=card.nation || "";
   el("#nation").textContent=card.nation || ""; el("#nation").hidden=!!card.flag || !card.nation;
   picture("#profile",card.profile,card.title+" side profile"); el("#missing").hidden=!!card.profile;
-  rows("#facts",card.facts.map(f=>({label:f.label,values:[f.value]}))); rows("#groups",card.groups);
+  rows("#facts",card.facts.map(f=>({label:f.label,values:[f.value]})));
+  el("#service").textContent=card.serviceYears || ""; el("#service").hidden=!card.serviceYears;
+  const weapons=card.groups.filter(g=>g.label==="Weapons" || g.label==="Defences");
+  rows("#overview dl",weapons); rows("#armament dl",weapons);
+  el("#mount-list").hidden=!card.installedMounts.length; rows("#mount-list dl",card.installedMounts);
+  rows("#sensors dl",card.groups.filter(g=>g.label==="Sensors"));
+  const wing=card.groups.filter(g=>g.label==="Aircraft" && g.values.some(v=>v!=="None"));
+  el("#tab-air-wing").hidden=!wing.length; rows("#air-wing dl",wing);
   el("#description").textContent=card.description || ""; el("#description").hidden=!card.description;
   el("article").hidden=false;
-  vscode.setState({entity:card.entity,appearance:card.appearance});
+  selectTab(tabId);
 });
 vscode.postMessage({type:"ready",...vscode.getState()});

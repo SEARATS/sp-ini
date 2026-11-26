@@ -100,7 +100,7 @@ The examples use the stock Spruance VLS destroyer. Select a screenshot to view i
 [sphere-colliders]: https://raw.githubusercontent.com/SEARATS/binaries/c7fa4552f83481e42155c44ee9926fe21dc8ac26/sp-ini/19-sphere-colliders.png
 [preview-definition]: https://raw.githubusercontent.com/SEARATS/binaries/e91f936c5d8f2e3addd7dbca97da93c60213503a/sp-ini/20-preview-definition.png
 [hierarchy-definition]: https://raw.githubusercontent.com/SEARATS/binaries/e91f936c5d8f2e3addd7dbca97da93c60213503a/sp-ini/21-hierarchy-definition.png
-[entity-trees]: https://raw.githubusercontent.com/SEARATS/binaries/b8c2cffeef263704ba345656b87fa1ffc3b650f5/sp-ini/22-entity-trees.png
+[entity-trees]: https://raw.githubusercontent.com/SEARATS/binaries/8e825c667761c3d323d7b1facdc1870f76e1d300/sp-ini/22-entity-trees.png
 [collider-highlight]: https://raw.githubusercontent.com/SEARATS/binaries/c7fa4552f83481e42155c44ee9926fe21dc8ac26/sp-ini/23-collider-highlight.png
-[unit-card]: https://raw.githubusercontent.com/SEARATS/binaries/0fac4c86b369cc7f1e05f21a26d11843b938a95b/sp-ini/24-unit-card.png
-[entity-overview]: https://raw.githubusercontent.com/SEARATS/binaries/b8c2cffeef263704ba345656b87fa1ffc3b650f5/sp-ini/26-entity-preview.png
+[unit-card]: https://raw.githubusercontent.com/SEARATS/binaries/8e825c667761c3d323d7b1facdc1870f76e1d300/sp-ini/24-unit-card.png
+[entity-overview]: https://raw.githubusercontent.com/SEARATS/binaries/8e825c667761c3d323d7b1facdc1870f76e1d300/sp-ini/26-entity-preview.png

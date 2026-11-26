@@ -357,11 +357,17 @@ export const run = async () => {
       if (!document.querySelector<HTMLImageElement>("#profile")?.naturalWidth ||
         !document.querySelector("#facts")?.textContent.includes("172 m") || !document.querySelector("#groups")?.textContent.includes("SPS-40"))
         return "waiting for Spruance card";
-      const rows=Array.from(document.querySelectorAll("#groups > div"));
+      const rows=Array.from(document.querySelectorAll("#armament dl > div"));
       const weapons=rows.find(row=>row.firstElementChild.textContent==="Weapons:");
       const defences=rows.find(row=>row.firstElementChild.textContent==="Defences:");
       if (weapons?.textContent.includes("Chaff") || !defences?.textContent.includes("Chaff") || !defences.textContent.includes("Noisemaker"))
         return "waiting for stock countermeasures in Defences";
+      if ([...document.querySelectorAll("#facts dt")].some(term=>term.textContent==="Range:") || !document.querySelector("#service").textContent.match(/198[78]/))
+        return "waiting for the service years and particulars";
+      const sensorTab=document.querySelector<HTMLButtonElement>("#tab-sensors");
+      sensorTab.click();
+      if (sensorTab.getAttribute("aria-selected")!=="true" || !document.querySelector<HTMLElement>("#sensors").offsetHeight) return "sensor tab inactive";
+      document.querySelector<HTMLButtonElement>("#tab-overview").click();
       const variant=document.querySelector<HTMLSelectElement>("#appearance");
       if (variant.value!=="Variant2") {variant.value="Variant2";variant.dispatchEvent(new Event("change"));return "selecting variant";}
       return document.querySelector("h1").textContent.includes("Foster") ? "verified controls" : "waiting for variant name";

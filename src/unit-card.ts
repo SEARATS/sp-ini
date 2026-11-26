@@ -47,11 +47,11 @@ export async function unitCard(request:PreviewRequest, catalog:Catalog, material
   }
   fact("Length",read("general","length"),"m");
   fact(air ? "Wingspan" : "Beam",air ? read("performance","wingspan") : read("general","beam"),"m");
-  fact("Max Speed",air ? read(kind==="helicopter" ? "physics" : "performance","maxspeedatsealevel") : read("physics","maxforwardvelocity"),"kts");
   if (air) fact("Empty Mass",read(kind==="helicopter" ? "physics" : "performance","emptymass"),"kg");
   else if (kind==="landunit") fact("Mass",read("physics","mass"),"kg");
   else fact("Displacement",read("physics","displacement"),"t");
-  if (!air) fact("Range",read("general","range") || "0","nm");
+  fact("Max Speed",air ? read(kind==="helicopter" ? "physics" : "performance","maxspeedatsealevel") : read("physics","maxforwardvelocity"),"kts");
+  if (!air && Number(read("general","range"))>0) fact("Range",read("general","range"),"nm");
   const groups:{label:string;values:string[]}[]=[];
   function group(label:string,names:string[]) {
     const values=[...new Set(names.filter(Boolean))];
@@ -87,6 +87,12 @@ export async function unitCard(request:PreviewRequest, catalog:Catalog, material
   group("Weapons",mounts.filter(s=>!isDefence(s)).flatMap(equipment));
   group("Sensors",systems("sensorsystem").map(s=>systemName(field(s,"systemname")?.value)));
   group("Defences",[...mounts.filter(isDefence).flatMap(equipment),...systems("decoysystem").map(s=>systemName(field(s,"systemname")?.value))]);
+  const mountCounts=new Map<string,number>();
+  for (const section of mounts) {
+    const label=systemName(field(section,"systemname")?.value);
+    if (label) mountCounts.set(label,(mountCounts.get(label) || 0)+1);
+  }
+  const installedMounts=[...mountCounts].map(([label,count])=>({label,values:[String(count)]}));
   const customAir=field(paint.selected,"customairgroup")?.value.toLowerCase()==="true";
   const airGroup=customAir ? paint.selected : sections.get("airgroup");
   group("Aircraft",(airGroup?.keys || []).filter(k=>!customAir || /^\w+,\d+$/.test(k.value)).map(k=>{
@@ -107,7 +113,9 @@ export async function unitCard(request:PreviewRequest, catalog:Catalog, material
     }
   }
   const [profile,flag]=await Promise.all([profileArt(),artwork(flagPath,catalog,materials,stock)]);
-  return {...choices,title:(name(variant) || name("default") || file).split(",")[0],
+  const service=(field(paint.selected,"servicedate") || field(paint.defaults,"servicedate"))?.value.split("|");
+  const serviceYears=service && /^[1-9]\d{3}$/.test(service[0]) ? service[0]+" - "+(/^[1-9]\d{3}$/.test(service[1]) ? service[1] : "Present") : undefined;
+  return {...choices,serviceYears,installedMounts,title:(name(variant) || name("default") || file).split(",")[0],
     classification:name("type")?.split(",").at(-1)?.trim() || read("general","unittype"),
     description:(name(variant+"description") || name("defaultdescription"))?.replaceAll("\\n","\n"),
     nation:nation && (local("nations","nations",nation.toLowerCase()) || nation), profile,flag,facts,groups};

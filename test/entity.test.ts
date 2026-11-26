@@ -34,7 +34,7 @@ test("system arc guides preserve separate firing sectors, wrap past 180 and show
   const unit=new Group(), mount=new Group();
   unit.position.set(2,0,3); mount.position.set(0,1,-2); mount.rotation.y=Math.PI; unit.add(mount);
   placeSystemArcs(aft,unit,mount,1);
-  assert.ok(aft[0].line.position.equals(unit.position));
+  assert.ok(aft[0].line.position.equals(new Vector3(2,1,1)));
   assert.ok(aft[1].line.position.equals(new Vector3(2,1,1)));
   assert.ok(vertices(aft[0].line).some(p=>p.applyQuaternion(aft[0].line.quaternion).z < -0.999));
   assert.ok(vertices(aft[0].line).every(p=>p.applyQuaternion(aft[0].line.quaternion).z < 0.501));
@@ -62,7 +62,7 @@ test("unit cards use mod names, inherited particulars and variant profile art in
     catalog,new Materials(uri=>docs.get(uri)),stock);
   assert.ok(!("error" in card));
   assert.equal(card.title,"Second ship"); assert.equal(card.description,"Stock description");
-  assert.deepEqual(card.facts,[{label:"Length",value:"123 m"},{label:"Range",value:"0 nm"}]);
+  assert.deepEqual(card.facts,[{label:"Length",value:"123 m"}]);
   assert.deepEqual(paths,["ui/profiles/copy_2","ui/profiles/copy","ui/profiles/base_2"]);
   assert.equal(card.profile,"image");
 });
