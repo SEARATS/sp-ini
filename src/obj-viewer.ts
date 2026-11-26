@@ -18,7 +18,24 @@ const scene = new Scene();
 const camera = new PerspectiveCamera(42, 1, 0.01, 10000);
 const bounds = new Sphere();
 let renderer, controls, model;
-const inspector = inspectEntity(canvas,camera,()=>model,id=>vscode.postMessage({type:"openEntityPart",id}));
+const objectLabels = new Map<string,HTMLElement>();
+const inspector = inspectEntity(canvas,camera,()=>model,id=>vscode.postMessage({type:"openEntityPart",id}),id=>selectObject(id,true));
+function selectObject(id: string, reveal: boolean) {
+  const selected = objectLabels.get(id);
+  if (!selected) return;
+  for (const label of objectLabels.values()) label.classList.toggle("selected-object",label === selected);
+  if (reveal) {
+    for (let el: HTMLElement = selected; el; el=el.parentElement) if (el instanceof HTMLDetailsElement) el.open=true;
+    selected.scrollIntoView({block:"nearest"});
+  }
+  model?.traverse(node=>{
+    if (!node.userData.widget) return;
+    const active = node.userData.partId === id;
+    node.material.color.set(active ? 0xffff77 : node.userData.color);
+    node.renderOrder = active ? 11 : 10;
+  });
+  if (renderer) draw();
+}
 const saved = vscode.getState();
 let selectedEntity = saved?.entity, selectedAppearance = saved?.appearance;
 let initializedEntity = saved?.entity;
@@ -26,13 +43,13 @@ const picker = document.querySelector<HTMLElement>("#entity-pickers");
 const entitySelect = picker.querySelector<HTMLSelectElement>("#entity"), appearanceSelect = picker.querySelector<HTMLSelectElement>("#appearance");
 const warnings = document.querySelector<HTMLDetailsElement>("#entity-warnings");
 const settings: DisplaySettings = {
-  meshes: saved?.meshes ?? true, colliders: saved?.colliders ?? true,
+  meshes: saved?.meshes ?? true, colliders: saved?.colliders ?? true, objects:saved?.objects ?? true,
   meshWireframe: saved?.meshWireframe ?? saved?.wireframe ?? false, colliderWireframe: saved?.colliderWireframe ?? true
 };
 const hidden = new Set<string>(saved?.hidden);
 const categories = new Map<string, boolean>();
 let updateRows: (() => void)[] = [];
-const inCategory = (part: PreviewPart) => part.collider ? settings.colliders : settings.meshes;
+const inCategory = (part: PreviewPart) => part.widget ? settings.objects : part.collider ? settings.colliders : settings.meshes;
 function updateDisplay() {
   updateRows.forEach(update => update());
   if (model) { applyDisplay(model, categories, hidden, settings); draw(); }
@@ -43,7 +60,7 @@ function changed() {
 }
 entitySelect.onchange = () => vscode.postMessage({type:"selectEntity",entity:entitySelect.value});
 appearanceSelect.onchange = () => vscode.postMessage({type:"selectEntity",entity:entitySelect.value,appearance:appearanceSelect.value});
-for (const category of ["meshes","colliders"] as const) {
+for (const category of ["meshes","colliders","objects"] as const) {
   const input = document.querySelector<HTMLInputElement>("#"+category);
   input.checked = settings[category];
   input.onchange = () => { settings[category] = input.checked; changed(); };
@@ -55,15 +72,26 @@ for (const key of ["meshWireframe","colliderWireframe"] as const) {
 }
 
 function showOutline(nodes: OutlineNode[], note: string, uri?: string) {
+  const entityTrees = nodes.some(node=>node.tree);
   outline.querySelector("p").textContent = note;
   updateRows = [];
   categories.clear();
+  objectLabels.clear();
   function row(node: OutlineNode, path: string, depth: number): {item: HTMLLIElement; subtree: PreviewPart[]} {
     const item = document.createElement("li");
     const fullPath = path ? path + " / " + node.name : node.name;
-    const label = document.createElement(node.children.length ? "summary" : "span");
+    const label = document.createElement(node.children.length || node.tree ? "summary" : "span");
     label.title = fullPath;
     if (node.entityId) inspector.link(label,node.entityId);
+    if (node.entityId?.startsWith("object:")) {
+      objectLabels.set(node.entityId,label);
+      label.addEventListener("click",event=>{
+        if (!event.ctrlKey && !event.metaKey && !(event.target instanceof HTMLInputElement)) selectObject(node.entityId,false);
+      });
+      label.addEventListener("keydown",event=>{
+        if (event.key === "Enter" && !event.ctrlKey && !event.metaKey) selectObject(node.entityId,false);
+      });
+    }
     const content = document.createElement("span");
     content.className = "row";
     label.append(content);
@@ -84,7 +112,7 @@ function showOutline(nodes: OutlineNode[], note: string, uri?: string) {
       }
       changed();
     };
-    if (targets.length) content.append(check);
+    if (targets.length && !node.tree) content.append(check);
     if (node.parts.length && node.parts.every(part => part.collider))
       content.append(document.querySelector<HTMLTemplateElement>("#box").content.cloneNode(true));
     content.append(node.name || "(unnamed)");
@@ -94,9 +122,9 @@ function showOutline(nodes: OutlineNode[], note: string, uri?: string) {
       check.checked = visible > 0 && visible === active.length;
       check.indeterminate = visible > 0 && visible < active.length;
       check.disabled = !active.length;
-      item.hidden = !subtree.some(inCategory) && !(subtree.length === 0 && settings.meshes && settings.colliders);
+      item.hidden = !entityTrees && !subtree.some(inCategory) && !(subtree.length === 0 && settings.meshes && settings.colliders);
     });
-    if (node.children.length) {
+    if (node.children.length || node.tree) {
       const branch = document.createElement("details");
       branch.open = depth === 0 && nodes.length === 1;
       const list = document.createElement("ul");
@@ -232,6 +260,8 @@ window.addEventListener("message", ({ data }) => {
     return;
   }
   if (data.type === "entityChoices") {
+    outline.querySelector("summary").textContent = "Entity hierarchy";
+    document.getElementById("object-filter").hidden = false;
     if (selectedEntity !== data.entity) hidden.clear();
     selectedEntity = data.entity; selectedAppearance = data.appearance;
     for (const [select,choices,value] of [[entitySelect,data.entities,selectedEntity],[appearanceSelect,data.appearances,selectedAppearance]] as const) {
@@ -245,7 +275,7 @@ window.addEventListener("message", ({ data }) => {
     return;
   }
   if (data.type === "entityScene") {
-    inspector.setParts(data.scene.parts);
+    inspector.setParts([...data.scene.parts,...data.scene.objects]);
     const notes: string[] = data.scene.warnings;
     warnings.hidden = !notes.length;
     warnings.querySelector("summary").textContent = "Preview notes ("+notes.length+")";

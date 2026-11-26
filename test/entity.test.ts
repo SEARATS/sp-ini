@@ -3,11 +3,40 @@ import assert from "node:assert/strict";
 import { Catalog } from "../src/catalog";
 import { parse } from "../src/ini";
 import { Materials } from "../src/materials";
-import { entityParts, expandEntityIni } from "../src/entity-model";
+import { entityObjects, entityParts, expandEntityIni } from "../src/entity-model";
 import { selectEntity, paintTexture, entityDocument } from "../src/entity-selection";
 import { assembledEntity } from "../src/entity-viewer";
 import { Box3, LoadingManager, Mesh, Vector3 } from "three";
 import type { EntityPart, Vector } from "../src/entity-model";
+import { applyDisplay } from "../src/preview-display";
+
+test("INI trees separate display categories while widgets follow their runtime mounts",()=>{
+  const text = ["[Models]","ResourcesMesh=hull","[Submodels]","Sensors_1=Mast","[Mast]","Mesh=Dummy","Position=1,2,3",
+    "[Colliders]","Collider1=Box","[Box]","Parent=Mast","Collider=Box","[SensorSystem1]","Mount=Mast","MountPosition=99,99,99",
+    "[WeaponSystem2]","Mount=Dummy","MountParent=Mast","MountPosition=4,5,6","AssociatedMagazine=Locker",
+    "[Locker]","Collider=Box","[CombatSystem1]","SystemName=Example","[SensorSystem3]","Mount=Missing",
+    "[LaunchPoint1]","Position=invalid"].join("\n");
+  const doc = expandEntityIni(text,"file:///test.ini");
+  const parts = entityParts(doc,new Set()).map(p=>p.part), objects = entityObjects(doc,parts);
+  const {model,outline} = assembledEntity({parts,objects,geometry:[],textures:[],warnings:[]},new LoadingManager());
+  assert.deepEqual(outline.map(n=>n.name),["Meshes","Colliders","Objects"]);
+  assert.deepEqual(outline[0].children[0].children.map(n=>n.name),["Mast"]);
+  assert.deepEqual(outline[1].children.map(n=>n.name),["Box"]);
+  assert.equal(objects.find(o=>o.name==="Locker").group,"Magazines");
+  const widgets = new Map<string,Mesh>();
+  model.traverse(node=>{if (node.userData.widget) widgets.set(node.userData.partId,node as Mesh);});
+  assert.equal(widgets.size,3);
+  assert.deepEqual(widgets.get("object:sensorsystem1").getWorldPosition(new Vector3()).toArray(),[-1,2,3]);
+  assert.deepEqual(widgets.get("object:weaponsystem2").getWorldPosition(new Vector3()).toArray(),[-5,7,9]);
+  assert.equal(doc.lines[objects.find(o=>o.name==="SensorSystem3").source.line],"[SensorSystem3]");
+  assert.ok(outline[2].children.find(n=>n.name==="Combat systems").children.length);
+  const settings = {objects:true, meshes:false,colliders:false,meshWireframe:false,colliderWireframe:true};
+  applyDisplay(model,new Map(),new Set(["object:sensorsystem1"]),settings);
+  assert.ok(widgets.get("object:weaponsystem2").layers.isEnabled(0));
+  assert.equal(widgets.get("object:sensorsystem1").layers.isEnabled(0),false);
+  applyDisplay(model,new Map(),new Set(),{...settings,objects:false});
+  assert.equal(widgets.get("object:weaponsystem2").layers.isEnabled(0),false);
+});
 
 test("entity picker resolves each scenario declaration and its own squadron or variant", async () => {
   const catalog = new Catalog(), docs = new Map();

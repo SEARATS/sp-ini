@@ -4,6 +4,7 @@ import { isColliderName } from "./mesh-names";
 export interface DisplaySettings {
   meshes: boolean;
   colliders: boolean;
+  objects?: boolean;
   meshWireframe: boolean;
   colliderWireframe: boolean;
 }
@@ -26,10 +27,11 @@ export function applyDisplay(model: Object3D, categories: Map<string, boolean>, 
     if (!("geometry" in node)) return;
     const id = node.userData.partId ?? String((node as Object3D & {ID?: number}).ID);
     const collider = categories.get(id) ?? isColliderName(node.userData.originalName || node.name);
+    const widget = node.userData.widget;
     // Layers hide this drawable while leaving child meshes independently visible.
-    if ((collider ? settings.colliders : settings.meshes) && !hidden.has(id)) node.layers.enable(0);
+    if ((widget ? settings.objects : collider ? settings.colliders : settings.meshes) && !hidden.has(id)) node.layers.enable(0);
     else node.layers.disable(0);
-    if (node instanceof Mesh) {
+    if (!widget && node instanceof Mesh) {
       const wireframe = collider ? settings.colliderWireframe : settings.meshWireframe;
       node.material = Array.isArray(node.material) ? node.material.map(m => styled(m, wireframe)) : styled(node.material, wireframe);
     }

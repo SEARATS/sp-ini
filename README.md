@@ -10,6 +10,8 @@ Ctrl+click an underlined INI value to open its source. Hover over a mesh to see 
 
 Click **Preview Entity** in the upper-right corner of the INI editor to open the selected unit beside its source. Hover over a mesh or collider in the preview to see where it comes from. Ctrl+click it to open its INI section.
 
+The INI preview has separate **Meshes**, **Colliders**, and **Objects** trees. Blue diamonds mark sensors, pink pyramids mark weapons, and purple boxes mark other objects with a known position. Select a marker to reveal its row, or Ctrl+click it to open its INI section. Use **Object markers** to hide the overlay.
+
 Open an OBJ or FBX for a 3D preview. Use the tree to show or hide parts and switch between shaded and wireframe views. You can collapse branches in the FBX hierarchy and fold objects and groups in OBJ text view.
 
 Mesh names containing `coll` or tagged `_col` are marked as likely colliders. Matching is case-insensitive.

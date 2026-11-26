@@ -1,4 +1,4 @@
-import { BoxGeometry, BufferAttribute, BufferGeometry, Group, MathUtils, Mesh, MeshPhongMaterial, OctahedronGeometry, RepeatWrapping, SRGBColorSpace, TextureLoader, type LoadingManager } from "three";
+import { Box3, BoxGeometry, BufferAttribute, BufferGeometry, ConeGeometry, Group, MathUtils, Mesh, MeshBasicMaterial, MeshPhongMaterial, OctahedronGeometry, RepeatWrapping, SRGBColorSpace, TextureLoader, Vector3, type LoadingManager } from "three";
 import type { EntityScene } from "./entity-model";
 import type { OutlineNode } from "./model-outline";
 
@@ -7,7 +7,10 @@ function floats(encoded: string) {
 }
 
 export function assembledEntity(scene: EntityScene, manager: LoadingManager) {
-  const model = new Group(), outline: OutlineNode[] = [];
+  const model = new Group();
+  const tree = (name: string): OutlineNode => ({name, tree:true, children:[], parts:[]});
+  const meshTree = tree("Meshes"), colliderTree = tree("Colliders"), objectTree = tree("Objects");
+  const byId = new Map(scene.parts.map(part=>[part.id,part]));
   const nodes = new Map<string,Group>(), rows = new Map<string,OutlineNode>();
   const meshes = scene.geometry.map(data=>{
     const geometry = new BufferGeometry();
@@ -36,7 +39,10 @@ export function assembledEntity(scene: EntityScene, manager: LoadingManager) {
   }
   for (const part of scene.parts) {
     (nodes.get(part.parent) || model).add(nodes.get(part.id));
-    (rows.get(part.parent)?.children || outline).push(rows.get(part.id));
+    const branch = part.collider ? colliderTree : meshTree;
+    let parent = byId.get(part.parent);
+    while (parent && parent.collider !== part.collider) parent = byId.get(parent.parent);
+    (rows.get(parent?.id) || branch).children.push(rows.get(part.id));
   }
   model.updateMatrixWorld(true);
   const spheres = new Map<number,OctahedronGeometry>();
@@ -61,5 +67,32 @@ export function assembledEntity(scene: EntityScene, manager: LoadingManager) {
     node.add(surface);
     rows.get(part.id).parts.push({id:part.id,collider:part.collider});
   }
-  return {model,outline};
+  const diameter = new Box3().setFromObject(model).getSize(new Vector3()).length() || 1;
+  const groups = new Map<string,OutlineNode>();
+  for (const obj of scene.objects || []) {
+    if (!groups.has(obj.group)) {
+      const group: OutlineNode = {name:obj.group, children:[], parts:[]};
+      groups.set(obj.group,group);
+      objectTree.children.push(group);
+    }
+    const row: OutlineNode = {name:[obj.name,obj.system].filter(Boolean).join(" · "),entityId:obj.id,children:[],parts:[]};
+    groups.get(obj.group).children.push(row);
+    const parent = nodes.get(obj.anchor);
+    if (!obj.position || !parent) continue;
+    const sensor = obj.group === "Sensors", weapon = obj.group === "Weapons";
+    const shape = sensor ? new OctahedronGeometry(1) : weapon ? new ConeGeometry(1,2,4) : new BoxGeometry(1.5,1.5,1.5);
+    const widget = new Mesh(shape,new MeshBasicMaterial({color:sensor ? 0x53c8fa : weapon ? 0xff6887 : 0xc6a2ff,
+      depthTest:false,depthWrite:false}));
+    const [x,y,z] = obj.position;
+    widget.position.set(-x,y,z);
+    const scale = parent.matrixWorld.getMaxScaleOnAxis();
+    widget.scale.setScalar(diameter*0.009/(scale || 1));
+    widget.userData.partId=obj.id;
+    widget.userData.widget=true;
+    widget.userData.color=widget.material.color.getHex();
+    widget.renderOrder=10;
+    parent.add(widget);
+    row.parts.push({id:obj.id,collider:false,widget:true});
+  }
+  return {model,outline:[meshTree,colliderTree,objectTree]};
 }

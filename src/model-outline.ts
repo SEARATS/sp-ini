@@ -1,13 +1,14 @@
 import type { ModelNode } from "./hierarchy";
 import { isColliderName } from "./mesh-names";
 
-export interface PreviewPart { id: string; collider: boolean }
+export interface PreviewPart { id: string; collider: boolean; widget?: boolean }
 export interface OutlineNode {
   name: string;
   children: OutlineNode[];
   parts: PreviewPart[];
   modelId?: string;
   entityId?: string;
+  tree?: boolean;
 }
 
 export function fbxOutline(nodes: ModelNode[]): OutlineNode[] {

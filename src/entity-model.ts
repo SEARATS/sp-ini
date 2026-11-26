@@ -1,6 +1,11 @@
 import { parse, type IniSection, type IniSource } from "./ini";
 
 export type Vector = [number, number, number];
+export type ObjectGroup = "Sensors" | "Weapons" | "Decoys" | "Combat systems" | "Ship systems" | "Flight deck" | "Magazines";
+export interface EntityObject {
+  id: string; name: string; group: ObjectGroup; system?: string; source?: IniSource;
+  anchor?: string; position?: Vector; placement: string;
+}
 export interface EntityPart {
   id: string; name: string; parent?: string; geometry?: number; texture?: number;
   collider: boolean; primitive?: "box" | "sphere"; visible: boolean;
@@ -9,6 +14,7 @@ export interface EntityPart {
 }
 export interface EntityScene {
   parts: EntityPart[];
+  objects?: EntityObject[];
   geometry: {positions: string; uvs: string}[];
   textures: {png:string; alpha:"opaque"|"cutout"|"blend"}[];
   warnings: string[];
@@ -54,7 +60,7 @@ export function entityParts(doc: ReturnType<typeof parse>, warnings: Set<string>
   const list = [{section: models, root: true, collider: false}];
   const seen = new Set([models.name.toLowerCase()]);
   for (const [section, keys, collider] of [
-    [sections.get("submodels") || models, /^submodel(?:\d|_)/i, false],
+    [sections.get("submodels") || models, sections.has("submodels") ? /./ : /^submodel(?:\d|_)/i, false],
     [sections.get("colliders"), /^(?:mesh)?collider\d+$/i, true]
   ] as const) for (const entry of section?.keys || []) {
     if (!keys.test(entry.name)) continue;
@@ -101,4 +107,40 @@ export function entityParts(doc: ReturnType<typeof parse>, warnings: Set<string>
     }
   }
   return parts;
+}
+
+export function entityObjects(doc: ReturnType<typeof parse>, parts: EntityPart[]): EntityObject[] {
+  const anchors = new Map(parts.map(part => [part.id,part.id]));
+  const root = parts.find(part => part.id === "models");
+  if (root) anchors.set(root.name.toLowerCase(),root.id);
+  const magazines = new Set(doc.sections.flatMap(section => (field(section,"associatedmagazine")?.value || "")
+    .toLowerCase().split(",").map(name=>name.trim()).filter(Boolean)));
+  const groups: [RegExp, ObjectGroup][] = [
+    [/^SensorSystem\d+$/i,"Sensors"], [/^WeaponSystem\d+$/i,"Weapons"], [/^CombatSystem\d+$/i,"Combat systems"],
+    [/^(?:ControlSystem|MainPowerSystem|(?:PropulsionSystem|RudderSystem)\d+)$/i,"Ship systems"],
+    [/^DecoySystem\d+$/i,"Decoys"], [/^(?:LaunchPoint|RecoveryPoint|Elevator)\d+$/i,"Flight deck"],
+    [/^Magazine\d+$/i,"Magazines"]
+  ];
+  const objects: EntityObject[] = [];
+  for (const section of doc.sections) {
+    const group = magazines.has(section.name.toLowerCase()) ? "Magazines" : groups.find(([pattern]) => pattern.test(section.name))?.[1];
+    if (!group) continue;
+    const obj: EntityObject = {id:"object:"+section.name.toLowerCase(),name:section.name,group,source:section.source,
+      system:field(section,"systemname")?.value || field(section,"type")?.value,placement:"No spatial reference"};
+    objects.push(obj);
+    const mount = field(section,"mount")?.value;
+    const namedMount = mount && !/^dummy$/i.test(mount);
+    const offset = !namedMount && (field(section,"mountposition") || field(section,"attachmentpointposition") ||
+      field(section,"position") || field(section,"spawnposition"));
+    const collider = !namedMount && !offset && field(section,"collider")?.value;
+    const anchor = namedMount ? mount : collider || field(section,"mountparent")?.value || "models";
+    if (!namedMount && !collider && !offset) continue;
+    obj.anchor = anchors.get(anchor.toLowerCase());
+    if (!obj.anchor) { obj.placement = "Unresolved anchor: "+anchor; continue; }
+    const coords = offset ? offset.value.split(",").map(v=>v.trim() ? Number(v) : NaN) : [0,0,0];
+    if (coords.length !== 3 || !coords.every(Number.isFinite)) { obj.placement = "Invalid "+offset.name; continue; }
+    obj.position = coords as Vector;
+    obj.placement = namedMount ? "Mount="+mount : collider ? "Collider="+collider : offset.name+"="+offset.value;
+  }
+  return objects;
 }

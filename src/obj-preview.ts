@@ -94,6 +94,7 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
       #outline > ul { padding-left:0; }
       #outline li { line-height:1.55; white-space:nowrap; }
       #outline li > span { padding-left:1em; }
+      .selected-object { background:var(--vscode-list-activeSelectionBackground); color:var(--vscode-list-activeSelectionForeground); }
       #outline p { margin:4px 0; color:var(--vscode-descriptionForeground); }
       #entity-pickers label { display:grid; gap:2px; margin:4px 0; }
       #entity-warnings { max-width:28rem; white-space:normal; }
@@ -111,7 +112,8 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
       <div id="filters"><label><input id="meshes" type="checkbox" checked>Meshes</label>
       <select id="meshWireframe" aria-label="Mesh render mode"><option value="shaded">Shaded</option><option value="wireframe">Wireframe</option></select>
       <label><input id="colliders" type="checkbox" checked>Colliders</label>
-      <select id="colliderWireframe" aria-label="Collider render mode"><option value="shaded">Shaded</option><option value="wireframe" selected>Wireframe</option></select></div>
+      <select id="colliderWireframe" aria-label="Collider render mode"><option value="shaded">Shaded</option><option value="wireframe" selected>Wireframe</option></select>
+      <div id="object-filter" hidden><label><input id="objects" type="checkbox" checked>Object markers</label></div></div>
       <p></p><details id="entity-warnings" hidden><summary></summary><div></div></details><ul></ul></details>
       <template id="box"><svg class="collider-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-linejoin="round" role="img" aria-label="Likely collider"><title>Likely collider</title><path d="M8 1 14.5 4.5v7L8 15l-6.5-3.5v-7z M1.5 4.5 8 8l6.5-3.5 M8 8v7"/></svg></template>
       <script nonce="${nonce}" src="${script}"></script></body></html>`;
@@ -184,6 +186,7 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
           const scene: EntityScene = await entityRequest({...request,entity,appearance,render:true},token);
           if (token.isCancellationRequested) return;
           for (const part of scene.parts) if (part.source) sources.set(part.id,part.source);
+          for (const obj of scene.objects) if (obj.source) sources.set(obj.id,obj.source);
           await panel.webview.postMessage({type:"entityScene",scene,entity});
         } catch (error) {
           if (!token.isCancellationRequested) await panel.webview.postMessage({type:"entityError",message:error.message});

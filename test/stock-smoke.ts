@@ -93,6 +93,55 @@ export const run = async () => {
     });
     outcomes.push("Assembled Spruance with nested and repeated submodels and variant selector");
     await renderedModel(port,()=>{
+      const roots = Array.from(document.querySelectorAll("#outline > ul > li > details > summary")).map(el=>el.textContent);
+      const row = Array.from(document.querySelectorAll<HTMLElement>("#outline [title]")).find(el=>el.title.startsWith("[SensorSystem2]\nSPS-40\nMount=SPS_40"));
+      if (roots.join("/")!=="Meshes/Colliders/Objects" || !row) return "waiting for sensor tree";
+      const checkbox = row.querySelector("input"), objects = document.querySelector<HTMLInputElement>("#objects");
+      if (!checkbox?.checked) return "missing sensor marker";
+      objects.click();
+      const off = checkbox.disabled;
+      objects.click();
+      row.click();
+      if (!off || checkbox.disabled || !row.classList.contains("selected-object")) return "marker controls failed";
+      row.dispatchEvent(new MouseEvent("click",{ctrlKey:true,bubbles:true,cancelable:true}));
+      return "verified controls";
+    });
+    await selectedSection(/^\[SensorSystem2\]$/i);
+    await renderedModel(port,async()=>{
+      const canvas = document.querySelector<HTMLCanvasElement>('canvas[aria-label*="spruance"]');
+      const meshes = document.querySelector<HTMLInputElement>("#meshes"), colliders = document.querySelector<HTMLInputElement>("#colliders");
+      if (!canvas || !meshes || !colliders) return "waiting for Spruance";
+      if (colliders.checked) colliders.click();
+      if (meshes.checked) meshes.click();
+      const sample = document.createElement("canvas");
+      sample.width=canvas.clientWidth; sample.height=canvas.clientHeight;
+      const ctx = sample.getContext("2d");
+      document.querySelector("#meshWireframe").dispatchEvent(new Event("change"));
+      ctx.drawImage(canvas,0,0,sample.width,sample.height);
+      const pixels = ctx.getImageData(0,0,sample.width,sample.height).data;
+      const tip = document.querySelector<HTMLElement>("#part-tip");
+      let candidates=0, lastHit="";
+      const rect=canvas.getBoundingClientRect();
+      for (let y=0;y<sample.height;y++) for (let x=0;x<sample.width;x++) {
+        const i=4*(y*sample.width+x);
+        if (pixels[i+3]<240 || pixels[i+2]<180 || pixels[i+2]-pixels[i]<80) continue;
+        candidates++;
+        const pos={clientX:rect.left+x+0.5,clientY:rect.top+y+0.5,bubbles:true};
+        canvas.dispatchEvent(new PointerEvent("pointermove",pos));
+        await new Promise(requestAnimationFrame);
+        if (!tip.hidden) lastHit=tip.textContent.split("\n")[0];
+        if (tip.hidden || !tip.textContent.startsWith("[SensorSystem")) continue;
+        const header=tip.textContent.split("\n")[0];
+        canvas.dispatchEvent(new PointerEvent("pointerdown",pos));
+        canvas.dispatchEvent(new PointerEvent("pointerup",pos));
+        canvas.dispatchEvent(new MouseEvent("click",pos));
+        const selected = document.querySelector<HTMLElement>("#outline .selected-object");
+        if (selected?.title.startsWith(header+"\n")) return "verified controls";
+      }
+      return "Marker samples: "+candidates+"; last hover: "+lastHit+"; selected: "+document.querySelector(".selected-object")?.textContent;
+    });
+    outcomes.push("Verified the three INI trees, marker visibility, viewport picking and sensor source navigation");
+    await renderedModel(port,()=>{
       const row=[...document.querySelectorAll<HTMLElement>("#outline [title]")].find(e=>e.title.startsWith("[VLS_Module_Fwd_L_1]\nMesh="));
       if (!row || !row.title.includes("click to open INI")) return "waiting for mesh tooltip";
       row.dispatchEvent(new MouseEvent("click",{ctrlKey:true,bubbles:true,cancelable:true}));

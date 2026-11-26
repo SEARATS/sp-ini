@@ -5,7 +5,7 @@ import { Materials } from "./materials";
 import { MeshFiles, parseObj } from "./meshes";
 import { referenceContext } from "./references";
 import { StockAssets, resolvedDiffuse } from "./stock-assets";
-import { field, entityParts, type EntityScene } from "./entity-model";
+import { field, entityParts, entityObjects, type EntityScene } from "./entity-model";
 import { entityDocument, paintTexture, type Appearance } from "./entity-selection";
 
 function triangles(model: ReturnType<typeof parseObj>, object: ReturnType<typeof parseObj>["objects"][number]) {
@@ -84,5 +84,6 @@ export async function entityAssets(text: string, uri: string, catalog: Catalog, 
     part.texture = textures.get(textureKey);
   }
   scene.warnings = [...warnings];
+  scene.objects = entityObjects(doc,scene.parts);
   return scene;
 }
