@@ -218,6 +218,7 @@ export const run = async () => {
       for (const [id,detail] of [["coll_mk41_1","Box"],["coll_sps_40","Sphere"],["coll_hull_1","Mesh · usn_dd_spruance_vls_coll_hull_1"]]) {
         const row=document.querySelector<HTMLElement>('[data-part-id="'+id+'"]');
         if (row?.title.split("\n")[1]!==detail) return "Missing collider type for "+id;
+        if (!/^line \d+$/m.test(row.title) || /\.ini · line/i.test(row.title)) return "Unexpected local source for "+id;
       }
       for (const [name,style,color] of [["coll_mk41_1","weapon","rgb(255, 68, 68)"],
         ["coll_ss_1","unassigned","rgb(192, 192, 192)"],["coll_mag_asroc","magazine","rgb(255, 131, 61)"],
@@ -308,7 +309,8 @@ export const run = async () => {
       if (units.value !== "Taskforce1Aircraft1") {
         units.value = "Taskforce1Aircraft1"; units.dispatchEvent(new Event("change")); return "switching mission unit";
       }
-      return document.querySelector('canvas[aria-label*="Taskforce1Aircraft1"][aria-label*="Squadron2"]') && document.querySelector("#outline > ul")?.textContent.includes("usn_p-3c") ? "verified controls" : "waiting for P-3C";
+      const source=document.querySelector<HTMLElement>('[data-part-id="models"]')?.title || "";
+      return document.querySelector('canvas[aria-label*="Taskforce1Aircraft1"][aria-label*="Squadron2"]') && /usn_p-3c\.ini · line \d+/i.test(source) ? "verified controls" : "waiting for P-3C source";
     });
     outcomes.push("Selected the Northern Passage P-3C and its declared squadron");
     const nationDoc = await vscode.workspace.openTextDocument(vscode.Uri.joinPath(ini,"../../aircraft/fr_f1c_squadrons.ini"));

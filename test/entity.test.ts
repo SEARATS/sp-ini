@@ -9,7 +9,7 @@ import { assembledEntity, patchEntity } from "../src/entity-viewer";
 import { Box3, LoadingManager, Mesh, MeshBasicMaterial, Vector3 } from "three";
 import type { EntityPart, Vector } from "../src/entity-model";
 import { applyDisplay, previewLayer } from "../src/preview-display";
-import { hoverStack } from "../src/entity-inspect";
+import { hoverStack, sourceLocation } from "../src/entity-inspect";
 
 test("INI trees separate display categories while widgets follow their runtime mounts",()=>{
   const text = ["[Models]","ResourcesMesh=hull","[Submodels]","Sensors_1=Mast","[Mast]","Mesh=Dummy","Position=1,2,3",
@@ -140,5 +140,6 @@ test("preview links retain source headers through repeats and inheritance",async
   const merged=await entityDocument("#!copy aircraft/base.ini\n\n[Tip]\nScale=1,1,1",derived,catalog,new Materials(()=>doc));
   const sources=entityParts(merged,new Set()).map(p=>p.part.source);
   assert.deepEqual(sources,[{uri,line:0,header:"Models"},{uri,line:7,header:"Part{i}"},{uri:derived,line:2,header:"Tip"}]);
+  assert.deepEqual(sources.map(source=>sourceLocation(source,derived)),["base.ini · line 1","base.ini · line 8","line 3"]);
   assert.deepEqual(expandEntityIni(text,uri).sections.at(-1).source,{uri,line:10,header:"Tip"});
 });

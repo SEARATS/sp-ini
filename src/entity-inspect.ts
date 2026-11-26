@@ -2,8 +2,16 @@ import { Raycaster, Vector2, type Object3D, type PerspectiveCamera } from "three
 import { previewLayer } from "./preview-display";
 import type { EntityPart, EntityObject } from "./entity-model";
 import type { PreviewColor } from "./preview-colors";
+import type { IniSource } from "./ini";
 
 type Inspectable = EntityPart | EntityObject;
+
+export function sourceLocation(source: IniSource, documentUri: string) {
+  const line="line "+(source.line+1);
+  if (source.uri===documentUri) return line;
+  const file=decodeURIComponent(new URL(source.uri).pathname.split("/").pop());
+  return file+" · "+line;
+}
 
 function geometryLabel(part: EntityPart) {
   if (!part.collider) return "Mesh="+(part.meshName || "Dummy");
@@ -38,10 +46,10 @@ export function inspectEntity(canvas: HTMLCanvasElement, camera: PerspectiveCame
   const modifier = /Mac/i.test(navigator.platform) ? "⌘" : "Ctrl";
   const openHint = modifier+"+click to open INI";
   let scheduled = 0, press: PointerEvent;
+  let documentUri: string;
 
   function description(part: EntityPart | EntityObject) {
     const {source} = part;
-    const file = decodeURIComponent(new URL(source.uri).pathname.split("/").pop());
     const detail = "group" in part ? [part.system,part.placement].filter(Boolean).join("\n") :
       geometryLabel(part);
     const owners = "referencedBy" in part && part.referencedBy?.length ? ["Used by "+part.referencedBy.map(name=>{
@@ -49,7 +57,7 @@ export function inspectEntity(canvas: HTMLCanvasElement, camera: PerspectiveCame
       return owner && "system" in owner && owner.system ? name+" ("+owner.system+")" : name;
     }).join(", ")] : [];
     return ["["+(part.id === "models" ? source.header : part.name)+"]", detail,...owners,
-      file+" · line "+(source.line+1)].join("\n");
+      sourceLocation(source,documentUri)].join("\n");
   }
   function hitsAt(event: MouseEvent) {
     if (!parts.size || !model()) return [];
@@ -101,7 +109,8 @@ export function inspectEntity(canvas: HTMLCanvasElement, camera: PerspectiveCame
     else if (part && "group" in part) select(part.id);
   });
   return {
-    setParts(next: (EntityPart | EntityObject)[]) {
+    setParts(next: (EntityPart | EntityObject)[], uri: string) {
+      documentUri=uri;
       hide(); press=undefined; parts.clear();
       for (const part of next) if (part.source) parts.set(part.id,part);
     },

@@ -228,7 +228,7 @@ function dispose(group) {
 }
 
 let revision = 0;
-async function loadEntity(id:string, next:EntityScene) {
+async function loadEntity(id:string, next:EntityScene, documentUri:string) {
   const current=++revision, same=active?.id===id;
   let staged:ReturnType<typeof assembledEntity>;
   try {
@@ -266,7 +266,7 @@ async function loadEntity(id:string, next:EntityScene) {
     }
     initializedEntity=id;
     active={id,scene:next,view};
-    inspector.setParts([...next.parts,...(next.objects || [])]);
+    inspector.setParts([...next.parts,...(next.objects || [])],documentUri);
     if (staged) {
       if (!same) pickedObject=undefined;
       showOutline(view.outline,"",undefined,same);
@@ -376,7 +376,7 @@ window.addEventListener("message", ({ data }) => {
     warnings.querySelector("summary").textContent = "Preview notes ("+notes.length+")";
     warnings.querySelector("div").replaceChildren(...notes.map(note=>{const p=document.createElement("p");p.textContent=note;return p;}));
     const report=(applied:boolean)=>vscode.postMessage({type:"entityRendered",version:data.version,applied});
-    if (controls) void loadEntity(data.entity,data.scene).then(applied=>report(!!applied));
+    if (controls) void loadEntity(data.entity,data.scene,data.documentUri).then(applied=>report(!!applied));
     else { status.textContent = "The entity preview needs WebGL 2."; report(false); }
     return;
   }

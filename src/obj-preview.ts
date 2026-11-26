@@ -191,7 +191,7 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
           const next=new Map<string,IniSource>();
           for (const part of [...scene.parts,...(scene.objects || [])]) if (part.source) next.set(part.id,part.source);
           stagedSources.set(version,next);
-          if (!await panel.webview.postMessage({type:"entityScene",scene,entity,version})) stagedSources.delete(version);
+          if (!await panel.webview.postMessage({type:"entityScene",scene,entity,version,documentUri:request.uri})) stagedSources.delete(version);
         } catch (error) {
           if (!token.isCancellationRequested) await panel.webview.postMessage({type:"entityError",message:error.message});
         }
