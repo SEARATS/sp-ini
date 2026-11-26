@@ -2,7 +2,10 @@
 
 [Downloads](https://github.com/SEARATS/sp-ini/releases) | [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=SEARATS.seapower-ini) | [Editor setup](https://github.com/SEARATS/sp-ini/blob/main/docs/setup.md) | [PSPad](https://github.com/SEARATS/sp-ini/blob/main/pspad/README.txt) | [Notepad++](https://github.com/SEARATS/sp-ini/blob/main/notepadpp/README.md)
 
-Ctrl+click an underlined INI value to open its source. Hover over a mesh to see its wireframe and, when it has UVs and a diffuse map, its textured preview. Hover over a collider to see its shape or wireframe. Material tooltips show the full texture on a lit plane, followed by the individual texture maps.
+Ctrl+click an underlined INI value to open its source. 
+Collider tooltips show its shape / wireframe. 
+Mesh tooltips also show its textured preview. 
+Material tooltips show the full texture on a lit plane, followed by the individual textures.
 
 [![Wireframe and textured mesh][mesh-hover]][mesh-hover]
 
@@ -12,29 +15,38 @@ Click **Preview Entity** in the upper-right corner of a unit INI to see the asse
 
 [![Spruance VLS with wireframe colliders and system arcs][entity-overview]][entity-overview]
 
-Use the **Meshes**, **Colliders**, and **Objects** trees to show or hide parts. Tooltips list the colliders under your pointer. Ctrl+click a mesh or system to open its INI section. On a collider, Ctrl+click opens its system and Shift+click opens its definition. On macOS, use Command instead of Ctrl.
+Use the **Meshes**, **Colliders**, and **Objects** trees to show or hide parts. 
+Tooltips list the colliders under your pointer. 
+Ctrl+click a mesh or system to open its INI section. 
+On a collider, Shift+click opens its definition. 
 
-Firing and elevation arcs appear by default. Select a system to see its angles.
+Firing and elevation arcs are displayed.
 
-Click **Preview Unit Card** to see the unit's profile, specifications and equipment. Use the selectors to switch units, ship variants or aircraft squadrons.
+Use **Preview Unit Card** to see the unit's profile, specifications and equipment.
 
 [![Spruance VLS unit reference card][unit-card]][unit-card]
 
-OBJ and FBX files open in a 3D preview. Use the hierarchy to hide parts or switch between shaded and wireframe views. In text view, you can fold FBX branches and OBJ objects or groups. Mesh names containing `coll` or tagged `_col` are marked as likely colliders, regardless of case.
+OBJ and FBX files open in a 3D preview with shaded and wireframe views. 
+Text view,  now allows you to fold FBX branches and OBJ objects or groups. 
+Mesh names containing `coll` or tagged `_col` are marked as likely colliders.
 
 ## Export from FBX
 
-Right-click an FBX in the Explorer or its 3D preview and choose **Copy Hierarchy as INI** to copy submodels and colliders. To set custom object roles, right-click a parent in the **FBX hierarchy** and choose **Generate Submodels and Colliders…**. Review the changes, then apply them to an INI or copy the generated text to your clipboard.
+Right-click an FBX in the Explorer or its 3D preview and choose **Copy Hierarchy as INI** to copy submodels and colliders. 
+To set custom object roles, right-click a parent in the **FBX hierarchy** and choose **Generate Submodels and Colliders…**.
 
-Choose **Copy Colliders as INI** to copy just the mesh collider definitions. Right-click a tree row to limit the picker to that branch. The picker preselects likely colliders by object or mesh name. You can change the selection before copying. Each collider keeps its FBX parent and local position.
+Choose **Copy Colliders as INI** to copy just the mesh collider definitions. 
+Right-click a tree row to limit the picker to that branch.
 
 ## Error checking
 
-The **Problems** panel lists INI issues. Repeating a key in the same section gives a warning when the values match and an error when they differ.
+The **Problems** panel lists INI issues. 
 
-Sea Power ignores material settings in numbered sensor sections. Use **Quick Fix** on the warning to move the line to the submodel named by `Mount`. The fix requires a single declared submodel in the same file with no existing assignment for that key.
+Repeating a key in the same section gives a warning when the values match and an error when they differ.
+Keys that are ingnored by seapower in specfic section. 
 
-To suppress an issue, right-click its line in the INI editor and choose **Suppress Diagnostic on This Line**. This adds a comment to that line. To comment out or restore a whole section, including its header, right-click anywhere in it and choose **Comment or Uncomment INI Section**.
+To suppress an issue, right-click its line in the INI editor and choose **Suppress Diagnostic on This Line**. This adds a comment to that line. 
+To comment out or restore a whole section, including its header, right-click anywhere in it and choose **Comment or Uncomment INI Section**.
 
 ## Screenshots
 
@@ -88,7 +100,7 @@ The examples use the stock Spruance VLS destroyer. Select a screenshot to view i
 [sphere-colliders]: https://raw.githubusercontent.com/SEARATS/binaries/c7fa4552f83481e42155c44ee9926fe21dc8ac26/sp-ini/19-sphere-colliders.png
 [preview-definition]: https://raw.githubusercontent.com/SEARATS/binaries/e91f936c5d8f2e3addd7dbca97da93c60213503a/sp-ini/20-preview-definition.png
 [hierarchy-definition]: https://raw.githubusercontent.com/SEARATS/binaries/e91f936c5d8f2e3addd7dbca97da93c60213503a/sp-ini/21-hierarchy-definition.png
-[entity-trees]: https://raw.githubusercontent.com/SEARATS/binaries/0fac4c86b369cc7f1e05f21a26d11843b938a95b/sp-ini/22-entity-trees.png
+[entity-trees]: https://raw.githubusercontent.com/SEARATS/binaries/b8c2cffeef263704ba345656b87fa1ffc3b650f5/sp-ini/22-entity-trees.png
 [collider-highlight]: https://raw.githubusercontent.com/SEARATS/binaries/c7fa4552f83481e42155c44ee9926fe21dc8ac26/sp-ini/23-collider-highlight.png
 [unit-card]: https://raw.githubusercontent.com/SEARATS/binaries/0fac4c86b369cc7f1e05f21a26d11843b938a95b/sp-ini/24-unit-card.png
-[entity-overview]: https://raw.githubusercontent.com/SEARATS/binaries/aa0c3ffa825af9531775e75a6387c5add3d60460/sp-ini/26-entity-preview.png
+[entity-overview]: https://raw.githubusercontent.com/SEARATS/binaries/b8c2cffeef263704ba345656b87fa1ffc3b650f5/sp-ini/26-entity-preview.png

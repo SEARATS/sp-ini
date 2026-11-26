@@ -5,7 +5,7 @@ import { assembledEntity, patchEntity } from "./entity-viewer";
 import type { EntityScene } from "./entity-model";
 import { previewColors } from "./preview-colors";
 import { inspectEntity } from "./entity-inspect";
-import {systemArcs} from "./system-arcs";
+import {placeSystemArcs,systemArcs} from "./system-arcs";
 import { Texture, Box3, Color, DirectionalLight, HemisphereLight, LoadingManager, PerspectiveCamera, Scene, Sphere, WebGLRenderer } from "three";
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
@@ -24,7 +24,7 @@ let renderer, controls, model;
 const objectLabels = new Map<string,HTMLElement>();
 let active: {id:string; scene:EntityScene; view:ReturnType<typeof assembledEntity>};
 let bright:string[] = [], pickedObject:string;
-const arcGuides=new Map<string,{guide:ReturnType<typeof systemArcs>;firingArcs?:string;elevationArc?:string}>();
+const arcGuides=new Map<string,{guides:ReturnType<typeof systemArcs>;firingArcs?:string;elevationArc?:string}>();
 const arcValues=document.querySelector<HTMLElement>("#arc-values");
 function syncArcs() {
   const unused=new Set(arcGuides.keys());
@@ -35,24 +35,22 @@ function syncArcs() {
     unused.delete(obj.id);
     if (!entry || entry.firingArcs!==obj.firingArcs || entry.elevationArc!==obj.elevationArc) {
       if (entry) removeArc(obj.id);
-      const guide=systemArcs(obj);
-      if (!guide) continue;
-      entry={guide,firingArcs:obj.firingArcs,elevationArc:obj.elevationArc};
+      const guides=systemArcs(obj);
+      if (!guides.length) continue;
+      entry={guides,firingArcs:obj.firingArcs,elevationArc:obj.elevationArc};
       arcGuides.set(obj.id,entry);
-      scene.add(guide);
+      for (const {line} of guides) scene.add(line);
     }
-    anchor.getWorldPosition(entry.guide.position);
-    anchor.getWorldQuaternion(entry.guide.quaternion);
-    entry.guide.scale.setScalar(bounds.radius*0.17);
+    placeSystemArcs(entry.guides,active.view.model,anchor,bounds.radius*0.17);
   }
   unused.forEach(removeArc);
 }
 function removeArc(id:string) {
   const entry=arcGuides.get(id);
   if (!entry) return;
-  scene.remove(entry.guide);
-  entry.guide.geometry.dispose();
-  entry.guide.material.dispose();
+  for (const {line} of entry.guides) {
+    scene.remove(line); line.geometry.dispose(); line.material.dispose();
+  }
   arcGuides.delete(id);
 }
 function showArcValues() {
@@ -238,10 +236,12 @@ function render() {
     if (settings.objects) camera.layers.enable(previewLayer.widget);
     if (settings.arcs) {
       camera.layers.enable(previewLayer.arc);
-      for (const [id,{guide}] of arcGuides) {
-        guide.visible=!hidden.has(id);
-        guide.material.color.setScalar(arcGuides.has(pickedObject) && pickedObject!==id ? 0.45 : 1);
-        guide.renderOrder=pickedObject===id ? 13 : 12;
+      for (const [id,{guides}] of arcGuides) {
+        for (const {line,color} of guides) {
+          line.visible=!hidden.has(id);
+          line.material.color.setHex(color).multiplyScalar(arcGuides.has(pickedObject) && pickedObject!==id ? 0.45 : 1);
+          line.renderOrder=pickedObject===id ? 13 : 12;
+        }
       }
     }
     renderer.render(scene,camera);

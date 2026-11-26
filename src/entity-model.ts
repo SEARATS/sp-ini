@@ -144,7 +144,8 @@ export function entityObjects(doc: ReturnType<typeof parse>, parts: EntityPart[]
     const group = magazine ? "Magazines" : groups.find(([pattern]) => pattern.test(section.name))?.[1];
     if (!group) continue;
     const obj: EntityObject = {id:"object:"+section.name.toLowerCase(),name:section.name,group,source:section.source,
-      firingArcs:field(section,"firingarcs")?.value,elevationArc:field(section,"elevationarc")?.value,
+      firingArcs:group==="Weapons" ? field(section,"firingarcs")?.value : undefined,
+      elevationArc:group==="Weapons" ? field(section,"elevationarc")?.value : undefined,
       system:field(section,"systemname")?.value || field(section,"type")?.value,placement:"No spatial reference"};
     objects.push(obj);
     const mount = field(section,"mount")?.value;

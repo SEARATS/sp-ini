@@ -4,7 +4,7 @@ import { TextDocument } from "vscode-languageserver-textdocument";
 import { Catalog } from "../src/catalog";
 import { diagnostics } from "../src/features";
 import { parse } from "../src/ini";
-import { moveToMount, placementCode } from "../src/section-placement";
+import { moveMisplacedKey, placementCode } from "../src/section-placement";
 
 const uri = "file:///mod/vessels/radar.ini";
 const registry = "[Submodels]\nSensors_1=RadarDish";
@@ -16,7 +16,7 @@ function check(text: string) {
   const document = TextDocument.create(uri, "seapower-ini", 7, text);
   const doc = parse(text);
   const issues = diagnostics(doc, new Catalog(), uri).filter(d => d.code === placementCode);
-  const fix = issues.length && moveToMount(document, doc, issues[0], true);
+  const fix = issues.length && moveMisplacedKey(document, doc, issues[0], true);
   return { document, issues, fix };
 }
 
@@ -65,4 +65,15 @@ test("ambiguous, inherited, dummy and already configured mounts keep the warning
     assert.equal(issues.length, 1);
     assert.equal(fix, undefined);
   }
+});
+
+test("check declared key roles across sections and move only to an unambiguous destination", () => {
+  const misplaced = check([registry, model, "[SensorSystem2_USA]", "FiringArcs=60,-60", "[WeaponSystem3_Default]",
+    "Mount=RadarDish", "Material=paint", "[SensorSystems]", "NumberOfWeaponSystems=2", "[WeaponSystems]"].join("\n"));
+  assert.deepEqual(misplaced.issues.map(d=>misplaced.document.getText(d.range)),["FiringArcs","Material","NumberOfWeaponSystems"]);
+  const actions=misplaced.issues.map(d=>moveMisplacedKey(misplaced.document,parse(misplaced.document.getText()),d,true)?.title);
+  assert.deepEqual(actions,[undefined,"Move Material to [RadarDish]","Move NumberOfWeaponSystems to [WeaponSystems]"]);
+  const valid=check([registry,model,"[SensorSystem2_USA]","Mount=RadarDish","RestAngles=180","ModSetting=1","[WeaponSystem3_Default]",
+    "FiringArcs=60,-60","[SensorSystems]","NumberOfSensorSystems=1","[Unknown]","Material=wildcard.ini"].join("\n"));
+  assert.equal(valid.issues.length,0);
 });

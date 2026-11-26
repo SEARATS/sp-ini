@@ -1,6 +1,6 @@
 import { CompletionItemKind, DiagnosticSeverity, Range, SymbolKind } from "vscode-languageserver/node";
 import { family, normalize, submodelNames } from "./catalog";
-import { ignoredSensorKey, placementCode } from "./section-placement";
+import { misplacedKey, placementCode } from "./section-placement";
 import { directives, sectionGroup, unitSection } from "./ini";
 import { choices, expected, validValue, valueRule } from "./values";
 import { tokens, referenceContext, domainFor, reference } from "./references";
@@ -108,16 +108,18 @@ function diagnostics(doc, catalog, uri = "") {
   const group = family(uri, doc);
   const ctx = catalog && referenceContext(doc, uri, catalog);
   const parts = ctx?.parts ?? submodelNames(doc);
+  for (const ref of ctx?.inheritedParts || []) parts.add(ref.name.toLowerCase());
   for (const section of doc.sections) {
     const seen = new Map();
     const schema = catalog?.sections.get(sectionGroup(section.name))?.get(group);
     for (const key of section.keys) {
       if (key.repeated || key.name.includes("{")) continue;
       const name = key.name.toLowerCase();
-      if (ignoredSensorKey(key, parts)) {
+      const placement = misplacedKey(key, parts);
+      if (placement) {
         result.push({ range: span(key.line, key.start, key.start + key.name.length), severity: DiagnosticSeverity.Warning,
           source: "Sea Power INI", code: placementCode,
-          message: `Sea Power ignores ${key.name} in [${section.name}]. Set it in the submodel section for the visible mesh.` });
+          message: `Sea Power ignores ${key.name} in [${section.name}]. Set it in ${placement.destination}.` });
       }
       const prior = seen.get(name);
       let message, code, relatedInformation, severity: DiagnosticSeverity = DiagnosticSeverity.Warning;

@@ -11,7 +11,7 @@ import { isColliderName } from "./mesh-names";
 import { Materials, imageMarkdown, resize } from "./materials";
 import { colliderSection, primitiveHover } from "./colliders";
 import { parse } from "./ini";
-import { moveToMount } from "./section-placement";
+import { moveMisplacedKey } from "./section-placement";
 import { entityAssets } from "./entity-assets";
 import { selectEntity, type PreviewRequest } from "./entity-selection";
 import {unitCard} from "./unit-card";
@@ -73,7 +73,7 @@ connection.onInitialize(params => {
 connection.onCodeAction(({ textDocument, context }) => {
   const document = documents.get(textDocument.uri), doc = parsed.get(textDocument.uri);
   if (!document || !doc || (context.only && !context.only.includes("quickfix"))) return [];
-  return context.diagnostics.map(diagnostic => moveToMount(document, doc, diagnostic, versionedEdits)).filter(Boolean);
+  return context.diagnostics.map(diagnostic => moveMisplacedKey(document, doc, diagnostic, versionedEdits)).filter(Boolean);
 });
 connection.onInitialized(() => refresh().catch(error => connection.console.error(String(error))));
 connection.onRequest("seapower/entityPreview", async (request: PreviewRequest, token) => {

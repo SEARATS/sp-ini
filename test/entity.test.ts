@@ -6,25 +6,44 @@ import { Materials } from "../src/materials";
 import { entityObjects, entityParts, expandEntityIni } from "../src/entity-model";
 import { selectEntity, paintTexture, entityDocument } from "../src/entity-selection";
 import { assembledEntity, patchEntity } from "../src/entity-viewer";
-import { Box3, LoadingManager, Mesh, MeshBasicMaterial, Vector3 } from "three";
+import { Box3, Group, LoadingManager, Mesh, MeshBasicMaterial, Vector3 } from "three";
 import type { EntityPart, Vector } from "../src/entity-model";
 import { applyDisplay, previewLayer } from "../src/preview-display";
 import { hoverStack, sourceLocation } from "../src/entity-inspect";
 import {unitCard} from "../src/unit-card";
 import {StockAssets} from "../src/stock-assets";
-import {systemArcs} from "../src/system-arcs";
+import {placeSystemArcs,systemArcs} from "../src/system-arcs";
 
 test("system arc guides preserve separate firing sectors, wrap past 180 and show elevation",()=>{
   const doc=expandEntityIni("[Models]\nMesh=hull\n[WeaponSystem1]\nMountPosition=0,0,0\nFiringArcs=150,-150|-30,30\nElevationArc=-15,85");
   const [obj]=entityObjects(doc,entityParts(doc,new Set()).map(p=>p.part));
   assert.equal(obj.elevationArc,"-15,85");
-  const guide=systemArcs(obj), points=guide.geometry.getAttribute("position");
-  const vertices=Array.from({length:points.count},(_,i)=>new Vector3().fromBufferAttribute(points,i));
-  assert.ok(vertices.some(p=>p.z < -0.999));
-  assert.ok(vertices.some(p=>p.z > 0.999));
-  assert.ok(vertices.every(p=>Math.abs(p.x)<0.51));
-  assert.ok(vertices.some(p=>p.y>0.99) && vertices.some(p=>p.y < -0.25));
-  assert.equal(systemArcs({...obj,firingArcs:"bad",elevationArc:"85,-15"}),undefined);
+  const guides=systemArcs(obj);
+  const vertices=(line:typeof guides[number]["line"])=>{
+    const points=line.geometry.getAttribute("position");
+    return Array.from({length:points.count},(_,i)=>new Vector3().fromBufferAttribute(points,i));
+  };
+  const bearing=vertices(guides[0].line), elevation=vertices(guides[1].line);
+  assert.ok(bearing.some(p=>p.z < -0.999) && bearing.some(p=>p.z > 0.999));
+  assert.ok(bearing.every(p=>Math.abs(p.x)<0.51));
+  assert.ok(elevation.some(p=>p.y>0.99) && elevation.some(p=>p.y < -0.25));
+  assert.deepEqual(systemArcs({...obj,firingArcs:undefined,elevationArc:"85,-15"}),[]);
+
+  // Stock Spruance aft mount: a turned submodel and an already aft-facing sector.
+  const aft=systemArcs({...obj,firingArcs:"60,-60"});
+  const unit=new Group(), mount=new Group();
+  unit.position.set(2,0,3); mount.position.set(0,1,-2); mount.rotation.y=Math.PI; unit.add(mount);
+  placeSystemArcs(aft,unit,mount,1);
+  assert.ok(aft[0].line.position.equals(unit.position));
+  assert.ok(aft[1].line.position.equals(new Vector3(2,1,1)));
+  assert.ok(vertices(aft[0].line).some(p=>p.applyQuaternion(aft[0].line.quaternion).z < -0.999));
+  assert.ok(vertices(aft[0].line).every(p=>p.applyQuaternion(aft[0].line.quaternion).z < 0.501));
+  assert.ok(vertices(aft[1].line).some(p=>p.applyQuaternion(aft[1].line.quaternion).z < -0.99));
+  const ring=systemArcs({...obj,firingArcs:"360,360|10,20"})[0];
+  assert.ok(vertices(ring.line).every(p=>p.length()>0.99));
+  assert.equal(vertices(systemArcs({...obj,firingArcs:"0"})[0].line).length,vertices(ring.line).length);
+  const laterZero=systemArcs({...obj,firingArcs:"330,30|0,0"})[0];
+  assert.ok(vertices(laterZero.line).every(p=>p.z>=0));
 });
 
 test("unit cards use mod names, inherited particulars and variant profile art in game lookup order",async()=>{
