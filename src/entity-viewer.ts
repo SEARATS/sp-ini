@@ -132,7 +132,7 @@ export function assembledEntity(scene: EntityScene, manager: LoadingManager) {
 // Most INI edits only move parts, toggle visibility or change source lines. Keep their GPU assets.
 export function patchEntity(view:ReturnType<typeof assembledEntity>, before:EntityScene, after:EntityScene) {
   const partShape = ({source,position,rotation,visible,...rest}:EntityPart)=>rest;
-  const objectShape = ({source,position,placement,...rest}:NonNullable<EntityScene["objects"]>[number])=>({...rest,placed:!!position});
+  const objectShape = ({source,position,placement,firingArcs,elevationArc,...rest}:NonNullable<EntityScene["objects"]>[number])=>({...rest,placed:!!position});
   if (before.geometry.length!==after.geometry.length || before.textures.length!==after.textures.length ||
     before.geometry.some((g,i)=>g.positions!==after.geometry[i].positions || g.uvs!==after.geometry[i].uvs) ||
     before.textures.some((t,i)=>t.png!==after.textures[i].png || t.alpha!==after.textures[i].alpha) ||

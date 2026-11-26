@@ -5,6 +5,7 @@ import { assembledEntity, patchEntity } from "./entity-viewer";
 import type { EntityScene } from "./entity-model";
 import { previewColors } from "./preview-colors";
 import { inspectEntity } from "./entity-inspect";
+import {systemArcs} from "./system-arcs";
 import { Texture, Box3, Color, DirectionalLight, HemisphereLight, LoadingManager, PerspectiveCamera, Scene, Sphere, WebGLRenderer } from "three";
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
@@ -23,6 +24,24 @@ let renderer, controls, model;
 const objectLabels = new Map<string,HTMLElement>();
 let active: {id:string; scene:EntityScene; view:ReturnType<typeof assembledEntity>};
 let bright:string[] = [], pickedObject:string;
+let arcGuide:ReturnType<typeof systemArcs>;
+const arcValues=document.querySelector<HTMLElement>("#arc-values");
+function showArcs(id?:string) {
+  if (arcGuide) {
+    scene.remove(arcGuide); arcGuide.geometry.dispose(); arcGuide.material.dispose(); arcGuide=undefined;
+  }
+  const obj=active?.scene.objects?.find(obj=>obj.id===id);
+  arcValues.replaceChildren();
+  if (!obj) return;
+  for (const [label,value,color] of [["FiringArcs",obj.firingArcs,"#ffdf72"],["ElevationArc",obj.elevationArc,"#71dfff"]]) {
+    if (!value) continue;
+    const span=document.createElement("span");
+    span.style.color=color; span.textContent=label+"="+value; arcValues.append(span,"  ");
+  }
+  if (!active.view.widgets.has(id)) return;
+  arcGuide=systemArcs(obj);
+  if (arcGuide) scene.add(arcGuide);
+}
 const white=new Color(0xffffff);
 function highlight(ids:string[]) {
   const next=ids.filter(id=>active?.view.surfaces.get(id)?.layers.isEnabled(previewLayer.collider));
@@ -38,11 +57,12 @@ function highlight(ids:string[]) {
   bright=next;
   if (renderer) render();
 }
-const inspector = inspectEntity(canvas,camera,()=>model,id=>vscode.postMessage({type:"openEntityPart",id}),id=>selectObject(id,true),highlight);
+const inspector = inspectEntity(canvas,camera,()=>model,ids=>vscode.postMessage({type:"openEntityPart",ids}),id=>selectObject(id,true),highlight);
 function selectObject(id: string, reveal: boolean) {
   const selected = objectLabels.get(id);
   if (!selected) return;
   pickedObject=id;
+  showArcs(id);
   for (const label of objectLabels.values()) label.classList.toggle("selected-object",label === selected);
   if (reveal) {
     for (let el: HTMLElement = selected; el; el=el.parentElement) if (el instanceof HTMLDetailsElement) el.open=true;
@@ -170,6 +190,7 @@ function draw() {
   render();
 }
 function render() {
+  arcValues.hidden=!arcValues.childElementCount || !settings.objects || hidden.has(pickedObject);
   renderer.clear();
   camera.layers.set(previewLayer.mesh);
   renderer.render(scene,camera);
@@ -189,6 +210,14 @@ function render() {
     }
   }
   if (settings.objects && selectedEntity) {
+    if (arcGuide) {
+      const anchor=active.view.widgets.get(pickedObject);
+      arcGuide.visible=!!anchor && !hidden.has(pickedObject);
+      if (arcGuide.visible) {
+        anchor.getWorldPosition(arcGuide.position); anchor.getWorldQuaternion(arcGuide.quaternion);
+        arcGuide.scale.setScalar(bounds.radius*0.17);
+      }
+    }
     renderer.clearDepth();
     camera.layers.set(previewLayer.widget);
     renderer.render(scene,camera);
@@ -268,10 +297,14 @@ async function loadEntity(id:string, next:EntityScene, documentUri:string) {
     active={id,scene:next,view};
     inspector.setParts([...next.parts,...(next.objects || [])],documentUri);
     if (staged) {
+      showArcs();
       if (!same) pickedObject=undefined;
       showOutline(view.outline,"",undefined,same);
       if (pickedObject) selectObject(pickedObject,false);
-    } else inspector.refreshLinks(outline);
+    } else {
+      inspector.refreshLinks(outline);
+      if (pickedObject) showArcs(pickedObject);
+    }
     changed();
     if (!same) frame();
     canvas.setAttribute("aria-label",[id,selectedAppearance].filter(Boolean).join(" · ")+" 3D preview");

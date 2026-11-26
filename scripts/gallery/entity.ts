@@ -1,12 +1,12 @@
 // Runs inside the actual preview. Find the part under a painted pixel using its normal hover handler.
-export async function inspectSpruance(mode: "mesh" | "sphere" | "overlap" | "trees" | "open" | "hierarchy") {
+export async function inspectSpruance(mode: "mesh" | "sphere" | "overlap" | "trees" | "arcs" | "open" | "hierarchy") {
   const canvas = document.querySelector<HTMLCanvasElement>('canvas[aria-label*="spruance"]');
   if (!canvas || !document.querySelector("[role=status]")?.textContent.includes("Drag to orbit")) return "waiting for Spruance";
   const tip = document.querySelector<HTMLElement>("#part-tip");
   if (mode === "open") {
     const point = JSON.parse(canvas.dataset.galleryPoint);
-    canvas.dispatchEvent(new PointerEvent("pointerdown", {...point, ctrlKey:true, bubbles:true}));
-    canvas.dispatchEvent(new MouseEvent("click", {...point, ctrlKey:true, bubbles:true}));
+    canvas.dispatchEvent(new PointerEvent("pointerdown", {...point, shiftKey:true, bubbles:true}));
+    canvas.dispatchEvent(new MouseEvent("click", {...point, shiftKey:true, bubbles:true}));
     return "verified controls";
   }
   if (mode === "hierarchy") {
@@ -25,11 +25,16 @@ export async function inspectSpruance(mode: "mesh" | "sphere" | "overlap" | "tre
   outline.open = mode === "trees";
   for (const id of ["meshes","colliders","objects"]) {
     const control = document.querySelector<HTMLInputElement>("#"+id);
-    const on=id==="objects" ? mode==="trees" : id==="meshes" ? mode!=="sphere" : mode!=="mesh";
+    const on=id==="objects" ? mode==="trees" || mode==="arcs" : id==="meshes" ? mode!=="sphere" : mode!=="mesh" && mode!=="arcs";
     if (control.checked !== on) control.click();
   }
   document.querySelector("button").click(); // Fit before each capture so retries use the same camera.
   canvas.dispatchEvent(new WheelEvent("wheel",{deltaY:mode === "sphere" ? -2200 : -970,cancelable:true}));
+  if (mode==="arcs") {
+    document.querySelector<HTMLElement>('[data-part-id="object:weaponsystem7"]').click();
+    const legend=document.querySelector<HTMLElement>("#arc-values");
+    return !legend.hidden && legend.textContent.includes("FiringArcs=-120,120") ? "verified controls" : "waiting for arc guides";
+  }
   if (mode === "trees") {
     for (const branch of outline.querySelectorAll<HTMLDetailsElement>("details[data-branch]"))
       branch.open=branch.dataset.branch==="Objects";

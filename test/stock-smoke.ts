@@ -233,13 +233,33 @@ export const run = async () => {
         await new Promise(requestAnimationFrame);
         if (tip.hidden || !tip.textContent.startsWith("[coll_")) continue;
         if (tip.textContent.includes("Collider=")) return "collider prefix still visible";
-        canvas.dispatchEvent(new PointerEvent("pointerdown",{...pos,ctrlKey:true}));
-        canvas.dispatchEvent(new MouseEvent("click",{...pos,ctrlKey:true}));
+        canvas.dispatchEvent(new PointerEvent("pointerdown",{...pos,shiftKey:true}));
+        canvas.dispatchEvent(new MouseEvent("click",{...pos,shiftKey:true}));
         return "verified controls";
       }
       return "waiting for collider hover";
     });
     await selectedSection(/^\[coll_[^\]]+\]$/i);
+    await renderedModel(port,()=>{
+      const row=document.querySelector<HTMLElement>('[data-part-id="coll_mk41_1"]');
+      if (!row?.title.includes("choose system")) return "waiting for shared collider";
+      row.dispatchEvent(new MouseEvent("click",{ctrlKey:true,bubbles:true,cancelable:true}));
+      return "verified controls";
+    });
+    await renderedModel(port,()=>{
+      const picker=document.querySelector<HTMLElement>(".quick-input-widget");
+      return picker?.offsetHeight && picker.textContent.includes("[WeaponSystem4]") && picker.textContent.includes("[WeaponMagazineMK41_Fwd]") ?
+        "verified controls" : "waiting for both owners";
+    });
+    await vscode.commands.executeCommand("workbench.action.acceptSelectedQuickOpenItem");
+    await selectedSection(/^\[WeaponSystem4\]$/i);
+    await renderedModel(port,()=>{
+      const row=document.querySelector<HTMLElement>('[data-part-id="coll_sps_40"]');
+      if (!row?.title.includes("Shift+click: collider")) return "waiting for collider navigation";
+      row.dispatchEvent(new MouseEvent("click",{ctrlKey:true,bubbles:true,cancelable:true}));
+      return "verified controls";
+    });
+    await selectedSection(/^\[SensorSystem2\]$/i);
     outcomes.push("Verified overlapping collider tooltip entries, weapon-first order, and collider source navigation over the hull");
     // Exercise real document updates on a disposable copy of the stock ship.
     const editFile=vscode.Uri.joinPath(vscode.Uri.file(process.env.SP_INI_TEST_RESULT),"../spruance-preview-edits.ini");

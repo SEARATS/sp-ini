@@ -140,6 +140,8 @@ async function capture(screen) {
   await screen.capture("18-entity-mesh-hover", "Mesh tooltip on the assembled Spruance", { preview: [0,0.40,0.85,1] });
   await renderedModel(port, inspectSpruance, "trees");
   await screen.capture("22-entity-trees", "Meshes, colliders and system markers on the Spruance", { preview: [0,0,0.82,0.92] });
+  await renderedModel(port, inspectSpruance, "arcs");
+  await screen.capture("25-system-arcs", "Selected system firing and elevation arcs", {preview:[0,0.36,0.9,1]});
   await renderedModel(port, inspectSpruance, "overlap");
   await screen.capture("23-collider-highlight", "Highlighted colliders with the weapon system first in the tooltip", { preview: [0,0.44,1,1] });
   await renderedModel(port, inspectSpruance, "sphere");
@@ -149,10 +151,10 @@ async function capture(screen) {
     const target = vscode.window.activeTextEditor;
     return target?.document.uri.toString() === stock.toString() && /^\[coll_/i.test(target.document.getText(target.selection))
       && target.document.lineAt(target.selection.start.line + 1).text.trim() === "Collider=Sphere";
-  }, "Ctrl+click on the rendered sphere did not select its INI definition");
+  }, "Shift+click on the rendered sphere did not select its INI definition");
   const target = vscode.window.activeTextEditor;
   target.revealRange(target.selection, vscode.TextEditorRevealType.InCenter);
-  await screen.capture("20-preview-definition", "Ctrl+click opens the collider definition beside the preview", { preview: true });
+  await screen.capture("20-preview-definition", "Shift+click opens the collider definition beside the preview", { preview: true });
   await screen.resize(1180, 560);
   await renderedModel(port, inspectSpruance, "hierarchy");
   await waitFor(() => target.document.getText(target.selection) === "[VLS_Module_Fwd_{lr}_{rm}]", "Hierarchy link to repeat template");

@@ -5,6 +5,7 @@ export type ObjectGroup = "Sensors" | "Weapons" | "Decoys" | "Combat systems" | 
 export interface EntityObject {
   id: string; name: string; group: ObjectGroup; system?: string; source?: IniSource;
   anchor?: string; position?: Vector; placement: string;
+  firingArcs?: string; elevationArc?: string;
 }
 export interface EntityPart {
   id: string; name: string; parent?: string; geometry?: number; texture?: number;
@@ -143,6 +144,7 @@ export function entityObjects(doc: ReturnType<typeof parse>, parts: EntityPart[]
     const group = magazine ? "Magazines" : groups.find(([pattern]) => pattern.test(section.name))?.[1];
     if (!group) continue;
     const obj: EntityObject = {id:"object:"+section.name.toLowerCase(),name:section.name,group,source:section.source,
+      firingArcs:field(section,"firingarcs")?.value,elevationArc:field(section,"elevationarc")?.value,
       system:field(section,"systemname")?.value || field(section,"type")?.value,placement:"No spatial reference"};
     objects.push(obj);
     const mount = field(section,"mount")?.value;

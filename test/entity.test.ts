@@ -12,6 +12,20 @@ import { applyDisplay, previewLayer } from "../src/preview-display";
 import { hoverStack, sourceLocation } from "../src/entity-inspect";
 import {unitCard} from "../src/unit-card";
 import {StockAssets} from "../src/stock-assets";
+import {systemArcs} from "../src/system-arcs";
+
+test("system arc guides preserve separate firing sectors, wrap past 180 and show elevation",()=>{
+  const doc=expandEntityIni("[Models]\nMesh=hull\n[WeaponSystem1]\nMountPosition=0,0,0\nFiringArcs=150,-150|-30,30\nElevationArc=-15,85");
+  const [obj]=entityObjects(doc,entityParts(doc,new Set()).map(p=>p.part));
+  assert.equal(obj.elevationArc,"-15,85");
+  const guide=systemArcs(obj), points=guide.geometry.getAttribute("position");
+  const vertices=Array.from({length:points.count},(_,i)=>new Vector3().fromBufferAttribute(points,i));
+  assert.ok(vertices.some(p=>p.z < -0.999));
+  assert.ok(vertices.some(p=>p.z > 0.999));
+  assert.ok(vertices.every(p=>Math.abs(p.x)<0.51));
+  assert.ok(vertices.some(p=>p.y>0.99) && vertices.some(p=>p.y < -0.25));
+  assert.equal(systemArcs({...obj,firingArcs:"bad",elevationArc:"85,-15"}),undefined);
+});
 
 test("unit cards use mod names, inherited particulars and variant profile art in game lookup order",async()=>{
   const catalog=new Catalog(), docs=new Map();
