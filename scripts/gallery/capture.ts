@@ -136,6 +136,9 @@ async function capture(screen) {
   await screen.resize(920, 600);
   await command("vscode.openWith", stock, "seapower-ini.entity", vscode.ViewColumn.One);
   const port = Number(process.env.SP_GALLERY_PORT);
+  await renderedModel(port, inspectSpruance, "overview");
+  await screen.pan(470,310,-25,-85);
+  await screen.capture("26-entity-preview","Spruance VLS in the entity preview",{preview:true});
   await renderedModel(port, inspectSpruance, "mesh");
   await screen.capture("18-entity-mesh-hover", "Mesh tooltip on the assembled Spruance", { preview: [0,0.40,0.85,1] });
   await renderedModel(port, inspectSpruance, "trees");
@@ -161,11 +164,11 @@ async function capture(screen) {
   target.revealRange(target.selection, vscode.TextEditorRevealType.InCenter);
   await screen.capture("21-hierarchy-definition", "Repeated mesh and its source template", { preview: true });
   await command("workbench.action.closeAllEditors");
-  await screen.resize(850,900);
+  await screen.resize(850,745);
   await command("vscode.openWith",stock,"seapower-ini.card",vscode.ViewColumn.One);
   await renderedModel(port,()=>{
     const profile=document.querySelector<HTMLImageElement>("#profile"), flag=document.querySelector<HTMLImageElement>("#flag");
-    return profile?.naturalWidth && flag?.naturalWidth && document.querySelector("h1")?.textContent.includes("Spruance")
+    return profile?.getBoundingClientRect().height>0 && profile.naturalWidth && flag?.naturalWidth && document.querySelector("#groups")?.textContent.includes("SPS-40") && document.querySelector("h1")?.textContent.includes("Spruance")
       ? "verified controls" : [document.querySelector("h1")?.textContent,profile?.naturalWidth,flag?.naturalWidth,document.querySelector("[role=status]")?.textContent].join(" / ");
   });
   await screen.capture("24-unit-card","Spruance VLS unit reference card",{preview:true});

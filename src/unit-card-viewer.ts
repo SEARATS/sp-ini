@@ -17,12 +17,17 @@ function picture(id:string,png:string,alt:string) {
   if (png) img.src="data:image/png;base64,"+png;
   else img.removeAttribute("src");
 }
-function rows(id:string,items:{label:string;value:string}[]) {
+function rows(id:string,items:{label:string;values:string[]}[]) {
   const list=el(id);
   list.hidden=!items.length;
-  list.replaceChildren(...items.map(({label,value})=>{
+  list.replaceChildren(...items.map(({label,values})=>{
     const row=document.createElement("div"), term=document.createElement("dt"), text=document.createElement("dd");
-    term.textContent=label+":"; text.textContent=value; row.append(term,text); return row;
+    term.textContent=label+":";
+    for (const value of values) {
+      const item=document.createElement("span");
+      item.textContent=value; text.append(item);
+    }
+    row.append(term,text); return row;
   }));
 }
 entity.onchange=()=>vscode.postMessage({type:"select",entity:entity.value});
@@ -38,9 +43,10 @@ window.addEventListener("message",({data}:{data:{card?:Card;error?:string}})=>{
     status.hidden=false; status.textContent=card.error; el("article").hidden=true; return;
   }
   el("h1").textContent=card.title; el("#classification").textContent=card.classification;
-  el("#nation span").textContent=card.nation || "";
-  picture("#flag",card.flag,""); picture("#profile",card.profile,card.title+" side profile"); el("#missing").hidden=!!card.profile;
-  rows("#facts",card.facts); rows("#groups",card.groups.map(g=>({label:g.label,value:g.values.join("  ·  ")})));
+  picture("#flag",card.flag,card.nation || ""); el("#flag").title=card.nation || "";
+  el("#nation").textContent=card.nation || ""; el("#nation").hidden=!!card.flag || !card.nation;
+  picture("#profile",card.profile,card.title+" side profile"); el("#missing").hidden=!!card.profile;
+  rows("#facts",card.facts.map(f=>({label:f.label,values:[f.value]}))); rows("#groups",card.groups);
   el("#description").textContent=card.description || ""; el("#description").hidden=!card.description;
   el("article").hidden=false;
   vscode.setState({entity:card.entity,appearance:card.appearance});

@@ -8,25 +8,21 @@ Ctrl+click an underlined INI value to open its source. Hover over a mesh to see 
 
 ## Visual previews
 
-Click **Preview Unit Card** in an INI editor to open the Sea Power Unit Reference beside the text. It shows the unit’s profile, flag, specifications, equipment and description. The selectors switch between mission units, ship variants and aircraft squadrons. Edits to the open INI update the card.
+Click **Preview Entity** in the upper-right corner of a unit INI to see the assembled model beside its source.
+
+[![Spruance VLS in the entity preview][entity-overview]][entity-overview]
+
+Use the **Meshes**, **Colliders**, and **Objects** trees to show or hide parts. Tooltips list the colliders under your pointer. Ctrl+click a mesh or system to open its INI section. On a collider, Ctrl+click opens its system and Shift+click opens its definition. On macOS, use Command instead of Ctrl.
+
+Firing and elevation arcs appear by default. Select a system to see its angles.
+
+[![Firing and elevation arcs on the Spruance][system-arcs]][system-arcs]
+
+Click **Preview Unit Card** to see the unit's profile, specifications and equipment. Use the selectors to switch units, ship variants or aircraft squadrons.
 
 [![Spruance VLS unit reference card][unit-card]][unit-card]
 
-Click **Preview Entity** in the upper-right corner of the INI editor to open the selected unit beside its source. Ctrl+click a mesh to open its INI section. On a collider, Ctrl+click opens the system that uses it and Shift+click opens the collider definition. Shared colliders offer a choice of systems. On macOS, use Command for Ctrl.
-
-The INI preview has separate **Meshes**, **Colliders**, and **Objects** trees. Enable **Colliders** to draw them over the model. The main hull is white. Unassigned structures such as the superstructure are light grey. Sensors are blue, weapons red, magazines orange, and other linked objects purple. A collider shared with a weapon is red. Hover over a collider to see which sections use it. Objects show a separate marker when their linked colliders are hidden or unavailable. Select a marker to reveal its row, or Ctrl+click it to open its INI section.
-
-Hover lists every visible collider under the pointer. Weapons appear first, followed by other systems, the main hull, and unassigned structures. Within each group the nearest appears first. Alt+scroll moves through long tooltips. Sphere collider detail follows its in-game size.
-
-Select a system in the **Objects** tree to see its authored angles. Yellow shows horizontal `FiringArcs` and cyan shows the vertical `ElevationArc`. The tooltip and legend show the INI values in degrees.
-
-[![Selected system firing and elevation arcs][system-arcs]][system-arcs]
-
-Hovered colliders brighten, with the strongest highlight on the first collider. Editing the INI preserves your camera and expanded branches. The last valid preview stays visible while you type.
-
-Open an OBJ or FBX for a 3D preview. Use the tree to show or hide parts and switch between shaded and wireframe views. You can collapse branches in the FBX hierarchy and fold objects and groups in OBJ text view.
-
-Mesh names containing `coll` or tagged `_col` are marked as likely colliders. Matching is case-insensitive.
+OBJ and FBX files open in a 3D preview. Use the hierarchy to hide parts or switch between shaded and wireframe views. In text view, you can fold FBX branches and OBJ objects or groups. Mesh names containing `coll` or tagged `_col` are marked as likely colliders, regardless of case.
 
 ## Export from FBX
 
@@ -94,7 +90,8 @@ The examples use the stock Spruance VLS destroyer. Select a screenshot to view i
 [sphere-colliders]: https://raw.githubusercontent.com/SEARATS/binaries/c7fa4552f83481e42155c44ee9926fe21dc8ac26/sp-ini/19-sphere-colliders.png
 [preview-definition]: https://raw.githubusercontent.com/SEARATS/binaries/e91f936c5d8f2e3addd7dbca97da93c60213503a/sp-ini/20-preview-definition.png
 [hierarchy-definition]: https://raw.githubusercontent.com/SEARATS/binaries/e91f936c5d8f2e3addd7dbca97da93c60213503a/sp-ini/21-hierarchy-definition.png
-[entity-trees]: https://raw.githubusercontent.com/SEARATS/binaries/e91f936c5d8f2e3addd7dbca97da93c60213503a/sp-ini/22-entity-trees.png
+[entity-trees]: https://raw.githubusercontent.com/SEARATS/binaries/0fac4c86b369cc7f1e05f21a26d11843b938a95b/sp-ini/22-entity-trees.png
 [collider-highlight]: https://raw.githubusercontent.com/SEARATS/binaries/c7fa4552f83481e42155c44ee9926fe21dc8ac26/sp-ini/23-collider-highlight.png
-[system-arcs]: https://raw.githubusercontent.com/SEARATS/binaries/c7fa4552f83481e42155c44ee9926fe21dc8ac26/sp-ini/25-system-arcs.png
-[unit-card]: https://raw.githubusercontent.com/SEARATS/binaries/a0eab6bf2516b5ef42dcb0afedfcd11542eebe91/sp-ini/24-unit-card.png
+[system-arcs]: https://raw.githubusercontent.com/SEARATS/binaries/0fac4c86b369cc7f1e05f21a26d11843b938a95b/sp-ini/25-system-arcs.png
+[unit-card]: https://raw.githubusercontent.com/SEARATS/binaries/0fac4c86b369cc7f1e05f21a26d11843b938a95b/sp-ini/24-unit-card.png
+[entity-overview]: https://raw.githubusercontent.com/SEARATS/binaries/0fac4c86b369cc7f1e05f21a26d11843b938a95b/sp-ini/26-entity-preview.png

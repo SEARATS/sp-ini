@@ -115,7 +115,8 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
       <select id="meshWireframe" aria-label="Mesh render mode"><option value="shaded">Shaded</option><option value="wireframe">Wireframe</option></select>
       <label><input id="colliders" type="checkbox" checked>Colliders</label>
       <select id="colliderWireframe" aria-label="Collider render mode"><option value="shaded">Shaded</option><option value="wireframe" selected>Wireframe</option></select>
-      <div id="object-filter" hidden><label><input id="objects" type="checkbox" checked>Object markers</label></div></div>
+      <div id="object-filter" hidden><label><input id="objects" type="checkbox" checked>Object markers</label></div>
+      <div id="arc-filter" hidden><label><input id="arcs" type="checkbox" checked>System arcs</label></div></div>
       <p></p><details id="entity-warnings" hidden><summary></summary><div></div></details><ul></ul></details>
       <script nonce="${nonce}" src="${script}"></script></body></html>`;
   }

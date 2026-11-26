@@ -24,13 +24,39 @@ let renderer, controls, model;
 const objectLabels = new Map<string,HTMLElement>();
 let active: {id:string; scene:EntityScene; view:ReturnType<typeof assembledEntity>};
 let bright:string[] = [], pickedObject:string;
-let arcGuide:ReturnType<typeof systemArcs>;
+const arcGuides=new Map<string,{guide:ReturnType<typeof systemArcs>;firingArcs?:string;elevationArc?:string}>();
 const arcValues=document.querySelector<HTMLElement>("#arc-values");
-function showArcs(id?:string) {
-  if (arcGuide) {
-    scene.remove(arcGuide); arcGuide.geometry.dispose(); arcGuide.material.dispose(); arcGuide=undefined;
+function syncArcs() {
+  const unused=new Set(arcGuides.keys());
+  for (const obj of active.scene.objects || []) {
+    const anchor=active.view.widgets.get(obj.id);
+    if (!anchor || !(obj.firingArcs || obj.elevationArc)) continue;
+    let entry=arcGuides.get(obj.id);
+    unused.delete(obj.id);
+    if (!entry || entry.firingArcs!==obj.firingArcs || entry.elevationArc!==obj.elevationArc) {
+      if (entry) removeArc(obj.id);
+      const guide=systemArcs(obj);
+      if (!guide) continue;
+      entry={guide,firingArcs:obj.firingArcs,elevationArc:obj.elevationArc};
+      arcGuides.set(obj.id,entry);
+      scene.add(guide);
+    }
+    anchor.getWorldPosition(entry.guide.position);
+    anchor.getWorldQuaternion(entry.guide.quaternion);
+    entry.guide.scale.setScalar(bounds.radius*0.17);
   }
-  const obj=active?.scene.objects?.find(obj=>obj.id===id);
+  unused.forEach(removeArc);
+}
+function removeArc(id:string) {
+  const entry=arcGuides.get(id);
+  if (!entry) return;
+  scene.remove(entry.guide);
+  entry.guide.geometry.dispose();
+  entry.guide.material.dispose();
+  arcGuides.delete(id);
+}
+function showArcValues() {
+  const obj=active?.scene.objects?.find(obj=>obj.id===pickedObject);
   arcValues.replaceChildren();
   if (!obj) return;
   for (const [label,value,color] of [["FiringArcs",obj.firingArcs,"#ffdf72"],["ElevationArc",obj.elevationArc,"#71dfff"]]) {
@@ -38,9 +64,6 @@ function showArcs(id?:string) {
     const span=document.createElement("span");
     span.style.color=color; span.textContent=label+"="+value; arcValues.append(span,"  ");
   }
-  if (!active.view.widgets.has(id)) return;
-  arcGuide=systemArcs(obj);
-  if (arcGuide) scene.add(arcGuide);
 }
 const white=new Color(0xffffff);
 function highlight(ids:string[]) {
@@ -62,7 +85,7 @@ function selectObject(id: string, reveal: boolean) {
   const selected = objectLabels.get(id);
   if (!selected) return;
   pickedObject=id;
-  showArcs(id);
+  showArcValues();
   for (const label of objectLabels.values()) label.classList.toggle("selected-object",label === selected);
   if (reveal) {
     for (let el: HTMLElement = selected; el; el=el.parentElement) if (el instanceof HTMLDetailsElement) el.open=true;
@@ -83,13 +106,13 @@ const picker = document.querySelector<HTMLElement>("#entity-pickers");
 const entitySelect = picker.querySelector<HTMLSelectElement>("#entity"), appearanceSelect = picker.querySelector<HTMLSelectElement>("#appearance");
 const warnings = document.querySelector<HTMLDetailsElement>("#entity-warnings");
 const settings: DisplaySettings = {
-  meshes: saved?.meshes ?? true, colliders: saved?.colliders ?? true, objects:saved?.objects ?? true,
+  meshes: saved?.meshes ?? true, colliders: saved?.colliders ?? true, objects:saved?.objects ?? true, arcs:saved?.arcs ?? true,
   meshWireframe: saved?.meshWireframe ?? saved?.wireframe ?? false, colliderWireframe: saved?.colliderWireframe ?? true
 };
 const hidden = new Set<string>(saved?.hidden);
 const categories = new Map<string, boolean>();
 let updateRows: (() => void)[] = [];
-const inCategory = (part: PreviewPart) => part.widget ? settings.objects : part.collider ? settings.colliders : settings.meshes;
+const inCategory = (part: PreviewPart) => part.widget ? settings.objects || (settings.arcs && arcGuides.has(part.id)) : part.collider ? settings.colliders : settings.meshes;
 function updateDisplay() {
   updateRows.forEach(update => update());
   if (model) { applyDisplay(model, categories, hidden, settings); draw(); }
@@ -100,7 +123,7 @@ function changed() {
 }
 entitySelect.onchange = () => vscode.postMessage({type:"selectEntity",entity:entitySelect.value});
 appearanceSelect.onchange = () => vscode.postMessage({type:"selectEntity",entity:entitySelect.value,appearance:appearanceSelect.value});
-for (const category of ["meshes","colliders","objects"] as const) {
+for (const category of ["meshes","colliders","objects","arcs"] as const) {
   const input = document.querySelector<HTMLInputElement>("#"+category);
   input.checked = settings[category];
   input.onchange = () => { settings[category] = input.checked; changed(); };
@@ -190,7 +213,7 @@ function draw() {
   render();
 }
 function render() {
-  arcValues.hidden=!arcValues.childElementCount || !settings.objects || hidden.has(pickedObject);
+  arcValues.hidden=!arcValues.childElementCount || !settings.arcs || hidden.has(pickedObject);
   renderer.clear();
   camera.layers.set(previewLayer.mesh);
   renderer.render(scene,camera);
@@ -209,17 +232,18 @@ function render() {
       }
     }
   }
-  if (settings.objects && selectedEntity) {
-    if (arcGuide) {
-      const anchor=active.view.widgets.get(pickedObject);
-      arcGuide.visible=!!anchor && !hidden.has(pickedObject);
-      if (arcGuide.visible) {
-        anchor.getWorldPosition(arcGuide.position); anchor.getWorldQuaternion(arcGuide.quaternion);
-        arcGuide.scale.setScalar(bounds.radius*0.17);
+  if (selectedEntity && (settings.objects || settings.arcs)) {
+    renderer.clearDepth();
+    camera.layers.disableAll();
+    if (settings.objects) camera.layers.enable(previewLayer.widget);
+    if (settings.arcs) {
+      camera.layers.enable(previewLayer.arc);
+      for (const [id,{guide}] of arcGuides) {
+        guide.visible=!hidden.has(id);
+        guide.material.color.setScalar(arcGuides.has(pickedObject) && pickedObject!==id ? 0.45 : 1);
+        guide.renderOrder=pickedObject===id ? 13 : 12;
       }
     }
-    renderer.clearDepth();
-    camera.layers.set(previewLayer.widget);
     renderer.render(scene,camera);
   }
   camera.layers.set(previewLayer.mesh);
@@ -289,22 +313,18 @@ async function loadEntity(id:string, next:EntityScene, documentUri:string) {
       if (oldVisibility.has(part.id) && oldVisibility.get(part.id)!==part.visible && part.visible) hidden.delete(part.id);
       if (!part.visible && oldVisibility.get(part.id)!==false) hidden.add(part.id);
     }
-    if (!initializedEntity && !vscode.getState()) {
-      settings.colliders=false;
-      document.querySelector<HTMLInputElement>("#colliders").checked=false;
-    }
     initializedEntity=id;
     active={id,scene:next,view};
+    syncArcs();
     inspector.setParts([...next.parts,...(next.objects || [])],documentUri);
     if (staged) {
-      showArcs();
-      if (!same) pickedObject=undefined;
+      if (!same || !next.objects?.some(obj=>obj.id===pickedObject)) pickedObject=undefined;
       showOutline(view.outline,"",undefined,same);
       if (pickedObject) selectObject(pickedObject,false);
     } else {
       inspector.refreshLinks(outline);
-      if (pickedObject) showArcs(pickedObject);
     }
+    showArcValues();
     changed();
     if (!same) frame();
     canvas.setAttribute("aria-label",[id,selectedAppearance].filter(Boolean).join(" · ")+" 3D preview");
@@ -391,6 +411,7 @@ window.addEventListener("message", ({ data }) => {
   if (data.type === "entityChoices") {
     outline.querySelector("summary").textContent = "Entity hierarchy";
     document.getElementById("object-filter").hidden = false;
+    document.getElementById("arc-filter").hidden = false;
     selectedEntity = data.entity; selectedAppearance = data.appearance;
     for (const [select,choices,value] of [[entitySelect,data.entities,selectedEntity],[appearanceSelect,data.appearances,selectedAppearance]] as const) {
       if (choices.length!==select.length || choices.some((c,i)=>select.options[i].value!==c.id || select.options[i].text!==c.label))

@@ -94,6 +94,12 @@ async function camera() {
   return {
     close: () => socket.close(),
     resize,
+    async pan(x:number,y:number,dx:number,dy:number) {
+      const start={x,y,button:"left",buttons:1,modifiers:8};
+      await call("Input.dispatchMouseEvent",{...start,type:"mousePressed",clickCount:1});
+      await call("Input.dispatchMouseEvent",{...start,type:"mouseMoved",x:x+dx,y:y+dy});
+      await call("Input.dispatchMouseEvent",{type:"mouseReleased",button:"left",x:x+dx,y:y+dy,clickCount:1});
+    },
     async escape() {
       for (const type of ["keyDown", "keyUp"]) await call("Input.dispatchKeyEvent", { type, key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
     },

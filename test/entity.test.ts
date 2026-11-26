@@ -43,7 +43,7 @@ test("unit cards use mod names, inherited particulars and variant profile art in
     catalog,new Materials(uri=>docs.get(uri)),stock);
   assert.ok(!("error" in card));
   assert.equal(card.title,"Second ship"); assert.equal(card.description,"Stock description");
-  assert.deepEqual(card.facts,[{label:"Length",value:"123 m"}]);
+  assert.deepEqual(card.facts,[{label:"Length",value:"123 m"},{label:"Range",value:"0 nm"}]);
   assert.deepEqual(paths,["ui/profiles/copy_2","ui/profiles/copy","ui/profiles/base_2"]);
   assert.equal(card.profile,"image");
 });

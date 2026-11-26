@@ -1,12 +1,13 @@
 import { Mesh, type Material, type Object3D } from "three";
 import { isColliderName } from "./mesh-names";
 
-export const previewLayer = { mesh:0, collider:1, widget:2, highlight:3 } as const;
+export const previewLayer = { mesh:0, collider:1, widget:2, highlight:3, arc:4 } as const;
 
 export interface DisplaySettings {
   meshes: boolean;
   colliders: boolean;
   objects?: boolean;
+  arcs?: boolean;
   meshWireframe: boolean;
   colliderWireframe: boolean;
 }

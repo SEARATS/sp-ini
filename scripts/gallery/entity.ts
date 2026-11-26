@@ -1,5 +1,5 @@
 // Runs inside the actual preview. Find the part under a painted pixel using its normal hover handler.
-export async function inspectSpruance(mode: "mesh" | "sphere" | "overlap" | "trees" | "arcs" | "open" | "hierarchy") {
+export async function inspectSpruance(mode: "overview" | "mesh" | "sphere" | "overlap" | "trees" | "arcs" | "open" | "hierarchy") {
   const canvas = document.querySelector<HTMLCanvasElement>('canvas[aria-label*="spruance"]');
   if (!canvas || !document.querySelector("[role=status]")?.textContent.includes("Drag to orbit")) return "waiting for Spruance";
   const tip = document.querySelector<HTMLElement>("#part-tip");
@@ -23,13 +23,14 @@ export async function inspectSpruance(mode: "mesh" | "sphere" | "overlap" | "tre
   }
   const outline=document.querySelector<HTMLDetailsElement>("#outline");
   outline.open = mode === "trees";
-  for (const id of ["meshes","colliders","objects"]) {
+  for (const id of ["meshes","colliders","objects","arcs"]) {
     const control = document.querySelector<HTMLInputElement>("#"+id);
-    const on=id==="objects" ? mode==="trees" || mode==="arcs" : id==="meshes" ? mode!=="sphere" : mode!=="mesh" && mode!=="arcs";
+    const on=id==="arcs" || id==="objects" ? mode==="trees" || mode==="arcs" : id==="meshes" ? mode!=="sphere" : !["overview","mesh","arcs"].includes(mode);
     if (control.checked !== on) control.click();
   }
   document.querySelector("button").click(); // Fit before each capture so retries use the same camera.
-  canvas.dispatchEvent(new WheelEvent("wheel",{deltaY:mode === "sphere" ? -2200 : -970,cancelable:true}));
+  canvas.dispatchEvent(new WheelEvent("wheel",{deltaY:mode === "sphere" ? -2200 : mode === "overview" ? -1850 : -970,cancelable:true}));
+  if (mode==="overview") return "verified controls";
   if (mode==="arcs") {
     document.querySelector<HTMLElement>('[data-part-id="object:weaponsystem7"]').click();
     const legend=document.querySelector<HTMLElement>("#arc-values");

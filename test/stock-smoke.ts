@@ -91,6 +91,21 @@ export const run = async () => {
           tree.querySelectorAll("input").length > 35 && document.querySelector("[role=status]")?.textContent.includes("Drag to orbit")) return "verified controls";
       return document.querySelector("[role=status]")?.textContent || "waiting";
     });
+    await renderedModel(port,()=>{
+      const canvas=document.querySelector<HTMLCanvasElement>('canvas[aria-label*="spruance"]');
+      const arcs=document.querySelector<HTMLInputElement>("#arcs"), colliders=document.querySelector<HTMLInputElement>("#colliders");
+      if (!canvas || !arcs?.checked || !colliders?.checked || document.querySelector(".selected-object")) return "waiting for initial overlays";
+      function pixels() {
+        document.querySelector("#meshWireframe").dispatchEvent(new Event("change"));
+        return canvas.toDataURL();
+      }
+      const initial=pixels();
+      arcs.click(); const noArcs=pixels();
+      colliders.click(); const noColliders=pixels();
+      colliders.click(); arcs.click();
+      return initial!==noArcs && noArcs!==noColliders && initial===pixels() ? "verified controls" : "initial overlays did not draw";
+    });
+    outcomes.push("Verified firing arcs and colliders render before selecting a system");
     outcomes.push("Assembled Spruance with nested and repeated submodels and variant selector");
     await renderedModel(port,()=>{
       const roots = Array.from(document.querySelectorAll("#outline > ul > li > details > summary")).map(el=>el.textContent);
@@ -98,6 +113,8 @@ export const run = async () => {
       if (roots.join("/")!=="Meshes/Colliders/Objects" || !row) return "waiting for sensor tree";
       const checkbox = row.querySelector("input"), objects = document.querySelector<HTMLInputElement>("#objects");
       if (!checkbox?.checked) return "missing sensor marker";
+      const arcs=document.querySelector<HTMLInputElement>("#arcs");
+      if (arcs.checked) arcs.click();
       objects.click();
       const off = checkbox.disabled;
       objects.click();
@@ -111,6 +128,8 @@ export const run = async () => {
       const canvas = document.querySelector<HTMLCanvasElement>('canvas[aria-label*="spruance"]');
       const meshes = document.querySelector<HTMLInputElement>("#meshes"), colliders = document.querySelector<HTMLInputElement>("#colliders");
       if (!canvas || !meshes || !colliders) return "waiting for Spruance";
+      const arcs=document.querySelector<HTMLInputElement>("#arcs");
+      if (arcs.checked) arcs.click();
       if (colliders.checked) colliders.click();
       if (meshes.checked) meshes.click();
       const sample = document.createElement("canvas");
@@ -338,6 +357,11 @@ export const run = async () => {
       if (!document.querySelector<HTMLImageElement>("#profile")?.naturalWidth ||
         !document.querySelector("#facts")?.textContent.includes("172 m") || !document.querySelector("#groups")?.textContent.includes("SPS-40"))
         return "waiting for Spruance card";
+      const rows=Array.from(document.querySelectorAll("#groups > div"));
+      const weapons=rows.find(row=>row.firstElementChild.textContent==="Weapons:");
+      const defences=rows.find(row=>row.firstElementChild.textContent==="Defences:");
+      if (weapons?.textContent.includes("Chaff") || !defences?.textContent.includes("Chaff") || !defences.textContent.includes("Noisemaker"))
+        return "waiting for stock countermeasures in Defences";
       const variant=document.querySelector<HTMLSelectElement>("#appearance");
       if (variant.value!=="Variant2") {variant.value="Variant2";variant.dispatchEvent(new Event("change"));return "selecting variant";}
       return document.querySelector("h1").textContent.includes("Foster") ? "verified controls" : "waiting for variant name";

@@ -31,7 +31,7 @@ export function systemArcs(system:EntityObject) {
   geometry.setAttribute("position",new Float32BufferAttribute(points,3));
   geometry.setAttribute("color",new Float32BufferAttribute(colors,3));
   const guide=new LineSegments(geometry,new LineBasicMaterial({vertexColors:true,depthTest:false,depthWrite:false}));
-  guide.layers.set(previewLayer.widget);
+  guide.layers.set(previewLayer.arc);
   guide.renderOrder=12;
   return guide;
 }

@@ -47,15 +47,15 @@ export async function unitCard(request:PreviewRequest, catalog:Catalog, material
   }
   fact("Length",read("general","length"),"m");
   fact(air ? "Wingspan" : "Beam",air ? read("performance","wingspan") : read("general","beam"),"m");
-  fact("Max Speed",air ? read(kind==="helicopter" ? "physics" : "performance","maxspeedatsealevel") : read("physics","maxforwardvelocity"),"kt");
+  fact("Max Speed",air ? read(kind==="helicopter" ? "physics" : "performance","maxspeedatsealevel") : read("physics","maxforwardvelocity"),"kts");
   if (air) fact("Empty Mass",read(kind==="helicopter" ? "physics" : "performance","emptymass"),"kg");
   else if (kind==="landunit") fact("Mass",read("physics","mass"),"kg");
   else fact("Displacement",read("physics","displacement"),"t");
-  if (!air) fact("Range",read("general","range"),"nm");
+  if (!air) fact("Range",read("general","range") || "0","nm");
   const groups:{label:string;values:string[]}[]=[];
   function group(label:string,names:string[]) {
     const values=[...new Set(names.filter(Boolean))];
-    if (values.length) groups.push({label,values});
+    groups.push({label,values:values.length ? values : ["None"]});
   }
   function systems(system:string) {
     const count=Number(read(system+"s","numberof"+system+"s") || 0);
@@ -70,7 +70,7 @@ export async function unitCard(request:PreviewRequest, catalog:Catalog, material
     const names=local("ammunition_names","ammunitionnames",id.toLowerCase())?.split(",");
     return names ? [...new Set(names.slice(0,2).map(n=>n.trim()).filter(Boolean))].join(" ") : id;
   }
-  group("Weapons",systems("weaponsystem").flatMap(s=>{
+  function equipment(s:(typeof doc.sections)[number]) {
     const mount=systemName(field(s,"systemname")?.value);
     if (/^(gun|ciws)$/i.test(field(s,"type")?.value)) return [mount];
     const ammo=field(s,"ammunition")?.value;
@@ -81,9 +81,12 @@ export async function unitCard(request:PreviewRequest, catalog:Catalog, material
       return index && +index[1]>=1 && +index[1]<=count;
     }).map(k=>k.value);
     return ids.length ? ids.map(ammoName) : [mount];
-  }));
+  }
+  const mounts=systems("weaponsystem");
+  const isDefence=(s:(typeof doc.sections)[number])=>/^(chaff|noisemaker)$/i.test(field(s,"type")?.value);
+  group("Weapons",mounts.filter(s=>!isDefence(s)).flatMap(equipment));
   group("Sensors",systems("sensorsystem").map(s=>systemName(field(s,"systemname")?.value)));
-  group("Defences",systems("decoysystem").map(s=>systemName(field(s,"systemname")?.value)));
+  group("Defences",[...mounts.filter(isDefence).flatMap(equipment),...systems("decoysystem").map(s=>systemName(field(s,"systemname")?.value))]);
   const customAir=field(paint.selected,"customairgroup")?.value.toLowerCase()==="true";
   const airGroup=customAir ? paint.selected : sections.get("airgroup");
   group("Aircraft",(airGroup?.keys || []).filter(k=>!customAir || /^\w+,\d+$/.test(k.value)).map(k=>{
