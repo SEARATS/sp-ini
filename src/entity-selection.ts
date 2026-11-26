@@ -6,9 +6,9 @@ import { field, expandEntityIni } from "./entity-model";
 
 export interface Choice { id: string; label: string }
 export interface Appearance { general?: IniSection; defaults?: IniSection; selected?: IniSection }
-export interface PreviewRequest {uri: string; text: string; entity?: string; appearance?: string; render?: boolean}
+export interface PreviewRequest {uri: string; text: string; entity?: string; appearance?: string; render?: boolean; card?: boolean; locale?: string}
 
-export async function entityDocument(text: string, uri: string, catalog: Catalog, materials: Materials, ancestors = new Set<string>()) {
+export async function entityDocument(text: string, uri: string, catalog: Catalog, materials: Materials, ancestors = new Set<string>(), copySources?: string[]) {
   const doc = expandEntityIni(text, uri);
   const base = doc.modifiers.find(m => /^(alias|copy|extend|prepend)$/.test(m.name));
   if (!base) return doc;
@@ -18,7 +18,8 @@ export async function entityDocument(text: string, uri: string, catalog: Catalog
   if (!file || ancestors.has(uriKey(file.uri))) throw Error("Cannot resolve entity base " + base.args);
   const source = await materials.readIni(file);
   if (!source) throw Error("Cannot read entity base " + base.args);
-  const inherited = await entityDocument(source.lines.join("\n"),file.uri,catalog,materials,new Set([...ancestors,uriKey(uri)]));
+  if (base.name==="copy" || base.name==="alias") copySources?.push(path.basename(normalize(file.rel),".ini"));
+  const inherited = await entityDocument(source.lines.join("\n"),file.uri,catalog,materials,new Set([...ancestors,uriKey(uri)]),copySources);
   const sections = new Map<string,IniSection>();
   const ordered = base.name === "prepend" ? [...doc.sections,...inherited.sections] : [...inherited.sections,...doc.sections];
   for (const s of ordered) {

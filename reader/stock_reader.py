@@ -21,9 +21,12 @@ class StockArchive:
         self.env = env
         self.names = defaultdict(list)
         self.paths = defaultdict(set)
+        self.textures = {}
         for asset in env.objects:
             if asset.type.name in ("Mesh", "Material", "Texture2D"):
                 self.names[(asset.type.name, (asset.peek_name() or "").casefold())].append(asset)
+                if asset.type.name == "Texture2D":
+                    self.textures[asset.path_id] = asset
         managers = UnityPy.load(str(data / "globalgamemanagers"))
         for obj in managers.objects:
             if obj.type.name != "ResourceManager":
@@ -40,15 +43,21 @@ class StockArchive:
         return candidates[0].read() if len(candidates) == 1 else None
 
     @staticmethod
-    def image(texture):
+    def image(texture, size=384):
         image = texture.image.convert("RGBA")
-        image.thumbnail((384, 384), Image.Resampling.LANCZOS)
+        image.thumbnail((size, size), Image.Resampling.LANCZOS)
         encoded = io.BytesIO()
         image.save(encoded, "PNG")
         return {"name": texture.m_Name, "png": base64.b64encode(encoded.getvalue()).decode("ascii")}
 
     def read(self, query):
         kind, name = query["kind"], query["name"]
+        if kind == "ResourceTexture":
+            ids = self.paths.get(query["scope"].strip("/").casefold(), ())
+            for asset_id in ids:
+                if asset_id in self.textures:
+                    return self.image(self.textures[asset_id].read(), 1024)
+            return None
         item = self.find(kind, name, query.get("scope", ""))
         if item is None:
             return None

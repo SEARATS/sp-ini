@@ -5,6 +5,7 @@ import { LanguageClient, TransportKind } from "vscode-languageclient/node";
 import { referencePatterns } from "./previews";
 import { registerIniActions } from "./ini-actions";
 import { registerObjPreview } from "./obj-preview";
+import {registerUnitCard} from "./unit-card-editor";
 let client;
 
 function registerModIniLanguage() {
@@ -71,6 +72,7 @@ async function activate(context) {
   }
   registerHierarchy(context);
   const indexed = new vscode.EventEmitter<void>();
+  context.subscriptions.push(registerUnitCard(context,(params,token)=>client.sendRequest("seapower/entityPreview",params,token),indexed.event));
   context.subscriptions.push(indexed, registerModIniLanguage(), registerObjPreview(context,(params,token)=>client.sendRequest("seapower/entityPreview",params,token),indexed.event), registerIniActions());
   client = new LanguageClient("seapower-ini", "Sea Power INI",
     { module: context.asAbsolutePath("dist/server.js"), transport: TransportKind.ipc },

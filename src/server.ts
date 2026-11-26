@@ -14,6 +14,7 @@ import { parse } from "./ini";
 import { moveToMount } from "./section-placement";
 import { entityAssets } from "./entity-assets";
 import { selectEntity, type PreviewRequest } from "./entity-selection";
+import {unitCard} from "./unit-card";
 import { iniFolds, objFolds } from "./folding";
 import { completions, diagnostics, documentLinks, exact, inspect, location, source, symbols } from "./features";
 
@@ -77,6 +78,7 @@ connection.onCodeAction(({ textDocument, context }) => {
 connection.onInitialized(() => refresh().catch(error => connection.console.error(String(error))));
 connection.onRequest("seapower/entityPreview", async (request: PreviewRequest, token) => {
   await building;
+  if (request.card) return unitCard(request,catalog,materials,stock);
   const {sourceText,sourceUri,paint,...choices} = await selectEntity(request,catalog,materials);
   if (!request.render) return choices;
   if (!sourceText) throw Error("Missing model definition for "+choices.entities.find(e=>e.id === choices.entity)?.label);

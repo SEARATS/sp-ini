@@ -313,6 +313,31 @@ export const run = async () => {
       return document.querySelector('canvas[aria-label*="Taskforce1Aircraft1"][aria-label*="Squadron2"]') && /usn_p-3c\.ini · line \d+/i.test(source) ? "verified controls" : "waiting for P-3C source";
     });
     outcomes.push("Selected the Northern Passage P-3C and its declared squadron");
+    await vscode.commands.executeCommand("seapower-ini.previewUnitCard",ini);
+    await renderedModel(port,()=>{
+      if (!document.querySelector<HTMLImageElement>("#profile")?.naturalWidth ||
+        !document.querySelector("#facts")?.textContent.includes("172 m") || !document.querySelector("#groups")?.textContent.includes("SPS-40"))
+        return "waiting for Spruance card";
+      const variant=document.querySelector<HTMLSelectElement>("#appearance");
+      if (variant.value!=="Variant2") {variant.value="Variant2";variant.dispatchEvent(new Event("change"));return "selecting variant";}
+      return document.querySelector("h1").textContent.includes("Foster") ? "verified controls" : "waiting for variant name";
+    });
+    outcomes.push("Opened the stock Spruance Unit Reference, checked its profile, specifications and sensors, and switched ships");
+    await vscode.commands.executeCommand("seapower-ini.previewUnitCard",editFile);
+    const length=editDoc.getText().indexOf("Length=172")+"Length=172".length;
+    await insert(editDoc.positionAt(length),".5");
+    await renderedModel(port,()=>document.querySelector("#facts")?.textContent.includes("172.5 m") ?
+      "verified controls" : "waiting for unsaved length");
+    await editDoc.save();
+    await vscode.commands.executeCommand("seapower-ini.previewUnitCard",aircraft);
+    await renderedModel(port,()=>{
+      const selector=document.querySelector<HTMLSelectElement>("#appearance");
+      if (!selector?.querySelector("option[value=Squadron2]")) return "waiting for aircraft card";
+      if (selector.value!=="Squadron2") {selector.value="Squadron2";selector.dispatchEvent(new Event("change"));}
+      return document.querySelector("h1")?.textContent.includes("VF-24") && document.querySelector("#facts")?.textContent.includes("Wingspan") ?
+        "verified controls" : "waiting for VF-24";
+    });
+    outcomes.push("Verified an unsaved unit-card edit and the F-14A squadron card");
     const nationDoc = await vscode.workspace.openTextDocument(vscode.Uri.joinPath(ini,"../../aircraft/fr_f1c_squadrons.ini"));
     await vscode.languages.setTextDocumentLanguage(nationDoc,"seapower-ini");
     const nationLine = nationDoc.getText().split(/\r?\n/).findIndex(l=>/^Nation=South_Africa/i.test(l));

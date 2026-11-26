@@ -10,7 +10,7 @@ import { meshHover } from "./mesh-hover";
 
 type StockImage = { name: string, png: string };
 type StockMaterial = { shader: string, floats: Record<string,number>, maps: Record<string, StockImage> };
-type StockTypes = { Mesh: {obj: string}, Material: StockMaterial, Texture2D: StockImage };
+type StockTypes = { Mesh: {obj: string}, Material: StockMaterial, Texture2D: StockImage, ResourceTexture: StockImage };
 
 export class StockAssets {
   directory?: string;

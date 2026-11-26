@@ -10,6 +10,29 @@ import { Box3, LoadingManager, Mesh, MeshBasicMaterial, Vector3 } from "three";
 import type { EntityPart, Vector } from "../src/entity-model";
 import { applyDisplay, previewLayer } from "../src/preview-display";
 import { hoverStack, sourceLocation } from "../src/entity-inspect";
+import {unitCard} from "../src/unit-card";
+import {StockAssets} from "../src/stock-assets";
+
+test("unit cards use mod names, inherited particulars and variant profile art in game lookup order",async()=>{
+  const catalog=new Catalog(), docs=new Map();
+  function add(rel:string,text:string) {
+    const uri="file:///stock/"+rel, doc=parse(text);
+    catalog.add({rel,uri,source:"Workspace"},doc); docs.set(uri,doc);
+  }
+  add("language_en/vessel_names/custom.ini","[copy]\nDefault=Custom class\nVariant2=Second ship");
+  add("language_en/vessel_names.ini","[copy]\nDefault=Fallback\nType=DD,Destroyer\nDefaultDescription=Stock description");
+  add("vessels/base.ini","[General]\nUnitType=Vessel\nLength=120");
+  const paths:string[]=[];
+  const stock=new StockAssets();
+  stock.read=async (_type,_name,scope)=>{paths.push(scope);return scope==="ui/profiles/base_2" ? {png:"image"} as any : undefined;};
+  const card=await unitCard({uri:"file:///stock/vessels/copy.ini",text:"#!copy vessels/base.ini\n[Default]\n[Variant2]\n[General]\nLength=123",appearance:"Variant2"},
+    catalog,new Materials(uri=>docs.get(uri)),stock);
+  assert.ok(!("error" in card));
+  assert.equal(card.title,"Second ship"); assert.equal(card.description,"Stock description");
+  assert.deepEqual(card.facts,[{label:"Length",value:"123 m"}]);
+  assert.deepEqual(paths,["ui/profiles/copy_2","ui/profiles/copy","ui/profiles/base_2"]);
+  assert.equal(card.profile,"image");
+});
 
 test("INI trees separate display categories while widgets follow their runtime mounts",()=>{
   const text = ["[Models]","ResourcesMesh=hull","[Submodels]","Sensors_1=Mast","[Mast]","Mesh=Dummy","Position=1,2,3",

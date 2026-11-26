@@ -2,7 +2,7 @@
   "name": "seapower-ini",
   "displayName": "Sea Power INI",
   "description": "Autocomplete, error checking and Go to Definition for Sea Power INI files.",
-  "version": "0.8.12",
+  "version": "0.9.0",
   "publisher": "searats",
   "private": true,
   "repository": {
@@ -86,6 +86,16 @@
           }
         ],
         "priority": "option"
+      },
+      {
+        "viewType": "seapower-ini.card",
+        "displayName": "Sea Power Unit Card",
+        "selector": [
+          {
+            "filenamePattern": "*.[iI][nN][iI]"
+          }
+        ],
+        "priority": "option"
       }
     ],
     "commands": [
@@ -145,6 +155,12 @@
         "title": "Preview Entity",
         "category": "Sea Power INI",
         "icon": "$(preview)"
+      },
+      {
+        "command": "seapower-ini.previewUnitCard",
+        "title": "Preview Unit Card",
+        "category": "Sea Power INI",
+        "icon": "$(book)"
       }
     ],
     "menus": {
@@ -175,6 +191,11 @@
           "command": "seapower-ini.previewEntity",
           "when": "resourceExtname =~ /[.]ini$/i && activeCustomEditorId != seapower-ini.entity && (editorLangId == seapower-ini || resourcePath =~ /[\\\\\\/](vessels|aircraft|land_units|biologic|missions)[\\\\\\/]/i)",
           "group": "navigation"
+        },
+        {
+          "command": "seapower-ini.previewUnitCard",
+          "when": "resourceExtname =~ /[.]ini$/i && activeCustomEditorId != seapower-ini.card && (editorLangId == seapower-ini || resourcePath =~ /[\\\\\\/](vessels|aircraft|land_units|biologic|missions)[\\\\\\/]/i)",
+          "group": "navigation"
         }
       ],
       "explorer/context": [
@@ -192,6 +213,10 @@
         },
         {
           "command": "seapower-ini.previewEntity",
+          "when": "resourceExtname =~ /[.]ini$/i && !explorerResourceIsFolder"
+        },
+        {
+          "command": "seapower-ini.previewUnitCard",
           "when": "resourceExtname =~ /[.]ini$/i && !explorerResourceIsFolder"
         }
       ],
@@ -218,6 +243,10 @@
         },
         {
           "command": "seapower-ini.previewEntity",
+          "when": "resourceExtname =~ /[.]ini$/i"
+        },
+        {
+          "command": "seapower-ini.previewUnitCard",
           "when": "resourceExtname =~ /[.]ini$/i"
         }
       ],
@@ -295,10 +324,30 @@
           "scope": "window",
           "items": {
             "type": "string",
-            "enum": ["projectRoot", "data", "resources", "mirror", "localMods", "installedMods", "userMods", "workshop", "game"]
+            "enum": [
+              "projectRoot",
+              "data",
+              "resources",
+              "mirror",
+              "localMods",
+              "installedMods",
+              "userMods",
+              "workshop",
+              "game"
+            ]
           },
           "uniqueItems": true,
-          "default": ["projectRoot", "data", "resources", "mirror", "localMods", "installedMods", "userMods", "workshop", "game"],
+          "default": [
+            "projectRoot",
+            "data",
+            "resources",
+            "mirror",
+            "localMods",
+            "installedMods",
+            "userMods",
+            "workshop",
+            "game"
+          ],
           "description": "Search enabled sources from top to bottom. Unlisted sources follow in their default order. Use the Search checkboxes to disable a source."
         },
         "seapowerIni.search.data": {

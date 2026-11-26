@@ -73,6 +73,7 @@ class Catalog {
   assets = new Map();
   filesByUri = new Map();
   references = new Map();
+  cardDictionaries = new Map<string, Map<string, Map<string,string>>>();
   counts = new Map();
   skipped = 0;
 
@@ -91,6 +92,20 @@ class Catalog {
     this.filesByUri.set(uriKey(file.uri), file);
     const target = doc.modifiers.find(m => ["extend", "prepend"].includes(m.name));
     const targets = target ? target.args.split(",").map(s => normalize(s.trim())) : [normalize(file.rel)];
+    for (const rel of targets) {
+      const dictionary=/(?:^|\/)(language_\w+\/(?:vessel_names|aircraft_names|land_units_names|biologic_names|ammunition_names|systemgroups|nations)(?:\/[^/]+)?|ui\/default\/settings_ui_general)\.ini$/.exec(rel);
+      if (!dictionary) continue;
+      const fileKey=dictionary[1].replace(/(language_\w+\/\w+_names)\/.+$/,"$1");
+      const sections=getOrCreate(this.cardDictionaries,fileKey,()=>new Map());
+      for (const section of doc.sections) {
+        if (fileKey.startsWith("ui/") && section.name.toLowerCase()!=="nationflags") continue;
+        const values=getOrCreate(sections,section.name.toLowerCase(),()=>new Map());
+        for (const entry of section.keys) {
+          const key=entry.name.toLowerCase();
+          if (!values.has(key)) values.set(key,entry.value);
+        }
+      }
+    }
     const addRef = (domain, item) => {
       const names = getOrCreate(this.references, domain, () => new Map());
       getOrCreate(names, item.name.toLowerCase(), () => []).push(item);

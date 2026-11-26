@@ -66,11 +66,11 @@ class Materials {
     return this.openIni(file.uri) || await fs.readFile(file.full, "utf8").then(parse, () => null);
   }
 
-  async texture(file) {
+  async texture(file, maxSize=384) {
     if (!file || !/\.(png|jpe?g)$/i.test(file.rel)) return;
     const stat = await fs.stat(file.full).catch(() => null);
     if (!stat || stat.size > 96 * 1024 * 1024) return;
-    const old = this.cache.get(file.uri);
+    const key = file.uri+"#"+maxSize, old = this.cache.get(key);
     if (old?.stamp === stat.mtimeMs && old.size === stat.size) return old.image;
     let image;
     try {
@@ -78,10 +78,10 @@ class Materials {
       const png = /\.png$/i.test(file.rel);
       if (png && bytes.readUInt32BE(16) * bytes.readUInt32BE(20) > 32 * 1024 * 1024) return;
       const source = png ? PNG.sync.read(bytes) : jpeg.decode(bytes, { maxResolutionInMP: 32, maxMemoryUsageInMB: 256 });
-      image = resize(source, 384);
+      image = resize(source, maxSize);
     } catch { return; }
     if (this.cache.size >= 24) this.cache.delete(this.cache.keys().next().value);
-    this.cache.set(file.uri, { stamp: stat.mtimeMs, size: stat.size, image });
+    this.cache.set(key, { stamp: stat.mtimeMs, size: stat.size, image });
     return image;
   }
 

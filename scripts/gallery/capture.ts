@@ -158,6 +158,15 @@ async function capture(screen) {
   await waitFor(() => target.document.getText(target.selection) === "[VLS_Module_Fwd_{lr}_{rm}]", "Hierarchy link to repeat template");
   target.revealRange(target.selection, vscode.TextEditorRevealType.InCenter);
   await screen.capture("21-hierarchy-definition", "Repeated mesh and its source template", { preview: true });
+  await command("workbench.action.closeAllEditors");
+  await screen.resize(850,900);
+  await command("vscode.openWith",stock,"seapower-ini.card",vscode.ViewColumn.One);
+  await renderedModel(port,()=>{
+    const profile=document.querySelector<HTMLImageElement>("#profile"), flag=document.querySelector<HTMLImageElement>("#flag");
+    return profile?.naturalWidth && flag?.naturalWidth && document.querySelector("h1")?.textContent.includes("Spruance")
+      ? "verified controls" : [document.querySelector("h1")?.textContent,profile?.naturalWidth,flag?.naturalWidth,document.querySelector("[role=status]")?.textContent].join(" / ");
+  });
+  await screen.capture("24-unit-card","Spruance VLS unit reference card",{preview:true});
   await screen.finish();
 }
 

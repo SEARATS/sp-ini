@@ -8,6 +8,10 @@ Ctrl+click an underlined INI value to open its source. Hover over a mesh to see 
 
 ## Visual previews
 
+Click **Preview Unit Card** in an INI editor to open the Sea Power Unit Reference beside the text. It shows the unit’s profile, flag, specifications, equipment and description. The selectors switch between mission units, ship variants and aircraft squadrons. Edits to the open INI update the card.
+
+[![Spruance VLS unit reference card][unit-card]][unit-card]
+
 Click **Preview Entity** in the upper-right corner of the INI editor to open the selected unit beside its source. Hover over a mesh or collider in the preview to see where it comes from. Ctrl+click it to open its INI section.
 
 The INI preview has separate **Meshes**, **Colliders**, and **Objects** trees. Enable **Colliders** to draw them over the model. The main hull is white. Unassigned structures such as the superstructure are light grey. Sensors are blue, weapons red, magazines orange, and other linked objects purple. A collider shared with a weapon is red. Hover over a collider to see which sections use it. Objects show a separate marker when their linked colliders are hidden or unavailable. Select a marker to reveal its row, or Ctrl+click it to open its INI section.
@@ -88,3 +92,4 @@ The examples use the stock Spruance VLS destroyer. Select a screenshot to view i
 [hierarchy-definition]: https://raw.githubusercontent.com/SEARATS/binaries/e91f936c5d8f2e3addd7dbca97da93c60213503a/sp-ini/21-hierarchy-definition.png
 [entity-trees]: https://raw.githubusercontent.com/SEARATS/binaries/e91f936c5d8f2e3addd7dbca97da93c60213503a/sp-ini/22-entity-trees.png
 [collider-highlight]: https://raw.githubusercontent.com/SEARATS/binaries/e91f936c5d8f2e3addd7dbca97da93c60213503a/sp-ini/23-collider-highlight.png
+[unit-card]: https://raw.githubusercontent.com/SEARATS/binaries/a0eab6bf2516b5ef42dcb0afedfcd11542eebe91/sp-ini/24-unit-card.png
