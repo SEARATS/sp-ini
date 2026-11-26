@@ -5,7 +5,7 @@ import { parse } from "../src/ini";
 import { Materials } from "../src/materials";
 import { entityObjects, entityParts, expandEntityIni } from "../src/entity-model";
 import { selectEntity, paintTexture, entityDocument } from "../src/entity-selection";
-import { assembledEntity } from "../src/entity-viewer";
+import { assembledEntity, patchEntity } from "../src/entity-viewer";
 import { Box3, LoadingManager, Mesh, MeshBasicMaterial, Vector3 } from "three";
 import type { EntityPart, Vector } from "../src/entity-model";
 import { applyDisplay, previewLayer } from "../src/preview-display";
@@ -117,6 +117,19 @@ test("sphere colliders use their scaled in-game size and keep their full extents
   assert.deepEqual(["small","nested","large","oversized","flat"].map(triangles),[8,32,128,128,8]);
   const size = new Box3().setFromObject(surface("nested"),true).getSize(new Vector3());
   assert.ok(size.distanceTo(new Vector3(0.1,0.05,0.025)) < 1e-6);
+});
+
+test("editing a transform moves the existing collider without replacing its geometry",()=>{
+  const doc = expandEntityIni("[Models]\nMesh=hull\n[Colliders]\nCollider1=Part\n[Part]\nCollider=Sphere");
+  const scene = {parts:entityParts(doc,new Set()).map(p=>p.part),objects:[],geometry:[],textures:[],warnings:[]};
+  const view = assembledEntity(scene,new LoadingManager()), original=view.surfaces.get("part").geometry;
+  const edit=structuredClone(scene);
+  edit.parts[1].position=[1,2,3];
+  assert.ok(patchEntity(view,scene,edit));
+  assert.equal(view.surfaces.get("part").geometry,original);
+  assert.deepEqual(view.nodes.get("part").position.toArray(),[-1,2,3]);
+  edit.parts[1].scale=[2,2,2];
+  assert.equal(patchEntity(view,scene,edit),false);
 });
 
 test("preview links retain source headers through repeats and inheritance",async()=>{

@@ -1,9 +1,11 @@
 import { previewObj } from "./obj-geometry";
 import { objLayout, type OutlineNode, type PreviewPart } from "./model-outline";
 import { applyDisplay, previewLayer, type DisplaySettings } from "./preview-display";
-import { assembledEntity } from "./entity-viewer";
+import { assembledEntity, patchEntity } from "./entity-viewer";
+import type { EntityScene } from "./entity-model";
+import { previewColors } from "./preview-colors";
 import { inspectEntity } from "./entity-inspect";
-import { Texture, Box3, DirectionalLight, HemisphereLight, LoadingManager, PerspectiveCamera, Scene, Sphere, WebGLRenderer } from "three";
+import { Texture, Box3, Color, DirectionalLight, HemisphereLight, LoadingManager, PerspectiveCamera, Scene, Sphere, WebGLRenderer } from "three";
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
@@ -19,10 +21,28 @@ const camera = new PerspectiveCamera(42, 1, 0.01, 10000);
 const bounds = new Sphere();
 let renderer, controls, model;
 const objectLabels = new Map<string,HTMLElement>();
-const inspector = inspectEntity(canvas,camera,()=>model,id=>vscode.postMessage({type:"openEntityPart",id}),id=>selectObject(id,true));
+let active: {id:string; scene:EntityScene; view:ReturnType<typeof assembledEntity>};
+let bright:string[] = [], pickedObject:string;
+const white=new Color(0xffffff);
+function highlight(ids:string[]) {
+  const next=ids.filter(id=>active?.view.surfaces.get(id)?.layers.isEnabled(previewLayer.collider));
+  if (next.length===bright.length && next.every((id,i)=>id===bright[i])) return;
+  for (const id of new Set([...bright,...next])) {
+    const surface=active?.view.surfaces.get(id);
+    if (!surface) continue;
+    const rank=next.indexOf(id);
+    surface.material.color.set(previewColors[surface.userData.previewRole]).lerp(white,rank===0 ? 0.36 : rank>0 ? 0.15 : 0);
+    if (rank===0) surface.layers.enable(previewLayer.highlight);
+    else surface.layers.disable(previewLayer.highlight);
+  }
+  bright=next;
+  if (renderer) render();
+}
+const inspector = inspectEntity(canvas,camera,()=>model,id=>vscode.postMessage({type:"openEntityPart",id}),id=>selectObject(id,true),highlight);
 function selectObject(id: string, reveal: boolean) {
   const selected = objectLabels.get(id);
   if (!selected) return;
+  pickedObject=id;
   for (const label of objectLabels.values()) label.classList.toggle("selected-object",label === selected);
   if (reveal) {
     for (let el: HTMLElement = selected; el; el=el.parentElement) if (el instanceof HTMLDetailsElement) el.open=true;
@@ -71,7 +91,9 @@ for (const key of ["meshWireframe","colliderWireframe"] as const) {
   mode.onchange = () => { settings[key] = mode.value === "wireframe"; changed(); };
 }
 
-function showOutline(nodes: OutlineNode[], note: string, uri?: string) {
+function showOutline(nodes: OutlineNode[], note: string, uri?: string, preserve=false) {
+  const expanded=new Map(Array.from(outline.querySelectorAll<HTMLDetailsElement>("details[data-branch]"),el=>[el.dataset.branch,el.open]));
+  const scroll=outline.scrollTop;
   const entityTrees = nodes.some(node=>node.tree);
   outline.querySelector("p").textContent = note;
   updateRows = [];
@@ -126,7 +148,8 @@ function showOutline(nodes: OutlineNode[], note: string, uri?: string) {
     });
     if (node.children.length || node.tree) {
       const branch = document.createElement("details");
-      branch.open = depth === 0 && nodes.length === 1;
+      branch.dataset.branch=fullPath;
+      branch.open = (preserve ? expanded.get(fullPath) : undefined) ?? (depth === 0 && nodes.length === 1);
       const list = document.createElement("ul");
       list.append(...children.map(child => child.item));
       branch.append(label, list);
@@ -138,11 +161,15 @@ function showOutline(nodes: OutlineNode[], note: string, uri?: string) {
     return {item, subtree};
   }
   outline.querySelector("ul").replaceChildren(...nodes.map(node => row(node, "", 0).item));
+  if (preserve) outline.scrollTop=scroll;
   updateDisplay();
 }
 
 function draw() {
   inspector.hide();
+  render();
+}
+function render() {
   renderer.clear();
   camera.layers.set(previewLayer.mesh);
   renderer.render(scene,camera);
@@ -150,6 +177,16 @@ function draw() {
     renderer.clearDepth();
     camera.layers.set(previewLayer.collider);
     renderer.render(scene,camera);
+    if (bright.length) {
+      camera.layers.set(previewLayer.highlight);
+      const w=canvas.clientWidth,h=canvas.clientHeight;
+      // A one-pixel rim stays visible even when the collider is already white.
+      for (const [x,y] of [[-1,0],[1,0],[0,-1],[0,1],[0,0]]) {
+        renderer.clearDepth();
+        renderer.setViewport(x,y,w,h);
+        renderer.render(scene,camera);
+      }
+    }
   }
   if (settings.objects && selectedEntity) {
     renderer.clearDepth();
@@ -162,8 +199,8 @@ function draw() {
 function frame() {
   const halfAngle = Math.atan(Math.tan(camera.fov * Math.PI / 360) * Math.min(1, camera.aspect));
   const distance = bounds.radius * 1.1 / Math.sin(halfAngle);
-  controls.target.set(0, 0, 0);
-  camera.position.set(1, 0.65, 1).normalize().multiplyScalar(distance);
+  controls.target.copy(bounds.center);
+  camera.position.set(1, 0.65, 1).normalize().multiplyScalar(distance).add(bounds.center);
   camera.near = bounds.radius / 1000;
   camera.far = Math.max(bounds.radius * 1000, distance * 2);
   controls.maxDistance = camera.far / 2;
@@ -191,6 +228,62 @@ function dispose(group) {
 }
 
 let revision = 0;
+async function loadEntity(id:string, next:EntityScene) {
+  const current=++revision, same=active?.id===id;
+  let staged:ReturnType<typeof assembledEntity>;
+  try {
+    const patched=same && patchEntity(active.view,active.scene,next);
+    if (!patched) {
+      const manager=new LoadingManager();
+      const loaded=new Promise<void>(resolve=>{manager.onLoad=resolve;});
+      staged=assembledEntity(next,manager);
+      if (next.textures.length) await loaded;
+      if (current!==revision) { dispose(staged.model); return; }
+    }
+    const view=staged || active.view;
+    const extent=new Box3().setFromObject(view.model).getBoundingSphere(new Sphere());
+    if (!Number.isFinite(extent.radius) || extent.isEmpty()) throw Error("No drawable geometry in this model.");
+    inspector.hide();
+    if (staged) {
+      if (same) staged.model.position.copy(model.position);
+      else staged.model.position.sub(extent.center);
+      extent.center.add(staged.model.position);
+      if (model) { scene.remove(model); dispose(model); }
+      model=staged.model;
+      scene.add(model);
+    }
+    bounds.copy(extent);
+    bounds.radius ||= 1;
+    const oldVisibility=new Map((same ? active.scene.parts : []).map(p=>[p.id,p.visible]));
+    if (!same && initializedEntity!==id) hidden.clear();
+    for (const part of !active && initializedEntity===id ? [] : next.parts) {
+      if (oldVisibility.has(part.id) && oldVisibility.get(part.id)!==part.visible && part.visible) hidden.delete(part.id);
+      if (!part.visible && oldVisibility.get(part.id)!==false) hidden.add(part.id);
+    }
+    if (!initializedEntity && !vscode.getState()) {
+      settings.colliders=false;
+      document.querySelector<HTMLInputElement>("#colliders").checked=false;
+    }
+    initializedEntity=id;
+    active={id,scene:next,view};
+    inspector.setParts([...next.parts,...(next.objects || [])]);
+    if (staged) {
+      if (!same) pickedObject=undefined;
+      showOutline(view.outline,"",undefined,same);
+      if (pickedObject) selectObject(pickedObject,false);
+    } else inspector.refreshLinks(outline);
+    changed();
+    if (!same) frame();
+    canvas.setAttribute("aria-label",[id,selectedAppearance].filter(Boolean).join(" · ")+" 3D preview");
+    fit.hidden=false;
+    status.textContent="Drag to orbit · Scroll to zoom";
+    return true;
+  } catch (error) {
+    if (staged && staged.model!==model) dispose(staged.model);
+    if (current===revision) status.textContent=error.message;
+  }
+}
+
 async function load(data, layout?: ReturnType<typeof objLayout>) {
   const current = ++revision;
   if (model) { scene.remove(model); dispose(model); model = undefined; }
@@ -204,18 +297,6 @@ async function load(data, layout?: ReturnType<typeof objLayout>) {
       const buffer = await response.arrayBuffer();
       if (current !== revision) return;
       next = new FBXLoader(manager).parse(buffer, new URL(".", data.url).href);
-    } else if (data.type === "entityScene") {
-      const manager = new LoadingManager();
-      const ready = () => {
-        if (current !== revision) return;
-        canvas.setAttribute("aria-label",[selectedEntity,selectedAppearance].filter(Boolean).join(" · ")+" 3D preview");
-        draw();
-      };
-      manager.onLoad = ready;
-      const assembled = assembledEntity(data.scene,manager);
-      if (!data.scene.textures.length) ready();
-      showOutline(assembled.outline,"");
-      next = assembled.model;
     } else {
       next = previewObj(data.text, layout);
     }
@@ -224,6 +305,7 @@ async function load(data, layout?: ReturnType<typeof objLayout>) {
     if (!Number.isFinite(bounds.radius) || bounds.isEmpty()) throw Error("No drawable geometry in this model.");
     bounds.radius ||= 1;
     model.position.sub(bounds.center);
+    bounds.center.set(0,0,0);
     scene.add(model);
     applyDisplay(model, categories, hidden, settings);
     frame();
@@ -269,24 +351,18 @@ try {
 let fbxUri: string;
 window.addEventListener("message", ({ data }) => {
   if (data.type === "entityLoading" || data.type === "entityError") {
-    inspector.setParts([]);
-    canvas.setAttribute("aria-label","3D model");
     revision++;
-    if (model) { scene.remove(model); dispose(model); model = undefined; draw(); }
-    fit.hidden = true;
-    warnings.hidden = true;
-    showOutline([],"");
-    status.textContent = data.message || "Assembling entity…";
+    if (data.message || !model) status.textContent = data.message || "Assembling entity…";
     return;
   }
   if (data.type === "entityChoices") {
     outline.querySelector("summary").textContent = "Entity hierarchy";
     document.getElementById("object-filter").hidden = false;
-    if (selectedEntity !== data.entity) hidden.clear();
     selectedEntity = data.entity; selectedAppearance = data.appearance;
     for (const [select,choices,value] of [[entitySelect,data.entities,selectedEntity],[appearanceSelect,data.appearances,selectedAppearance]] as const) {
-      select.replaceChildren(...choices.map(c=>new Option(c.label,c.id)));
-      select.value = value || "";
+      if (choices.length!==select.length || choices.some((c,i)=>select.options[i].value!==c.id || select.options[i].text!==c.label))
+        select.replaceChildren(...choices.map(c=>new Option(c.label,c.id)));
+      if (select.value!==(value || "")) select.value=value || "";
     }
     picker.hidden = false;
     entitySelect.disabled = data.entities.length === 1;
@@ -295,22 +371,13 @@ window.addEventListener("message", ({ data }) => {
     return;
   }
   if (data.type === "entityScene") {
-    inspector.setParts([...data.scene.parts,...data.scene.objects]);
     const notes: string[] = data.scene.warnings;
     warnings.hidden = !notes.length;
     warnings.querySelector("summary").textContent = "Preview notes ("+notes.length+")";
     warnings.querySelector("div").replaceChildren(...notes.map(note=>{const p=document.createElement("p");p.textContent=note;return p;}));
-    if (!initializedEntity && !vscode.getState()) {
-      settings.colliders = false;
-      document.querySelector<HTMLInputElement>("#colliders").checked = false;
-    }
-    if (initializedEntity !== data.entity) {
-      for (const part of data.scene.parts) if (!part.visible) hidden.add(part.id);
-      initializedEntity = data.entity;
-    }
-    changed();
-    if (controls) void load(data);
-    else status.textContent = "The entity preview needs WebGL 2.";
+    const report=(applied:boolean)=>vscode.postMessage({type:"entityRendered",version:data.version,applied});
+    if (controls) void loadEntity(data.entity,data.scene).then(applied=>report(!!applied));
+    else { status.textContent = "The entity preview needs WebGL 2."; report(false); }
     return;
   }
   if (data.type === "outline") {

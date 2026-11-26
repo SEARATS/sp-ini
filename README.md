@@ -14,6 +14,8 @@ The INI preview has separate **Meshes**, **Colliders**, and **Objects** trees. E
 
 Hover lists every visible collider under the pointer. Weapons appear first, followed by other systems, the main hull, and unassigned structures. Within each group the nearest appears first. Alt+scroll moves through long tooltips. Ctrl+click opens the first entry. Sphere collider detail follows its in-game size.
 
+Hovered colliders brighten, with the strongest highlight on the first collider. Editing the INI preserves your camera and expanded branches. The last valid preview stays visible while you type.
+
 Open an OBJ or FBX for a 3D preview. Use the tree to show or hide parts and switch between shaded and wireframe views. You can collapse branches in the FBX hierarchy and fold objects and groups in OBJ text view.
 
 Mesh names containing `coll` or tagged `_col` are marked as likely colliders. Matching is case-insensitive.

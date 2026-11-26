@@ -153,8 +153,9 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
     resolveCustomTextEditor(document,panel) {
       panel.webview.options = {enableScripts:true,localResourceRoots:[dist]};
       let pending: vscode.CancellationTokenSource, timer, entity: string, appearance: string;
-      const sources = new Map<string,IniSource>();
-      function cancel() { sources.clear(); pending?.cancel(); pending?.dispose(); pending = undefined; clearTimeout(timer); }
+      let serial=0, sources = new Map<string,IniSource>();
+      const stagedSources=new Map<number,Map<string,IniSource>>();
+      function cancel() { pending?.cancel(); pending?.dispose(); pending = undefined; clearTimeout(timer); }
       async function reveal(id: string) {
         const source=sources.get(id);
         if (!source) return;
@@ -186,14 +187,22 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
           await panel.webview.postMessage({type:"entityChoices",...choices});
           const scene: EntityScene = await entityRequest({...request,entity,appearance,render:true},token);
           if (token.isCancellationRequested) return;
-          for (const part of scene.parts) if (part.source) sources.set(part.id,part.source);
-          for (const obj of scene.objects) if (obj.source) sources.set(obj.id,obj.source);
-          await panel.webview.postMessage({type:"entityScene",scene,entity});
+          const version=++serial;
+          const next=new Map<string,IniSource>();
+          for (const part of [...scene.parts,...(scene.objects || [])]) if (part.source) next.set(part.id,part.source);
+          stagedSources.set(version,next);
+          if (!await panel.webview.postMessage({type:"entityScene",scene,entity,version})) stagedSources.delete(version);
         } catch (error) {
           if (!token.isCancellationRequested) await panel.webview.postMessage({type:"entityError",message:error.message});
         }
       }
       const messages = panel.webview.onDidReceiveMessage(message => {
+        if (message.type === "entityRendered") {
+          const next=stagedSources.get(message.version);
+          if (message.applied && next) sources=next;
+          stagedSources.delete(message.version);
+          return;
+        }
         if (message.type === "openEntityPart") {
           void reveal(message.id).catch(e=>vscode.window.showErrorMessage(e.message));
           return;

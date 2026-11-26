@@ -177,11 +177,18 @@ export const run = async () => {
       const overlay=pixels();
       toggle("meshes",true);
       const combined=pixels();
+      const weaponRow=document.querySelector<HTMLElement>('[data-part-id="coll_mk41_1"]');
+      weaponRow.dispatchEvent(new PointerEvent("pointerenter"));
+      ctx.drawImage(canvas,0,0);
+      const highlighted=ctx.getImageData(0,0,sample.width,sample.height).data;
+      weaponRow.dispatchEvent(new PointerEvent("pointerleave"));
+      let brighter=false;
       let overlap=0, obscured=0;
       const candidates:number[]=[];
       for (let i=0;i<hull.length;i+=4) {
         if (hull[i+3]!==255 || overlay[i+3]!==255 || overlay[i]!==255 || overlay[i+1]!==68 || overlay[i+2]!==68) continue;
         overlap++;
+        if (highlighted[i]===255 && highlighted[i+1]>combined[i+1]+20 && highlighted[i+2]>combined[i+2]+20) brighter=true;
         candidates.push(i/4);
         if (combined[i]!==255 || combined[i+1]!==68 || combined[i+2]!==68) obscured++;
       }
@@ -200,7 +207,7 @@ export const run = async () => {
       control("colliderWireframe").value="wireframe";
       control("colliderWireframe").dispatchEvent(new Event("change"));
       toggle("objects",true);
-      return picked && overlap && !obscured ? "verified controls" : "Weapon tooltip "+picked+", red overlap "+overlap+", obscured "+obscured;
+      return brighter && picked && overlap && !obscured ? "verified controls" : "Highlight "+brighter+", weapon tooltip "+picked+", red overlap "+overlap+", obscured "+obscured;
     });
     await renderedModel(port,async()=>{
       if (!document.querySelector('canvas[aria-label*="spruance"]')) return "waiting for entity";
@@ -219,7 +226,8 @@ export const run = async () => {
         const pos={clientX:box.left+box.width*x,clientY:box.top+box.height*y,bubbles:true};
         canvas.dispatchEvent(new PointerEvent("pointermove",pos));
         await new Promise(requestAnimationFrame);
-        if (tip.hidden || !tip.textContent.startsWith("[coll_") || !tip.textContent.includes("Collider=")) continue;
+        if (tip.hidden || !tip.textContent.startsWith("[coll_")) continue;
+        if (tip.textContent.includes("Collider=")) return "collider prefix still visible";
         canvas.dispatchEvent(new PointerEvent("pointerdown",{...pos,ctrlKey:true}));
         canvas.dispatchEvent(new MouseEvent("click",{...pos,ctrlKey:true}));
         return "verified controls";
@@ -228,6 +236,48 @@ export const run = async () => {
     });
     await selectedSection(/^\[coll_[^\]]+\]$/i);
     outcomes.push("Verified overlapping collider tooltip entries, weapon-first order, and collider source navigation over the hull");
+    // Exercise real document updates on a disposable copy of the stock ship.
+    const editFile=vscode.Uri.joinPath(vscode.Uri.file(process.env.SP_INI_TEST_RESULT),"../spruance-preview-edits.ini");
+    await vscode.workspace.fs.writeFile(editFile,Buffer.from(doc.getText()));
+    const editDoc=await vscode.workspace.openTextDocument(editFile);
+    await vscode.commands.executeCommand("seapower-ini.previewEntity",editFile);
+    await renderedModel(port,()=>{
+      const canvas=document.querySelector<HTMLCanvasElement>('canvas[aria-label*="spruance-preview-edits"]');
+      const row=document.querySelector<HTMLElement>('[data-part-id="coll_mk41_1"]');
+      if (!canvas || !row) return "waiting for editable ship";
+      row.closest("details").open=true;
+      row.dataset.testIdentity="before";
+      canvas.dataset.oldTitle=row.title;
+      canvas.dispatchEvent(new WheelEvent("wheel",{deltaY:-330,cancelable:true}));
+      document.querySelector("#meshWireframe").dispatchEvent(new Event("change"));
+      canvas.dataset.orbit=canvas.toDataURL();
+      return "verified controls";
+    });
+    async function insert(position:vscode.Position,text:string) {
+      const edit=new vscode.WorkspaceEdit();
+      edit.insert(editFile,position,text);
+      assert.ok(await vscode.workspace.applyEdit(edit));
+    }
+    await insert(new vscode.Position(0,0),"; edit preview test\n");
+    await renderedModel(port,()=>{
+      const canvas=document.querySelector<HTMLCanvasElement>("canvas[data-orbit]");
+      const row=document.querySelector<HTMLElement>('[data-part-id="coll_mk41_1"]');
+      if (!canvas || !row || row.title===canvas.dataset.oldTitle) return "waiting for source line update";
+      document.querySelector("#meshWireframe").dispatchEvent(new Event("change"));
+      return row.dataset.testIdentity==="before" && row.closest("details").open && canvas.toDataURL()===canvas.dataset.orbit ?
+        "verified controls" : "camera or outline reset on comment edit";
+    });
+    await insert(editDoc.positionAt(editDoc.getText().length),"\n[CombatSystem999]\nSystemName=PreviewTest\n");
+    await renderedModel(port,()=>{
+      const canvas=document.querySelector<HTMLCanvasElement>("canvas[data-orbit]");
+      const added=document.querySelector('[data-part-id="object:combatsystem999"]');
+      if (!canvas || !added) return "waiting for new system";
+      document.querySelector("#meshWireframe").dispatchEvent(new Event("change"));
+      return document.querySelector('[data-part-id="coll_mk41_1"]').closest("details").open && canvas.toDataURL()===canvas.dataset.orbit ?
+        "verified controls" : "camera or outline reset on structural edit";
+    });
+    await editDoc.save(); // Only the test session's copy is writable here.
+    outcomes.push("Verified brighter collider pixels and retained the zoom and collider branch across live INI edits");
     const aircraft = vscode.Uri.joinPath(ini,"../../aircraft/usn_f-14a_squadrons.ini");
     await vscode.commands.executeCommand("seapower-ini.previewEntity",aircraft);
     await renderedModel(port,()=>{

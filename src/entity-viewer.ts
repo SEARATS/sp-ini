@@ -1,10 +1,16 @@
 import { Box3, BoxGeometry, BufferAttribute, BufferGeometry, ConeGeometry, Group, MathUtils, Mesh, MeshBasicMaterial, MeshPhongMaterial, OctahedronGeometry, RepeatWrapping, SRGBColorSpace, TextureLoader, Vector3, type LoadingManager } from "three";
-import type { EntityPart, EntityScene } from "./entity-model";
+import type { EntityPart, EntityScene, Vector } from "./entity-model";
 import type { OutlineNode } from "./model-outline";
 import { objectColor, previewColors, type PreviewColor } from "./preview-colors";
 
 function floats(encoded: string) {
   return new Float32Array(Uint8Array.from(atob(encoded), char=>char.charCodeAt(0)).buffer);
+}
+
+function transform(node:Group, position:Vector, rotation:Vector) {
+  const [x,y,z]=position, [rx,ry,rz]=rotation.map(MathUtils.degToRad);
+  node.position.set(-x,y,z);
+  node.rotation.set(rx,-ry,-rz,"YXZ");
 }
 
 export function assembledEntity(scene: EntityScene, manager: LoadingManager) {
@@ -14,6 +20,7 @@ export function assembledEntity(scene: EntityScene, manager: LoadingManager) {
   const byId = new Map(scene.parts.map(part=>[part.id,part]));
   const nodes = new Map<string,Group>(), rows = new Map<string,OutlineNode>();
   const objectColliders = new Map<string,string[]>();
+  const widgets = new Map<string,Mesh>(), surfaces = new Map<string,Mesh<BufferGeometry,MeshBasicMaterial | MeshPhongMaterial>>();
   const objectGroups = new Map((scene.objects || []).map(obj=>[obj.name.toLowerCase(),obj.group]));
   function colliderColor(part: EntityPart): PreviewColor {
     const owners = part.referencedBy || [];
@@ -44,10 +51,7 @@ export function assembledEntity(scene: EntityScene, manager: LoadingManager) {
   for (const part of scene.parts) {
     const node = new Group();
     node.name = part.name;
-    const [x,y,z] = part.position;
-    node.position.set(-x,y,z);
-    const [rx,ry,rz] = part.rotation.map(MathUtils.degToRad);
-    node.rotation.set(rx,-ry,-rz,"YXZ");
+    transform(node,part.position,part.rotation);
     node.scale.fromArray(part.scale);
     nodes.set(part.id,node);
     rows.set(part.id,{name:part.name,entityId:part.id,children:[],parts:[],
@@ -88,6 +92,7 @@ export function assembledEntity(scene: EntityScene, manager: LoadingManager) {
     surface.name = part.name;
     surface.userData.partId = part.id;
     surface.userData.previewRole = rows.get(part.id).colliderStyle;
+    if (part.collider) surfaces.set(part.id,surface);
     node.add(surface);
     rows.get(part.id).parts.push({id:part.id,collider:part.collider});
   }
@@ -118,7 +123,24 @@ export function assembledEntity(scene: EntityScene, manager: LoadingManager) {
     widget.userData.color=widget.material.color.getHex();
     widget.renderOrder=10;
     parent.add(widget);
+    widgets.set(obj.id,widget);
     row.parts.push({id:obj.id,collider:false,widget:true});
   }
-  return {model,outline:[meshTree,colliderTree,objectTree]};
+  return {model,outline:[meshTree,colliderTree,objectTree],surfaces,nodes,widgets};
+}
+
+// Most INI edits only move parts, toggle visibility or change source lines. Keep their GPU assets.
+export function patchEntity(view:ReturnType<typeof assembledEntity>, before:EntityScene, after:EntityScene) {
+  const partShape = ({source,position,rotation,visible,...rest}:EntityPart)=>rest;
+  const objectShape = ({source,position,placement,...rest}:NonNullable<EntityScene["objects"]>[number])=>({...rest,placed:!!position});
+  if (before.geometry.length!==after.geometry.length || before.textures.length!==after.textures.length ||
+    before.geometry.some((g,i)=>g.positions!==after.geometry[i].positions || g.uvs!==after.geometry[i].uvs) ||
+    before.textures.some((t,i)=>t.png!==after.textures[i].png || t.alpha!==after.textures[i].alpha) ||
+    JSON.stringify(before.parts.map(partShape))!==JSON.stringify(after.parts.map(partShape)) ||
+    JSON.stringify(before.objects?.map(objectShape))!==JSON.stringify(after.objects?.map(objectShape))) return false;
+  for (const part of after.parts) transform(view.nodes.get(part.id),part.position,part.rotation);
+  for (const obj of after.objects || []) {
+    if (obj.position) view.widgets.get(obj.id)?.position.set(-obj.position[0],obj.position[1],obj.position[2]);
+  }
+  return true;
 }

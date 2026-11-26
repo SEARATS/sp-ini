@@ -22,7 +22,8 @@ export function hoverStack(hits: readonly {object:Object3D}[], parts: ReadonlyMa
   return [...ranked.entries()].sort((a,b)=>a[1]-b[1]).map(([part])=>part);
 }
 
-export function inspectEntity(canvas: HTMLCanvasElement, camera: PerspectiveCamera, model: () => Object3D, open: (id: string) => void, select: (id: string) => void) {
+export function inspectEntity(canvas: HTMLCanvasElement, camera: PerspectiveCamera, model: () => Object3D, open: (id: string) => void,
+  select: (id: string) => void, highlight: (ids:string[])=>void) {
   const tip = document.querySelector<HTMLElement>("#part-tip");
   const parts = new Map<string,Inspectable>();
   const ray = new Raycaster(), pointer = new Vector2();
@@ -36,7 +37,7 @@ export function inspectEntity(canvas: HTMLCanvasElement, camera: PerspectiveCame
     const {source} = part;
     const file = decodeURIComponent(new URL(source.uri).pathname.split("/").pop());
     const detail = "group" in part ? [part.system,part.placement].filter(Boolean).join("\n") :
-      (part.collider ? "Collider" : "Mesh")+"="+(part.meshName || part.primitive || "Dummy");
+      (part.collider ? "" : "Mesh=")+(part.meshName || part.primitive || "Dummy");
     const owners = "referencedBy" in part && part.referencedBy?.length ? ["Used by "+part.referencedBy.map(name=>{
       const owner = parts.get("object:"+name.toLowerCase());
       return owner && "system" in owner && owner.system ? name+" ("+owner.system+")" : name;
@@ -55,13 +56,15 @@ export function inspectEntity(canvas: HTMLCanvasElement, camera: PerspectiveCame
     cancelAnimationFrame(scheduled);
     tip.hidden = true;
     canvas.classList.remove("source-link");
+    highlight([]);
   }
   canvas.addEventListener("pointermove",event=>{
-    hide();
-    if (event.buttons || !parts.size) return;
+    cancelAnimationFrame(scheduled);
+    if (event.buttons || !parts.size) { hide(); return; }
     scheduled = requestAnimationFrame(()=>{
       const hits = hitsAt(event);
-      if (!hits.length) return;
+      if (!hits.length) { hide(); return; }
+      highlight(hits.filter(part=>"collider" in part && part.collider).map(part=>part.id));
       tip.textContent = hits.map(description).join("\n\n")+"\n"+(hits.length === 1 ? openHint : modifier+"+click to open the first entry");
       tip.scrollTop = 0;
       tip.hidden = false;
@@ -100,7 +103,14 @@ export function inspectEntity(canvas: HTMLCanvasElement, camera: PerspectiveCame
       const part=parts.get(id);
       if (!part) return;
       label.tabIndex=0;
+      label.dataset.partId=id;
       label.title=description(part)+"\n"+openHint;
+      if ("collider" in part && part.collider) {
+        label.addEventListener("pointerenter",()=>highlight([id]));
+        label.addEventListener("pointerleave",()=>highlight([]));
+        label.addEventListener("focus",()=>highlight([id]));
+        label.addEventListener("blur",()=>highlight([]));
+      }
       label.addEventListener("click",event=>{
         if (!(event.ctrlKey || event.metaKey) || event.target instanceof HTMLInputElement) return;
         event.preventDefault(); event.stopPropagation(); open(id);
@@ -108,6 +118,12 @@ export function inspectEntity(canvas: HTMLCanvasElement, camera: PerspectiveCame
       label.addEventListener("keydown",event=>{
         if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {event.preventDefault();open(id);}
       });
+    },
+    refreshLinks(root:HTMLElement) {
+      for (const label of root.querySelectorAll<HTMLElement>("[data-part-id]")) {
+        const part=parts.get(label.dataset.partId);
+        if (part) label.title=description(part)+"\n"+openHint;
+      }
     },
     hide
   };
