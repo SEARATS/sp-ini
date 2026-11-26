@@ -1,5 +1,6 @@
 import type { ModelNode } from "./hierarchy";
 import { isColliderName } from "./mesh-names";
+import type { PreviewColor } from "./preview-colors";
 
 export interface PreviewPart { id: string; collider: boolean; widget?: boolean }
 export interface OutlineNode {
@@ -9,6 +10,7 @@ export interface OutlineNode {
   modelId?: string;
   entityId?: string;
   tree?: boolean;
+  colliderStyle?: PreviewColor;
 }
 
 export function fbxOutline(nodes: ModelNode[]): OutlineNode[] {

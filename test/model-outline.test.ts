@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { objLayout, fbxOutline } from "../src/model-outline";
-import { applyDisplay } from "../src/preview-display";
+import { applyDisplay, previewLayer } from "../src/preview-display";
 import { previewObj } from "../src/obj-geometry";
 import { Mesh, MeshPhongMaterial } from "three";
 import { type ModelNode, colliderSnippet } from "../src/hierarchy";
@@ -26,7 +26,7 @@ test("OBJ row visibility distinguishes repeated names and overlapping groups", (
   applyDisplay(model,categories,hidden,settings);
   assert.deepEqual(model.children.map(m=>m.layers.isEnabled(0)),[false,false]);
   applyDisplay(model,categories,hidden,{...settings,colliders:true});
-  assert.deepEqual(model.children.map(m=>m.layers.isEnabled(0)),[false,true]);
+  assert.deepEqual(model.children.map(m=>m.layers.isEnabled(previewLayer.collider)),[false,true]);
 });
 
 test("FBX parent visibility and wireframe can change independently of child visibility", () => {
@@ -39,9 +39,9 @@ test("FBX parent visibility and wireframe can change independently of child visi
   const colliderMaterial = child.material[0];
   assert.equal(parent.material.wireframe,false);
   assert.equal(colliderMaterial.wireframe,true);
-  assert.ok(child.layers.isEnabled(0) && !parent.layers.isEnabled(0) && parent.visible);
+  assert.ok(child.layers.isEnabled(previewLayer.collider) && !parent.layers.isEnabled(0) && parent.visible);
   applyDisplay(parent,categories,new Set(["2"]),{meshes:true,colliders:true,meshWireframe:true,colliderWireframe:false});
-  assert.ok(parent.layers.isEnabled(0) && !child.layers.isEnabled(0));
+  assert.ok(parent.layers.isEnabled(0) && child.layers.mask === 0);
   assert.equal(parent.material.wireframe,true);
   assert.equal(colliderMaterial.wireframe,false);
   assert.equal(child.material[0],colliderMaterial);

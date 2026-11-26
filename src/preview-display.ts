@@ -1,6 +1,8 @@
 import { Mesh, type Material, type Object3D } from "three";
 import { isColliderName } from "./mesh-names";
 
+export const previewLayer = { mesh:0, collider:1, widget:2 } as const;
+
 export interface DisplaySettings {
   meshes: boolean;
   colliders: boolean;
@@ -28,9 +30,11 @@ export function applyDisplay(model: Object3D, categories: Map<string, boolean>, 
     const id = node.userData.partId ?? String((node as Object3D & {ID?: number}).ID);
     const collider = categories.get(id) ?? isColliderName(node.userData.originalName || node.name);
     const widget = node.userData.widget;
-    // Layers hide this drawable while leaving child meshes independently visible.
-    if ((widget ? settings.objects : collider ? settings.colliders : settings.meshes) && !hidden.has(id)) node.layers.enable(0);
-    else node.layers.disable(0);
+    const hasVisibleCollider = widget && settings.colliders && node.userData.colliderIds?.some((partId:string)=>!hidden.has(partId));
+    const visible = widget ? settings.objects && !hasVisibleCollider : collider ? settings.colliders : settings.meshes;
+    // A parent's layer does not hide its children.
+    if (visible && !hidden.has(id)) node.layers.set(widget ? previewLayer.widget : collider ? previewLayer.collider : previewLayer.mesh);
+    else node.layers.disableAll();
     if (!widget && node instanceof Mesh) {
       const wireframe = collider ? settings.colliderWireframe : settings.meshWireframe;
       node.material = Array.isArray(node.material) ? node.material.map(m => styled(m, wireframe)) : styled(node.material, wireframe);

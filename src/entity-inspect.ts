@@ -1,10 +1,13 @@
 import { Raycaster, Vector2, type Object3D, type PerspectiveCamera } from "three";
+import { previewLayer } from "./preview-display";
 import type { EntityPart, EntityObject } from "./entity-model";
 
 export function inspectEntity(canvas: HTMLCanvasElement, camera: PerspectiveCamera, model: () => Object3D, open: (id: string) => void, select: (id: string) => void) {
   const tip = document.querySelector<HTMLElement>("#part-tip");
   const parts = new Map<string,EntityPart | EntityObject>();
   const ray = new Raycaster(), pointer = new Vector2();
+  ray.layers.enable(previewLayer.collider);
+  ray.layers.enable(previewLayer.widget);
   const modifier = /Mac/i.test(navigator.platform) ? "⌘" : "Ctrl";
   let scheduled = 0, press: PointerEvent;
 
@@ -13,7 +16,8 @@ export function inspectEntity(canvas: HTMLCanvasElement, camera: PerspectiveCame
     const file = decodeURIComponent(new URL(source.uri).pathname.split("/").pop());
     const detail = "group" in part ? [part.system,part.placement].filter(Boolean).join("\n") :
       (part.collider ? "Collider" : "Mesh")+"="+(part.meshName || part.primitive || "Dummy");
-    return ["["+(part.id === "models" ? source.header : part.name)+"]", detail,
+    const owners = "referencedBy" in part && part.referencedBy?.length ? ["Used by "+part.referencedBy.join(", ")] : [];
+    return ["["+(part.id === "models" ? source.header : part.name)+"]", detail,...owners,
       file+" · line "+(source.line+1), modifier+"+click to open INI"].join("\n");
   }
   function hit(event: MouseEvent) {
@@ -22,7 +26,7 @@ export function inspectEntity(canvas: HTMLCanvasElement, camera: PerspectiveCame
     pointer.set((event.clientX-rect.left)/rect.width*2-1, 1-(event.clientY-rect.top)/rect.height*2);
     ray.setFromCamera(pointer,camera);
     const hits = ray.intersectObject(model(),true);
-    const closest = hits.find(hit=>hit.object.userData.widget) ?? hits[0];
+    const closest = hits.find(hit=>hit.object.userData.widget) ?? hits.find(hit=>hit.object.layers.isEnabled(previewLayer.collider)) ?? hits[0];
     return closest && parts.get(closest.object.userData.partId);
   }
   function hide() {

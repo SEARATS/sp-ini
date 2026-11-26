@@ -1,6 +1,6 @@
 import { previewObj } from "./obj-geometry";
 import { objLayout, type OutlineNode, type PreviewPart } from "./model-outline";
-import { applyDisplay, type DisplaySettings } from "./preview-display";
+import { applyDisplay, previewLayer, type DisplaySettings } from "./preview-display";
 import { assembledEntity } from "./entity-viewer";
 import { inspectEntity } from "./entity-inspect";
 import { Texture, Box3, DirectionalLight, HemisphereLight, LoadingManager, PerspectiveCamera, Scene, Sphere, WebGLRenderer } from "three";
@@ -113,8 +113,8 @@ function showOutline(nodes: OutlineNode[], note: string, uri?: string) {
       changed();
     };
     if (targets.length && !node.tree) content.append(check);
-    if (node.parts.length && node.parts.every(part => part.collider))
-      content.append(document.querySelector<HTMLTemplateElement>("#box").content.cloneNode(true));
+    if (node.colliderStyle) content.classList.add(node.colliderStyle);
+    else if (node.parts.length && node.parts.every(part => part.collider)) content.classList.add("collider");
     content.append(node.name || "(unnamed)");
     updateRows.push(() => {
       const active = targets.filter(inCategory);
@@ -141,7 +141,23 @@ function showOutline(nodes: OutlineNode[], note: string, uri?: string) {
   updateDisplay();
 }
 
-function draw() { inspector.hide(); renderer.render(scene, camera); }
+function draw() {
+  inspector.hide();
+  renderer.clear();
+  camera.layers.set(previewLayer.mesh);
+  renderer.render(scene,camera);
+  if (settings.colliders) {
+    renderer.clearDepth();
+    camera.layers.set(previewLayer.collider);
+    renderer.render(scene,camera);
+  }
+  if (settings.objects && selectedEntity) {
+    renderer.clearDepth();
+    camera.layers.set(previewLayer.widget);
+    renderer.render(scene,camera);
+  }
+  camera.layers.set(previewLayer.mesh);
+}
 
 function frame() {
   const halfAngle = Math.atan(Math.tan(camera.fov * Math.PI / 360) * Math.min(1, camera.aspect));
@@ -224,6 +240,7 @@ async function load(data, layout?: ReturnType<typeof objLayout>) {
 
 try {
   renderer = new WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.autoClear = false;
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   canvas.addEventListener("contextmenu", event => {
     if (!document.body.dataset.vscodeContext) return;
@@ -238,7 +255,10 @@ try {
   controls.addEventListener("change", draw);
   const light = new DirectionalLight(0xffffff, 2);
   light.position.set(1, 2, 3);
-  scene.add(light, new HemisphereLight(0xffffff, 0x999999, 2));
+  const ambient = new HemisphereLight(0xffffff, 0x999999, 2);
+  light.layers.enableAll();
+  ambient.layers.enableAll();
+  scene.add(light,ambient);
   resize();
   window.addEventListener("resize", resize);
   fit.addEventListener("click", frame);

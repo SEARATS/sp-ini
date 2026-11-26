@@ -1,6 +1,7 @@
 import { Box3, BoxGeometry, BufferAttribute, BufferGeometry, ConeGeometry, Group, MathUtils, Mesh, MeshBasicMaterial, MeshPhongMaterial, OctahedronGeometry, RepeatWrapping, SRGBColorSpace, TextureLoader, Vector3, type LoadingManager } from "three";
-import type { EntityScene } from "./entity-model";
+import type { EntityPart, EntityScene } from "./entity-model";
 import type { OutlineNode } from "./model-outline";
+import { objectColor, previewColors, type PreviewColor } from "./preview-colors";
 
 function floats(encoded: string) {
   return new Float32Array(Uint8Array.from(atob(encoded), char=>char.charCodeAt(0)).buffer);
@@ -12,6 +13,17 @@ export function assembledEntity(scene: EntityScene, manager: LoadingManager) {
   const meshTree = tree("Meshes"), colliderTree = tree("Colliders"), objectTree = tree("Objects");
   const byId = new Map(scene.parts.map(part=>[part.id,part]));
   const nodes = new Map<string,Group>(), rows = new Map<string,OutlineNode>();
+  const objectColliders = new Map<string,string[]>();
+  const objectGroups = new Map((scene.objects || []).map(obj=>[obj.name.toLowerCase(),obj.group]));
+  function colliderColor(part: EntityPart): PreviewColor {
+    const owners = part.referencedBy || [];
+    const groups = owners.map(name=>objectGroups.get(name.toLowerCase()));
+    if (groups.includes("Weapons")) return "weapon";
+    if (part.hullCollider) return "hull";
+    if (groups.includes("Magazines")) return "magazine";
+    if (groups.includes("Sensors")) return "sensor";
+    return owners.length ? "object" : "collider";
+  }
   const meshes = scene.geometry.map(data=>{
     const geometry = new BufferGeometry();
     geometry.setAttribute("position",new BufferAttribute(floats(data.positions),3));
@@ -35,7 +47,8 @@ export function assembledEntity(scene: EntityScene, manager: LoadingManager) {
     node.rotation.set(rx,-ry,-rz,"YXZ");
     node.scale.fromArray(part.scale);
     nodes.set(part.id,node);
-    rows.set(part.id,{name:part.name,entityId:part.id,children:[],parts:[]});
+    rows.set(part.id,{name:part.name,entityId:part.id,children:[],parts:[],
+      colliderStyle:part.collider ? colliderColor(part) : undefined});
   }
   for (const part of scene.parts) {
     (nodes.get(part.parent) || model).add(nodes.get(part.id));
@@ -60,8 +73,15 @@ export function assembledEntity(scene: EntityScene, manager: LoadingManager) {
     if (!shape) continue;
     const map = textures[part.texture];
     const alpha = scene.textures[part.texture]?.alpha;
-    const surface = new Mesh(shape,new MeshPhongMaterial({color:part.collider ? 0xff833d : map ? 0xffffff : 0xaaaaaa,
-      map:map || null, alphaTest:alpha === "cutout" ? 0.5 : 0, transparent:alpha === "blend", depthWrite:alpha !== "blend"}));
+    const surface = new Mesh(shape,part.collider
+      ? new MeshBasicMaterial({color:previewColors[rows.get(part.id).colliderStyle]})
+      : new MeshPhongMaterial({color:map ? 0xffffff : 0xaaaaaa, map:map || null, alphaTest:alpha === "cutout" ? 0.5 : 0,
+        transparent:alpha === "blend", depthWrite:alpha !== "blend"}));
+    for (const name of part.referencedBy || []) {
+      const key = name.toLowerCase();
+      if (!objectColliders.has(key)) objectColliders.set(key,[]);
+      objectColliders.get(key).push(part.id);
+    }
     surface.name = part.name;
     surface.userData.partId = part.id;
     node.add(surface);
@@ -81,7 +101,7 @@ export function assembledEntity(scene: EntityScene, manager: LoadingManager) {
     if (!obj.position || !parent) continue;
     const sensor = obj.group === "Sensors", weapon = obj.group === "Weapons";
     const shape = sensor ? new OctahedronGeometry(1) : weapon ? new ConeGeometry(1,2,4) : new BoxGeometry(1.5,1.5,1.5);
-    const widget = new Mesh(shape,new MeshBasicMaterial({color:sensor ? 0x53c8fa : weapon ? 0xff6887 : 0xc6a2ff,
+    const widget = new Mesh(shape,new MeshBasicMaterial({color:previewColors[objectColor(obj.group)],
       depthTest:false,depthWrite:false}));
     const [x,y,z] = obj.position;
     widget.position.set(-x,y,z);
@@ -89,6 +109,7 @@ export function assembledEntity(scene: EntityScene, manager: LoadingManager) {
     widget.scale.setScalar(diameter*0.009/(scale || 1));
     widget.userData.partId=obj.id;
     widget.userData.widget=true;
+    widget.userData.colliderIds=objectColliders.get(obj.name.toLowerCase());
     widget.userData.color=widget.material.color.getHex();
     widget.renderOrder=10;
     parent.add(widget);

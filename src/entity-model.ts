@@ -11,6 +11,8 @@ export interface EntityPart {
   collider: boolean; primitive?: "box" | "sphere"; visible: boolean;
   position: Vector; rotation: Vector; scale: Vector;
   source?: IniSource; meshName?: string;
+  referencedBy?: string[];
+  hullCollider?: boolean;
 }
 export interface EntityScene {
   parts: EntityPart[];
@@ -57,6 +59,8 @@ export function entityParts(doc: ReturnType<typeof parse>, warnings: Set<string>
   const models = sections.get("models");
   if (!models) throw Error("This INI has no [Models] section to preview.");
   const hull = field(models,"resourcesmesh") || field(models,"mesh") || field(models,"assetbundlemesh");
+  const hullColliders = new Set(models.keys.filter(key=>/^(resources|assetbundle)meshhullcollider$/i.test(key.name))
+    .map(key=>key.value.toLowerCase()));
   const list = [{section: models, root: true, collider: false}];
   const seen = new Set([models.name.toLowerCase()]);
   for (const [section, keys, collider] of [
@@ -90,9 +94,21 @@ export function entityParts(doc: ReturnType<typeof parse>, warnings: Set<string>
       position: vector("position",[0,0,0]), rotation: vector("rotation",[0,0,0]), scale: vector("scale",[1,1,1]),
       visible: !/^false$/i.test(field(section,"isvisible")?.value || "")
     };
+    if (collider) part.hullCollider = [section.name,mesh?.value].some(name => name &&
+      (hullColliders.has(name.toLowerCase()) || /(?:^|[^a-z]|collider|coll|col)hull(?:$|[^a-z]|col)/i.test(name)));
     return {part, mesh, material:field(section,root ? "resourcesmaterial" : "material") || (root && field(section,"assetbundlematerial")) || undefined};
   });
   const byId = new Map(parts.map(({part}) => [part.id,part]));
+  for (const section of doc.sections) {
+    // In a collider definition, Collider names the shape or mesh. Elsewhere it links to definitions.
+    if (byId.get(section.name.toLowerCase())?.collider) continue;
+    const refs = field(section,"collider")?.value;
+    if (!refs) continue;
+    for (const id of new Set(refs.split(",").map(value=>value.trim().toLowerCase()))) {
+      const collider = byId.get(id);
+      if (collider?.collider) (collider.referencedBy ??= []).push(section.name);
+    }
+  }
   for (const {part} of parts) {
     const ancestors = new Set([part.id]);
     let parent = part.parent;
@@ -123,7 +139,8 @@ export function entityObjects(doc: ReturnType<typeof parse>, parts: EntityPart[]
   ];
   const objects: EntityObject[] = [];
   for (const section of doc.sections) {
-    const group = magazines.has(section.name.toLowerCase()) ? "Magazines" : groups.find(([pattern]) => pattern.test(section.name))?.[1];
+    const magazine = magazines.has(section.name.toLowerCase()) || /magazine$/i.test(field(section,"moduletype")?.value || "");
+    const group = magazine ? "Magazines" : groups.find(([pattern]) => pattern.test(section.name))?.[1];
     if (!group) continue;
     const obj: EntityObject = {id:"object:"+section.name.toLowerCase(),name:section.name,group,source:section.source,
       system:field(section,"systemname")?.value || field(section,"type")?.value,placement:"No spatial reference"};

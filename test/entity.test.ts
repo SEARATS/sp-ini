@@ -6,9 +6,9 @@ import { Materials } from "../src/materials";
 import { entityObjects, entityParts, expandEntityIni } from "../src/entity-model";
 import { selectEntity, paintTexture, entityDocument } from "../src/entity-selection";
 import { assembledEntity } from "../src/entity-viewer";
-import { Box3, LoadingManager, Mesh, Vector3 } from "three";
+import { Box3, LoadingManager, Mesh, MeshBasicMaterial, Vector3 } from "three";
 import type { EntityPart, Vector } from "../src/entity-model";
-import { applyDisplay } from "../src/preview-display";
+import { applyDisplay, previewLayer } from "../src/preview-display";
 
 test("INI trees separate display categories while widgets follow their runtime mounts",()=>{
   const text = ["[Models]","ResourcesMesh=hull","[Submodels]","Sensors_1=Mast","[Mast]","Mesh=Dummy","Position=1,2,3",
@@ -32,10 +32,35 @@ test("INI trees separate display categories while widgets follow their runtime m
   assert.ok(outline[2].children.find(n=>n.name==="Combat systems").children.length);
   const settings = {objects:true, meshes:false,colliders:false,meshWireframe:false,colliderWireframe:true};
   applyDisplay(model,new Map(),new Set(["object:sensorsystem1"]),settings);
-  assert.ok(widgets.get("object:weaponsystem2").layers.isEnabled(0));
-  assert.equal(widgets.get("object:sensorsystem1").layers.isEnabled(0),false);
+  assert.ok(widgets.get("object:weaponsystem2").layers.isEnabled(previewLayer.widget));
+  assert.equal(widgets.get("object:sensorsystem1").layers.mask,0);
   applyDisplay(model,new Map(),new Set(),{...settings,objects:false});
-  assert.equal(widgets.get("object:weaponsystem2").layers.isEnabled(0),false);
+  assert.equal(widgets.get("object:weaponsystem2").layers.mask,0);
+});
+
+test("referenced colliders use their owners' colors and replace markers only while visible",()=>{
+  const doc = expandEntityIni(["[Models]","Mesh=hull","ResourcesMeshHullCollider=chassis","[Colliders]","Collider1=A","Collider2=B","Collider3=C",
+    "Collider4=coll_hull1a","Collider5=LockerBox","MeshCollider1=Shell","[Shell]","Collider=chassis","[A]","Collider=Box","[B]","Collider=Sphere","[C]","Collider=Box",
+    "[coll_hull1a]","Collider=Box","[LockerBox]","Collider=Box","[SensorSystem1]","MountPosition=1,2,3","Collider=a, B",
+    "[WeaponSystem1]","MountPosition=4,5,6","AssociatedMagazine=Locker","Collider=B","[Locker]","Collider=b,LockerBox"].join("\n"));
+  const parts=entityParts(doc,new Set()).map(p=>p.part);
+  const {model,outline}=assembledEntity({parts,objects:entityObjects(doc,parts),geometry:[],textures:[],warnings:[]},new LoadingManager());
+  assert.deepEqual(parts.find(p=>p.id==="b").referencedBy,["SensorSystem1","WeaponSystem1","Locker"]);
+  assert.deepEqual(outline[1].children.map(r=>r.colliderStyle),["sensor","weapon","collider","hull","magazine","hull"]);
+  for (const [name,color] of [["A",0x53c8fa],["B",0xff4444],["C",0xff833d],["coll_hull1a",0xffffff],["LockerBox",0xff833d]] as const) {
+    const mesh=model.getObjectByName(name).children[0];
+    assert.ok(mesh instanceof Mesh && mesh.material instanceof MeshBasicMaterial);
+    assert.equal(mesh.material.color.getHex(),color);
+  }
+  const widgets = new Map<string,Mesh>();
+  model.traverse(n=>{if(n.userData.widget) widgets.set(n.userData.partId,n as Mesh);});
+  const settings={meshes:true,colliders:true,objects:true,meshWireframe:false,colliderWireframe:true};
+  const categories=new Map(parts.map(p=>[p.id,p.collider]));
+  applyDisplay(model,categories,new Set(),settings);
+  assert.equal(widgets.get("object:sensorsystem1").layers.mask,0);
+  applyDisplay(model,categories,new Set(["b"]),settings);
+  assert.equal(widgets.get("object:sensorsystem1").layers.mask,0);
+  assert.ok(widgets.get("object:weaponsystem1").layers.isEnabled(previewLayer.widget));
 });
 
 test("entity picker resolves each scenario declaration and its own squadron or variant", async () => {

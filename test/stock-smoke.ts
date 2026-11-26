@@ -6,9 +6,9 @@ import { renderedModel } from "../scripts/gallery/webview";
 function checkPreviewControls() {
   const canvas = document.querySelector("canvas[aria-label]") as HTMLCanvasElement;
   if (!canvas || !document.querySelector("[role=status]")?.textContent.includes("Drag to orbit")) return "loading";
-  const icon = document.querySelector<SVGElement>("#outline li .collider-icon");
-  if (!icon) return "waiting for colliders";
-  const row = icon.closest("li"), part = icon.closest(".row").querySelector("input");
+  const label = document.querySelector<HTMLElement>("#outline li .row.collider");
+  if (!label) return "waiting for colliders";
+  const row = label.closest("li"), part = label.querySelector("input");
   const meshes = document.querySelector<HTMLInputElement>("#meshes");
   const colliders = document.querySelector<HTMLInputElement>("#colliders");
   const meshMode = document.querySelector<HTMLSelectElement>("#meshWireframe");
@@ -74,7 +74,7 @@ export const run = async () => {
         outcomes.push("FBX preview opened");
         if (process.env.SP_INI_CDP_PORT) {
           await renderedModel(Number(process.env.SP_INI_CDP_PORT),checkPreviewControls);
-          outcomes.push("FBX collider icon, visibility, category filters and wireframe verified");
+          outcomes.push("FBX collider row colors, visibility, category filters and wireframe verified");
         }
       }
     }
@@ -156,12 +156,49 @@ export const run = async () => {
       assert.fail("Did not navigate to "+expected);
     }
     await selectedSection(/^\[VLS_Module_Fwd_\{lr\}_\{rm\}\]$/i);
+    await renderedModel(port,()=>{
+      const canvas=document.querySelector<HTMLCanvasElement>('canvas[aria-label*="spruance"]');
+      if (!canvas) return "waiting for Spruance";
+      const control=(id:string)=>document.querySelector<HTMLInputElement>("#"+id);
+      const toggle=(id:string,on:boolean)=>{if(control(id).checked!==on) control(id).click();};
+      const sample=document.createElement("canvas");
+      sample.width=canvas.width; sample.height=canvas.height;
+      const ctx=sample.getContext("2d");
+      function pixels() {
+        control("colliderWireframe").dispatchEvent(new Event("change"));
+        ctx.clearRect(0,0,sample.width,sample.height);
+        ctx.drawImage(canvas,0,0);
+        return ctx.getImageData(0,0,sample.width,sample.height).data;
+      }
+      toggle("objects",false); toggle("meshes",true); toggle("colliders",false);
+      const hull=pixels();
+      toggle("meshes",false); toggle("colliders",true);
+      control("colliderWireframe").value="shaded";
+      const overlay=pixels();
+      toggle("meshes",true);
+      const combined=pixels();
+      let overlap=0, obscured=0;
+      for (let i=0;i<hull.length;i+=4) {
+        if (hull[i+3]!==255 || overlay[i+3]!==255 || overlay[i]!==255 || overlay[i+1]!==68 || overlay[i+2]!==68) continue;
+        overlap++;
+        if (combined[i]!==255 || combined[i+1]!==68 || combined[i+2]!==68) obscured++;
+      }
+      control("colliderWireframe").value="wireframe";
+      control("colliderWireframe").dispatchEvent(new Event("change"));
+      toggle("objects",true);
+      return overlap && !obscured ? "verified controls" : "Red collider overlap "+overlap+", obscured "+obscured;
+    });
     await renderedModel(port,async()=>{
       if (!document.querySelector('canvas[aria-label*="spruance"]')) return "waiting for entity";
       const canvas=document.querySelector("canvas"), tip=document.querySelector<HTMLElement>("#part-tip");
       const meshes=document.querySelector<HTMLInputElement>("#meshes"), colliders=document.querySelector<HTMLInputElement>("#colliders");
-      if (meshes.checked) meshes.click();
+      if (!meshes.checked) meshes.click();
       if (!colliders.checked) colliders.click();
+      for (const [name,style,color] of [["coll_mk41_1","weapon","rgb(255, 68, 68)"],
+        ["coll_mag_sparrow","magazine","rgb(255, 131, 61)"],["coll_hull_1","hull","rgb(255, 255, 255)"]]) {
+        const label=Array.from(document.querySelectorAll<HTMLElement>("#outline .row."+style)).find(el=>el.textContent===name);
+        if (!label || getComputedStyle(label).color!==color) return "waiting for "+name+" in "+color;
+      }
       const box=canvas.getBoundingClientRect();
       for (const y of [0.5,0.45,0.55,0.4,0.6]) for (const x of [0.5,0.4,0.6]) {
         const pos={clientX:box.left+box.width*x,clientY:box.top+box.height*y,bubbles:true};
@@ -175,7 +212,7 @@ export const run = async () => {
       return "waiting for collider hover";
     });
     await selectedSection(/^\[coll_[^\]]+\]$/i);
-    outcomes.push("Opened repeated mesh source from hierarchy and collider source from viewport");
+    outcomes.push("Verified red weapon collider row and opened collider source over visible hull");
     const aircraft = vscode.Uri.joinPath(ini,"../../aircraft/usn_f-14a_squadrons.ini");
     await vscode.commands.executeCommand("seapower-ini.previewEntity",aircraft);
     await renderedModel(port,()=>{
