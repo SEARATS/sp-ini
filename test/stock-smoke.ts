@@ -193,7 +193,9 @@ export const run = async () => {
           clientX:rect.left+(pixel%sample.width+0.5)*rect.width/sample.width,
           clientY:rect.top+(Math.floor(pixel/sample.width)+0.5)*rect.height/sample.height}));
         await new Promise(requestAnimationFrame);
-        picked=!tip.hidden && /Used by .*WeaponSystem\d+ \(/.test(tip.textContent);
+        const entries=tip.textContent.split("\n\n"), headers=entries.map(entry=>entry.split("\n")[0]);
+        picked=!tip.hidden && entries.length>1 && headers.every(header=>/^\[coll_/i.test(header)) &&
+          new Set(headers).size===headers.length && /Used by .*WeaponSystem\d+ \(/.test(entries[0]);
       }
       control("colliderWireframe").value="wireframe";
       control("colliderWireframe").dispatchEvent(new Event("change"));
@@ -217,7 +219,7 @@ export const run = async () => {
         const pos={clientX:box.left+box.width*x,clientY:box.top+box.height*y,bubbles:true};
         canvas.dispatchEvent(new PointerEvent("pointermove",pos));
         await new Promise(requestAnimationFrame);
-        if (tip.hidden || !tip.textContent.includes("Collider=")) continue;
+        if (tip.hidden || !tip.textContent.startsWith("[coll_") || !tip.textContent.includes("Collider=")) continue;
         canvas.dispatchEvent(new PointerEvent("pointerdown",{...pos,ctrlKey:true}));
         canvas.dispatchEvent(new MouseEvent("click",{...pos,ctrlKey:true}));
         return "verified controls";
@@ -225,7 +227,7 @@ export const run = async () => {
       return "waiting for collider hover";
     });
     await selectedSection(/^\[coll_[^\]]+\]$/i);
-    outcomes.push("Verified red weapon collider row and opened collider source over visible hull");
+    outcomes.push("Verified overlapping collider tooltip entries, weapon-first order, and collider source navigation over the hull");
     const aircraft = vscode.Uri.joinPath(ini,"../../aircraft/usn_f-14a_squadrons.ini");
     await vscode.commands.executeCommand("seapower-ini.previewEntity",aircraft);
     await renderedModel(port,()=>{

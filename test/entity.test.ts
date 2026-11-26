@@ -9,7 +9,7 @@ import { assembledEntity } from "../src/entity-viewer";
 import { Box3, LoadingManager, Mesh, MeshBasicMaterial, Vector3 } from "three";
 import type { EntityPart, Vector } from "../src/entity-model";
 import { applyDisplay, previewLayer } from "../src/preview-display";
-import { preferredHover } from "../src/entity-inspect";
+import { hoverStack } from "../src/entity-inspect";
 
 test("INI trees separate display categories while widgets follow their runtime mounts",()=>{
   const text = ["[Models]","ResourcesMesh=hull","[Submodels]","Sensors_1=Mast","[Mast]","Mesh=Dummy","Position=1,2,3",
@@ -61,8 +61,8 @@ test("referenced colliders use their owners' colors and replace markers only whi
   assert.equal(widgets.get("object:sensorsystem1").layers.mask,0);
   const hit = (name:string) => ({object:model.getObjectByName(name).children[0]});
   const byId = new Map(parts.map(part=>[part.id,part]));
-  assert.equal(preferredHover([hit("C"),hit("B"),hit("A")],byId)?.id,"b");
-  assert.equal(preferredHover([hit("C"),hit("A"),hit("B")],byId)?.id,"a");
+  const ordered = hoverStack(["C","LockerBox","A","coll_hull1a","B","B","C"].map(hit),byId);
+  assert.deepEqual(ordered.map(p=>p.id),["b","lockerbox","a","coll_hull1a","c"]);
   applyDisplay(model,categories,new Set(["b"]),settings);
   assert.equal(widgets.get("object:sensorsystem1").layers.mask,0);
   assert.ok(widgets.get("object:weaponsystem1").layers.isEnabled(previewLayer.widget));

@@ -84,6 +84,7 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
       canvas { display:block; width:100vw; height:100vh; touch-action:none; }
       canvas.source-link { cursor:pointer; }
       #part-tip { position:fixed; pointer-events:none; white-space:pre-line; overflow-wrap:anywhere; max-width:min(32rem,95vw);
+        max-height:85vh; overflow-y:auto;
         color:var(--vscode-editorHoverWidget-foreground); background:var(--vscode-editorHoverWidget-background);
         border:1px solid var(--vscode-editorHoverWidget-border); padding:5px 8px; z-index:2; }
       aside { position:absolute; bottom:10px; left:12px; max-width:85%; background:var(--vscode-editor-background); }

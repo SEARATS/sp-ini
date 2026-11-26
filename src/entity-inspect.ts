@@ -1,20 +1,25 @@
 import { Raycaster, Vector2, type Object3D, type PerspectiveCamera } from "three";
 import { previewLayer } from "./preview-display";
 import type { EntityPart, EntityObject } from "./entity-model";
+import type { PreviewColor } from "./preview-colors";
 
 type Inspectable = EntityPart | EntityObject;
 
-// Three returns intersections nearest first. Keep distance order within each category.
-export function preferredHover(hits: readonly {object:Object3D}[], parts: ReadonlyMap<string,Inspectable>) {
-  let collider: Inspectable, mesh: Inspectable;
+const hoverPriority: Record<PreviewColor,number> = { weapon:0, sensor:1, magazine:1, object:1, hull:2, unassigned:3, collider:3 };
+
+// Three returns triangles nearest first. A stable sort keeps that order within a priority.
+export function hoverStack(hits: readonly {object:Object3D}[], parts: ReadonlyMap<string,Inspectable>): Inspectable[] {
+  const ranked = new Map<Inspectable,number>();
+  let mesh: Inspectable;
   for (const {object} of hits) {
     const part = parts.get(object.userData.partId);
-    if (!part) continue;
-    if (object.userData.widget || object.userData.systemTarget) return part;
-    if (object.layers.isEnabled(previewLayer.collider)) collider ??= part;
+    if (!part || ranked.has(part)) continue;
+    const role: PreviewColor = object.userData.previewRole;
+    if (role) ranked.set(part,hoverPriority[role]);
     else mesh ??= part;
   }
-  return collider ?? mesh;
+  if (!ranked.size) return mesh ? [mesh] : [];
+  return [...ranked.entries()].sort((a,b)=>a[1]-b[1]).map(([part])=>part);
 }
 
 export function inspectEntity(canvas: HTMLCanvasElement, camera: PerspectiveCamera, model: () => Object3D, open: (id: string) => void, select: (id: string) => void) {
@@ -24,6 +29,7 @@ export function inspectEntity(canvas: HTMLCanvasElement, camera: PerspectiveCame
   ray.layers.enable(previewLayer.collider);
   ray.layers.enable(previewLayer.widget);
   const modifier = /Mac/i.test(navigator.platform) ? "⌘" : "Ctrl";
+  const openHint = modifier+"+click to open INI";
   let scheduled = 0, press: PointerEvent;
 
   function description(part: EntityPart | EntityObject) {
@@ -36,14 +42,14 @@ export function inspectEntity(canvas: HTMLCanvasElement, camera: PerspectiveCame
       return owner && "system" in owner && owner.system ? name+" ("+owner.system+")" : name;
     }).join(", ")] : [];
     return ["["+(part.id === "models" ? source.header : part.name)+"]", detail,...owners,
-      file+" · line "+(source.line+1), modifier+"+click to open INI"].join("\n");
+      file+" · line "+(source.line+1)].join("\n");
   }
-  function hit(event: MouseEvent) {
-    if (!parts.size || !model()) return;
+  function hitsAt(event: MouseEvent) {
+    if (!parts.size || !model()) return [];
     const rect = canvas.getBoundingClientRect();
     pointer.set((event.clientX-rect.left)/rect.width*2-1, 1-(event.clientY-rect.top)/rect.height*2);
     ray.setFromCamera(pointer,camera);
-    return preferredHover(ray.intersectObject(model(),true),parts);
+    return hoverStack(ray.intersectObject(model(),true),parts);
   }
   function hide() {
     cancelAnimationFrame(scheduled);
@@ -54,27 +60,34 @@ export function inspectEntity(canvas: HTMLCanvasElement, camera: PerspectiveCame
     hide();
     if (event.buttons || !parts.size) return;
     scheduled = requestAnimationFrame(()=>{
-      const part = hit(event);
-      if (!part) return;
-      tip.textContent = description(part);
+      const hits = hitsAt(event);
+      if (!hits.length) return;
+      tip.textContent = hits.map(description).join("\n\n")+"\n"+(hits.length === 1 ? openHint : modifier+"+click to open the first entry");
+      tip.scrollTop = 0;
       tip.hidden = false;
       tip.style.left = Math.max(0,Math.min(event.clientX+12,innerWidth-tip.offsetWidth))+"px";
       tip.style.top = Math.max(0,Math.min(event.clientY+14,innerHeight-tip.offsetHeight))+"px";
       canvas.classList.toggle("source-link", event.ctrlKey || event.metaKey);
     });
   });
+  canvas.addEventListener("wheel",event=>{
+    if (tip.hidden || !event.altKey || tip.scrollHeight <= tip.clientHeight) return;
+    event.preventDefault(); event.stopImmediatePropagation();
+    const step = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? tip.clientHeight : 1;
+    tip.scrollTop += event.deltaY * step;
+  },{capture:true,passive:false});
   canvas.addEventListener("pointerleave",hide);
   canvas.addEventListener("pointercancel",()=>{press=undefined;hide();});
   canvas.addEventListener("pointerdown",event=>{
     hide(); press=undefined;
     if (event.button !== 0) return;
     press=event;
-    if ((event.ctrlKey || event.metaKey) && hit(event)) event.stopImmediatePropagation();
+    if ((event.ctrlKey || event.metaKey) && hitsAt(event).length) event.stopImmediatePropagation();
   },true);
   canvas.addEventListener("click",event=>{
     if (event.button !== 0 || !press || Math.hypot(press.clientX-event.clientX,press.clientY-event.clientY)>4) return;
     press=undefined;
-    const part=hit(event);
+    const [part]=hitsAt(event);
     if (part && (event.ctrlKey || event.metaKey)) open(part.id);
     else if (part && "group" in part) select(part.id);
   });
@@ -87,7 +100,7 @@ export function inspectEntity(canvas: HTMLCanvasElement, camera: PerspectiveCame
       const part=parts.get(id);
       if (!part) return;
       label.tabIndex=0;
-      label.title=description(part);
+      label.title=description(part)+"\n"+openHint;
       label.addEventListener("click",event=>{
         if (!(event.ctrlKey || event.metaKey) || event.target instanceof HTMLInputElement) return;
         event.preventDefault(); event.stopPropagation(); open(id);

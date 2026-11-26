@@ -87,7 +87,7 @@ export function assembledEntity(scene: EntityScene, manager: LoadingManager) {
     }
     surface.name = part.name;
     surface.userData.partId = part.id;
-    surface.userData.systemTarget = !!part.referencedBy?.length || rows.get(part.id).colliderStyle === "magazine";
+    surface.userData.previewRole = rows.get(part.id).colliderStyle;
     node.add(surface);
     rows.get(part.id).parts.push({id:part.id,collider:part.collider});
   }
@@ -113,6 +113,7 @@ export function assembledEntity(scene: EntityScene, manager: LoadingManager) {
     widget.scale.setScalar(diameter*0.009/(scale || 1));
     widget.userData.partId=obj.id;
     widget.userData.widget=true;
+    widget.userData.previewRole=objectColor(obj.group);
     widget.userData.colliderIds=objectColliders.get(obj.name.toLowerCase());
     widget.userData.color=widget.material.color.getHex();
     widget.renderOrder=10;
