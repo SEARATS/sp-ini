@@ -195,6 +195,7 @@ export const run = async () => {
       if (!meshes.checked) meshes.click();
       if (!colliders.checked) colliders.click();
       for (const [name,style,color] of [["coll_mk41_1","weapon","rgb(255, 68, 68)"],
+        ["coll_ss_1","unassigned","rgb(192, 192, 192)"],["coll_mag_asroc","magazine","rgb(255, 131, 61)"],
         ["coll_mag_sparrow","magazine","rgb(255, 131, 61)"],["coll_hull_1","hull","rgb(255, 255, 255)"]]) {
         const label=Array.from(document.querySelectorAll<HTMLElement>("#outline .row."+style)).find(el=>el.textContent===name);
         if (!label || getComputedStyle(label).color!==color) return "waiting for "+name+" in "+color;

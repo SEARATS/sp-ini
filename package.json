@@ -2,7 +2,7 @@
   "name": "seapower-ini",
   "displayName": "Sea Power INI",
   "description": "Autocomplete, error checking and Go to Definition for Sea Power INI files.",
-  "version": "0.8.5",
+  "version": "0.8.6",
   "publisher": "searats",
   "private": true,
   "repository": {

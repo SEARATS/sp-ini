@@ -22,7 +22,10 @@ export function assembledEntity(scene: EntityScene, manager: LoadingManager) {
     if (part.hullCollider) return "hull";
     if (groups.includes("Magazines")) return "magazine";
     if (groups.includes("Sensors")) return "sensor";
-    return owners.length ? "object" : "collider";
+    if (owners.length) return "object";
+    const magazineName = /(?:^|[^a-z])mag(?:azine)?(?:$|[^a-z])/i;
+    if ([part.name,part.meshName].some(name=>name && magazineName.test(name))) return "magazine";
+    return "unassigned";
   }
   const meshes = scene.geometry.map(data=>{
     const geometry = new BufferGeometry();

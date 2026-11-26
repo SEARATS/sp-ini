@@ -46,8 +46,8 @@ test("referenced colliders use their owners' colors and replace markers only whi
   const parts=entityParts(doc,new Set()).map(p=>p.part);
   const {model,outline}=assembledEntity({parts,objects:entityObjects(doc,parts),geometry:[],textures:[],warnings:[]},new LoadingManager());
   assert.deepEqual(parts.find(p=>p.id==="b").referencedBy,["SensorSystem1","WeaponSystem1","Locker"]);
-  assert.deepEqual(outline[1].children.map(r=>r.colliderStyle),["sensor","weapon","collider","hull","magazine","hull"]);
-  for (const [name,color] of [["A",0x53c8fa],["B",0xff4444],["C",0xff833d],["coll_hull1a",0xffffff],["LockerBox",0xff833d]] as const) {
+  assert.deepEqual(outline[1].children.map(r=>r.colliderStyle),["sensor","weapon","unassigned","hull","magazine","hull"]);
+  for (const [name,color] of [["A",0x53c8fa],["B",0xff4444],["C",0xc0c0c0],["coll_hull1a",0xffffff],["LockerBox",0xff833d]] as const) {
     const mesh=model.getObjectByName(name).children[0];
     assert.ok(mesh instanceof Mesh && mesh.material instanceof MeshBasicMaterial);
     assert.equal(mesh.material.color.getHex(),color);
