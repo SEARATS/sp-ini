@@ -1,4 +1,5 @@
 import { registerHierarchy } from "./hierarchy-ui";
+import { watchFile, unwatchFile, type Stats } from "node:fs";
 import * as vscode from "vscode";
 import { LanguageClient, TransportKind } from "vscode-languageclient/node";
 import { referencePatterns } from "./previews";
@@ -58,11 +59,15 @@ function options() {
 
 async function activate(context) {
   if (context.extensionMode === vscode.ExtensionMode.Development && process.env.SEAPOWER_DEV_RELOAD === "1") {
-    const fs = require("node:fs");
     const stamp = context.asAbsolutePath("dist/.dev-build");
-    const reload = () => vscode.commands.executeCommand("workbench.action.reloadWindow");
-    fs.watchFile(stamp, { interval: 350 }, reload);
-    context.subscriptions.push({ dispose: () => fs.unwatchFile(stamp, reload) });
+    // A missing stamp also triggers watchFile when the development host starts.
+    const onBuild = (current: Stats, previous: Stats) => {
+      if (current.nlink && current.mtimeMs !== previous.mtimeMs) {
+        void vscode.commands.executeCommand("workbench.action.reloadWindow");
+      }
+    };
+    watchFile(stamp, { interval: 350 }, onBuild);
+    context.subscriptions.push({ dispose: () => unwatchFile(stamp, onBuild) });
   }
   registerHierarchy(context);
   const indexed = new vscode.EventEmitter<void>();

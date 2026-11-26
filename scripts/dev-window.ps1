@@ -14,7 +14,7 @@ try {
         if ($LASTEXITCODE) { throw 'VS Code failed to open the development window.' }
         # A window reload releases the CLI's --wait marker. The profile process survives it.
         $app = Get-CimInstance Win32_Process -Filter "Name = 'Code.exe'" | Where-Object {
-            $_.CommandLine -like "*$profile*" -and $_.CommandLine -notlike '*--type=*'
+            $_.CommandLine.Replace('/', '\') -like "*$profile*" -and $_.CommandLine -notlike '*--type=*'
         } | Select-Object -First 1
         if (!$app) { throw 'The VS Code development profile did not start.' }
         Wait-Process -Id $app.ProcessId -ErrorAction SilentlyContinue
