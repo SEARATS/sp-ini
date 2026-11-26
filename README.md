@@ -87,4 +87,4 @@ The examples use the stock Spruance VLS destroyer. Select a screenshot to view i
 [preview-definition]: https://raw.githubusercontent.com/SEARATS/binaries/04ea384d40bbdaaa64c521b8d5a7ae84d9000fa3/sp-ini/20-preview-definition.png
 [hierarchy-definition]: https://raw.githubusercontent.com/SEARATS/binaries/04ea384d40bbdaaa64c521b8d5a7ae84d9000fa3/sp-ini/21-hierarchy-definition.png
 [entity-trees]: https://raw.githubusercontent.com/SEARATS/binaries/04ea384d40bbdaaa64c521b8d5a7ae84d9000fa3/sp-ini/22-entity-trees.png
-[collider-highlight]: https://raw.githubusercontent.com/SEARATS/binaries/04ea384d40bbdaaa64c521b8d5a7ae84d9000fa3/sp-ini/23-collider-highlight.png
+[collider-highlight]: https://raw.githubusercontent.com/SEARATS/binaries/e578519aeeff1cddc61f62877baac25fff10ff4c/sp-ini/23-collider-highlight.png

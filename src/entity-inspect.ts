@@ -5,6 +5,12 @@ import type { PreviewColor } from "./preview-colors";
 
 type Inspectable = EntityPart | EntityObject;
 
+function geometryLabel(part: EntityPart) {
+  if (!part.collider) return "Mesh="+(part.meshName || "Dummy");
+  if (part.primitive) return part.primitive === "sphere" ? "Sphere" : "Box";
+  return part.meshName ? "Mesh · "+part.meshName : "Mesh";
+}
+
 const hoverPriority: Record<PreviewColor,number> = { weapon:0, sensor:1, magazine:1, object:1, hull:2, unassigned:3, collider:3 };
 
 // Three returns triangles nearest first. A stable sort keeps that order within a priority.
@@ -37,7 +43,7 @@ export function inspectEntity(canvas: HTMLCanvasElement, camera: PerspectiveCame
     const {source} = part;
     const file = decodeURIComponent(new URL(source.uri).pathname.split("/").pop());
     const detail = "group" in part ? [part.system,part.placement].filter(Boolean).join("\n") :
-      (part.collider ? "" : "Mesh=")+(part.meshName || part.primitive || "Dummy");
+      geometryLabel(part);
     const owners = "referencedBy" in part && part.referencedBy?.length ? ["Used by "+part.referencedBy.map(name=>{
       const owner = parts.get("object:"+name.toLowerCase());
       return owner && "system" in owner && owner.system ? name+" ("+owner.system+")" : name;

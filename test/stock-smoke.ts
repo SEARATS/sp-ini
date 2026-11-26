@@ -215,6 +215,10 @@ export const run = async () => {
       const meshes=document.querySelector<HTMLInputElement>("#meshes"), colliders=document.querySelector<HTMLInputElement>("#colliders");
       if (!meshes.checked) meshes.click();
       if (!colliders.checked) colliders.click();
+      for (const [id,detail] of [["coll_mk41_1","Box"],["coll_sps_40","Sphere"],["coll_hull_1","Mesh · usn_dd_spruance_vls_coll_hull_1"]]) {
+        const row=document.querySelector<HTMLElement>('[data-part-id="'+id+'"]');
+        if (row?.title.split("\n")[1]!==detail) return "Missing collider type for "+id;
+      }
       for (const [name,style,color] of [["coll_mk41_1","weapon","rgb(255, 68, 68)"],
         ["coll_ss_1","unassigned","rgb(192, 192, 192)"],["coll_mag_asroc","magazine","rgb(255, 131, 61)"],
         ["coll_mag_sparrow","magazine","rgb(255, 131, 61)"],["coll_hull_1","hull","rgb(255, 255, 255)"]]) {
