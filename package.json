@@ -2,7 +2,7 @@
   "name": "seapower-ini",
   "displayName": "Sea Power INI",
   "description": "Autocomplete, error checking and Go to Definition for Sea Power INI files.",
-  "version": "0.9.24",
+  "version": "0.9.25",
   "icon": "dist/icon.png",
   "publisher": "searats",
   "private": true,
@@ -375,7 +375,7 @@
         "seapowerIni.meshFlags": {
           "type": "array",
           "scope": "resource",
-          "markdownDescription": "Flag meshes in model and entity hierarchies. Each row shows every matching flag in list order. Substrings and JavaScript regular expressions match either the object or mesh name, ignoring case. Edit the list in settings.json. Use an empty list to hide all flags. These labels do not change collider export or visibility.",
+          "markdownDescription": "Flag meshes in model and entity hierarchies. Rules match object and mesh names, ignoring case. Export INI Data uses the Collider, LOD and Damaged tags to suggest export roles. Edit rules in settings.json or use Tags on an individual mesh.",
           "items": {
             "type": "object",
             "required": ["label"],
@@ -390,6 +390,9 @@
           },
           "default": [
             { "label": "Collider", "icon": "package", "substrings": ["coll"], "patterns": ["(?:^|_)col(?=$|[_.0-9])"] },
+            { "label": "Primary mesh", "icon": "star-full" },
+            { "label": "Primary damage mesh", "icon": "flame" },
+            { "label": "Hull collider", "icon": "shield" },
             { "label": "Damaged", "icon": "flame", "patterns": ["_d(?:_?[0-9]+)?(?=$|_lod_?[0-9]+(?:$|_))"] },
             { "label": "LOD", "icon": "layers", "patterns": ["(?:^|_)lod_?[0-9]+(?:$|_)"] },
             { "label": "Glass", "icon": "eye", "patterns": ["(?:^|_)glass(?:$|_)"] },

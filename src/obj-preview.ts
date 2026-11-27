@@ -2,15 +2,17 @@ import { randomBytes } from "node:crypto";
 import * as vscode from "vscode";
 import { readBlendPreview } from "./blend-export";
 import { needsFbxReader, readFbx } from "./fbx-reader";
-import { sceneHierarchy, hierarchy } from "./hierarchy";
+import { sceneHierarchy, type ModelNode } from "./hierarchy";
+import { objExportHierarchy } from "./export-plan";
+import { modelTags } from "./model-tags";
 import { fbxOutline } from "./model-outline";
 import type { IniSource } from "./ini";
 import type { EntityScene } from "./entity-model";
 import { previewColors } from "./preview-colors";
-import { meshFlagSetting } from "./mesh-flags";
+import { meshFlagMatcher, meshFlagSetting } from "./mesh-flags";
 import { isMissingTextureColor, type MissingTextureColor } from "./missing-textures";
-import { readMeshTags } from "./mesh-sidecar";
-import { editMeshTags, watchMeshTags } from "./mesh-tags-ui";
+import { readMeshOverrides } from "./mesh-sidecar";
+import { editMeshTags, moveMeshInList, watchMeshTags } from "./mesh-tags-ui";
 const viewType = "seapower-ini.obj";
 
 function openSourceBeside(document, column) {
@@ -59,7 +61,11 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
     }
     panel.webview.options = { enableScripts: true, localResourceRoots: [dist, vscode.workspace.getWorkspaceFolder(document.uri)?.uri ?? vscode.Uri.joinPath(document.uri, "..")] };
     let timer;
-    const send = () => panel.webview.postMessage({ type:"model", sourceUri:document.uri.toString(), text:document.getText(), url:panel.webview.asWebviewUri(document.uri).toString() });
+    const send = () => {
+      const text = document.getText();
+      void updateModelTags(objExportHierarchy(text,new Map()));
+      return panel.webview.postMessage({ type:"model", sourceUri:document.uri.toString(), text, url:panel.webview.asWebviewUri(document.uri).toString() });
+    };
     const messages = panel.webview.onDidReceiveMessage(message => { if (message.type === "ready") send(); });
     let paired = false;
     function pair() {
@@ -79,7 +85,7 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
       visibility.dispose();
       edits.dispose();
     });
-    showViewer(panel, document.uri);
+    const updateModelTags = showViewer(panel, document.uri);
     pair();
   }
   function showViewer(panel: vscode.WebviewPanel, uri: vscode.Uri, loading = "Opening model…") {
@@ -89,11 +95,19 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
       value:(!hasProject() && looseColor) || vscode.workspace.getConfiguration(undefined, uri).get(colorKey, "grey")});
     const looseChanges = looseColorChanged.event(() => { if (!hasProject()) void sendColor(); });
     const editable = uri.scheme === "file" && /\.(obj|fbx|blend)$/i.test(uri.path);
+    let roots: ModelNode[] = [], effective = meshFlagMatcher([]);
     const sendFlags = () => {
-      let entries = [], error = "";
-      try { if (editable) entries = [...readMeshTags(uri.fsPath)].map(([name, flags]) => [name, [...flags]]); }
+      let entries = [], order:string[] = [], error = "";
+      const rules = vscode.workspace.getConfiguration(undefined,uri).get(meshFlagSetting);
+      try { if (editable) {
+        const saved = readMeshOverrides(uri.fsPath);
+        order = saved.order;
+        const tags = modelTags(roots,uri.fsPath,saved.tags,rules);
+        effective = meshFlagMatcher(rules,tags);
+        entries = [...tags].map(([name, flags]) => [name, [...flags]]);
+      } }
       catch (e) { error = e.message; }
-      return panel.webview.postMessage({ type:"meshFlags", editable, entries, error, rules:vscode.workspace.getConfiguration(undefined, uri).get(meshFlagSetting) });
+      return panel.webview.postMessage({ type:"meshFlags", editable, entries, order, error, rules });
     };
     const watcher = editable && watchMeshTags(uri, sendFlags);
     const ready = panel.webview.onDidReceiveMessage(async message => {
@@ -108,7 +122,15 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
       }
       if (editable && message.type === "editMeshTags" && Array.isArray(message.names) && message.names.length &&
           message.names.every(name => typeof name === "string" && name.length)) {
-        try { await editMeshTags(uri, message.names); await sendFlags(); }
+        try {
+          const object = message.names.includes(message.objectName) ? message.objectName : message.names[0];
+          await editMeshTags(uri, message.names,effective(...message.names).map(f => f.label),object);
+          await sendFlags();
+        }
+        catch (error) { void vscode.window.showErrorMessage(error.message); }
+      }
+      if (editable && message.type === "moveMesh") {
+        try { moveMeshInList(uri,message); await sendFlags(); }
         catch (error) { void vscode.window.showErrorMessage(error.message); }
       }
     });
@@ -146,6 +168,7 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
       .row .edit-tags { padding:0 3px; background:transparent; color:inherit; opacity:0; }
       .row:hover .edit-tags, .row:focus-within .edit-tags { opacity:1; }
       .edit-tags[hidden] { display:none; }
+      .moves{display:inline-flex;opacity:0}.row:hover .moves,.row:focus-within .moves{opacity:1}.moves button{padding:0 3px}
       #entity-pickers label { display:grid; gap:2px; margin:4px 0; }
       #entity-warnings { max-width:28rem; white-space:normal; }
       #filters { display:grid; grid-template-columns:auto auto; align-items:center; gap:4px 8px; margin:6px 0; }
@@ -168,6 +191,7 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
       <div id="arc-filter" hidden><label><input id="arcs" type="checkbox" checked>System arcs</label></div></div>
       <p></p><p id="sidecar-error" role="status" hidden></p><details id="entity-warnings" hidden><summary></summary><div></div></details><ul></ul></details>
       <script nonce="${nonce}" src="${script}"></script></body></html>`;
+    return (next: ModelNode[]) => { roots = next; return sendFlags(); };
   }
   const blendType = "seapower-ini.blend";
   const openBlend = vscode.commands.registerCommand("seapower-ini.previewBlend", (uri?: vscode.Uri) => {
@@ -196,7 +220,11 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
             const file = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
             const scene = blend || fallback || needsFbxReader(file) ? readFbx(file) : undefined;
             await panel.webview.postMessage({ ...message, revision: current, scene });
-            if (revision === current) await panel.webview.postMessage({ type: "outline", nodes: fbxOutline(scene ? sceneHierarchy(scene) : hierarchy(file)) });
+            if (revision === current) {
+              const roots = sceneHierarchy(scene ?? readFbx(file,"counts"));
+              void updateModelTags(roots);
+              await panel.webview.postMessage({ type:"outline", nodes:fbxOutline(roots) });
+            }
           } catch (error) {
             if (revision === current) await panel.webview.postMessage({ ...message, error: String(error), revision: current });
           }
@@ -214,7 +242,7 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
         watcher.onDidChange(refresh);
         watcher.onDidCreate(refresh);
         panel.onDidDispose(() => { revision++; conversion?.abort(); clearTimeout(timer); watcher.dispose(); messages.dispose(); });
-        showViewer(panel, document.uri, blend ? "Opening scene in Blender…" : undefined);
+        const updateModelTags = showViewer(panel, document.uri, blend ? "Opening scene in Blender…" : undefined);
       }
     }, {webviewOptions:{retainContextWhenHidden:blend}});
   }

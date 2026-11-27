@@ -2,30 +2,43 @@ import * as vscode from "vscode";
 import { basename, dirname, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { ModelNode, Role, changes, colliderSnippet, defaultRole, flatten, generate, hierarchy, snippet } from "./hierarchy";
+import { ModelNode, Role, changes, colliderSnippet, defaultRole, flatten, generate, hierarchy, sceneHierarchy, snippet } from "./hierarchy";
+import { readFbx } from "./fbx-reader";
+import { modelTags } from "./model-tags";
 import { parse } from "./ini";
 import { meshFlagMatcher, meshFlagSetting } from "./mesh-flags";
 import { watchMeshTags } from "./mesh-tags-ui";
-import { readMeshTags } from "./mesh-sidecar";
+import { readMeshOverrides } from "./mesh-sidecar";
+import { orderedSiblings, orderHierarchy } from "./mesh-order";
 import { openExportPanel } from "./export-panel";
 
 export function registerHierarchy(context: vscode.ExtensionContext) {
   const changed = new vscode.EventEmitter<void>();
   let file: vscode.Uri, loading: Promise<ModelNode[]> = Promise.resolve([]);
   let watcher: vscode.Disposable;
+  let order:string[] = [], activeRoots:ModelNode[] = [];
   const readFlags = () => {
     const rules = vscode.workspace.getConfiguration(undefined, file).get(meshFlagSetting);
-    try { return meshFlagMatcher(rules, file && readMeshTags(file.fsPath)); }
+    try {
+      const saved = file && readMeshOverrides(file.fsPath);
+      order = saved?.order ?? [];
+      return meshFlagMatcher(rules,saved && modelTags(activeRoots,file.fsPath,saved.tags,rules));
+    }
     catch { return meshFlagMatcher(rules); } // The model preview displays the sidecar error.
   };
   let matchFlags = readFlags();
   const select = (uri: vscode.Uri) => {
     if (!uri || !/\.fbx$/i.test(uri.path) || file?.toString()===uri.toString()) return;
     file = uri;
+    activeRoots = [];
     watcher?.dispose();
     watcher = watchMeshTags(uri, () => { matchFlags = readFlags(); changed.fire(); });
     matchFlags = readFlags();
-    loading = readFile(uri.fsPath).then(hierarchy);
+    loading = readFile(uri.fsPath).then(bytes => {
+      const roots = sceneHierarchy(readFbx(bytes,"counts"));
+      if (file === uri) { activeRoots = roots; matchFlags = readFlags(); }
+      return roots;
+    });
     loading.catch(() => {});
     changed.fire();
   };
@@ -35,7 +48,7 @@ export function registerHierarchy(context: vscode.ExtensionContext) {
   }
   const tree = vscode.window.createTreeView("seapower-ini.hierarchy", { treeDataProvider: {
     onDidChangeTreeData: changed.event,
-    getChildren: (node?: ModelNode) => node ? node.children : loading,
+    getChildren: async (node?: ModelNode) => orderedSiblings(node ? node.children : await loading,order).map(row => row.node),
     getTreeItem: (node: ModelNode) => {
       const item = new vscode.TreeItem(node.name, node.children.length ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None);
       item.id = node.path;
@@ -76,7 +89,8 @@ export function registerHierarchy(context: vscode.ExtensionContext) {
     const model = resource || (node ? file : existing ? await referenced(existing,editor.selection.active.line) : undefined)
       || await pickFile("Choose model","fbx");
     if (!model) return;
-    const roots = hierarchy(await readFile(model.fsPath), readMeshTags(model.fsPath));
+    const saved = readMeshOverrides(model.fsPath);
+    const roots = orderHierarchy(hierarchy(await readFile(model.fsPath),saved.tags),saved.order);
     const nodes = flatten(roots);
     if (node || previewNodeId !== undefined) {
       node = nodes.find(n => previewNodeId !== undefined ? n.id === previewNodeId : n.path === node.path);

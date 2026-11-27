@@ -13,7 +13,7 @@ export function needsFbxReader(bytes: Buffer) {
 export interface FbxScene {
   axes: number[];
   nodes: {index: number; parent: number; id: string; name: string; mesh: number; local: number[]; geometric: number[]; materials: number[]}[];
-  meshes: {name: string; positions: Float32Array; normals: Float32Array; uvs: Float32Array; indices: Uint32Array; slots: Uint32Array; faces?: [number, number][]; vertexIndices?: Uint32Array}[];
+  meshes: {name: string; triangles?: number; positions: Float32Array; normals: Float32Array; uvs: Float32Array; indices: Uint32Array; slots: Uint32Array; faces?: [number, number][]; vertexIndices?: Uint32Array}[];
   materials: {name: string; color: number[]; path: string; content?: Uint8Array}[];
 }
 
@@ -26,7 +26,7 @@ interface ReaderExports extends WebAssembly.Exports {
 }
 
 let compiled: WebAssembly.Module;
-export function readFbx(bytes: Buffer, mode: "preview" | "hierarchy" | "lookup" = "preview"): FbxScene {
+export function readFbx(bytes: Buffer, mode: "preview" | "hierarchy" | "lookup" | "counts" = "preview"): FbxScene {
   if (!compiled) {
     const file = [__dirname, join(__dirname, "../dist"), join(__dirname, "..")]
       .map(dir => join(dir, "fbx-reader.wasm")).find(existsSync);
@@ -64,7 +64,7 @@ export function readFbx(bytes: Buffer, mode: "preview" | "hierarchy" | "lookup" 
     },
     mesh(name: number, n: number, positions: number, normals: number, uv: number, triangles: number, indices: number, slots: number) {
       scene.meshes.push({name: string(name), positions: floats(positions, n*3), normals: floats(normals, n*3),
-        uvs: floats(uv, uv ? n*2 : 0), indices: ints(indices, triangles*3), slots: ints(slots, triangles)});
+        triangles, uvs: floats(uv, uv ? n*2 : 0), indices: ints(indices, indices ? triangles*3 : 0), slots: ints(slots, slots ? triangles : 0)});
     },
     polygons(name: number, n: number, positions: number, corners: number, vertexIndices: number, uv: number, count: number, ranges: number) {
       const pairs = new Uint32Array(memory(), ranges, count*2);
@@ -81,7 +81,7 @@ export function readFbx(bytes: Buffer, mode: "preview" | "hierarchy" | "lookup" 
   if (!ptr) throw Error(error);
   try {
     new Uint8Array(memory(), ptr, bytes.length).set(bytes);
-    if (!wasm.decode(ptr, bytes.length, {hierarchy:0, preview:1, lookup:2}[mode], Number(mode !== "lookup" && !needsFbxReader(bytes)))) throw Error(error);
+    if (!wasm.decode(ptr, bytes.length, {hierarchy:0, preview:1, lookup:2, counts:3}[mode], Number(mode !== "lookup" && !needsFbxReader(bytes)))) throw Error(error);
     return scene;
   } finally { wasm.free(ptr); }
 }

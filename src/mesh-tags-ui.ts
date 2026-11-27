@@ -2,7 +2,8 @@ import * as vscode from "vscode";
 import { dirname } from "node:path";
 import { colliderType } from "./mesh-names";
 import { meshFlagMatcher, meshFlagSetting } from "./mesh-flags";
-import { meshSidecar, readMeshTags, writeMeshTags } from "./mesh-sidecar";
+import { meshSidecar, moveMesh, readMeshTags, writeMeshTags } from "./mesh-sidecar";
+import { specialRoles } from "./export-roles";
 
 export function watchMeshTags(uri: vscode.Uri, refresh: () => void) {
   const file = vscode.Uri.file(meshSidecar(uri.fsPath)).toString();
@@ -14,13 +15,12 @@ export function watchMeshTags(uri: vscode.Uri, refresh: () => void) {
   return watcher;
 }
 
-export async function editMeshTags(uri: vscode.Uri, names: string[]) {
+export async function editMeshTags(uri: vscode.Uri, names: string[], effective?: string[], objectName = names[0]) {
   const tags = readMeshTags(uri.fsPath);
   const match = meshFlagMatcher(vscode.workspace.getConfiguration(undefined, uri).get(meshFlagSetting), tags);
-  const current = new Set(match(...names).map(flag => flag.label));
+  const current = new Set(effective ?? match(...names).map(flag => flag.label));
   if (colliderType(tags, ...names)) current.add("Collider");
-  else current.delete("Collider");
-  const labels = new Set([...match.labels, "Collider", ...names.flatMap(name => [...(tags.get(name)?.keys() ?? [])])]);
+  const labels = new Set([...match.labels, ...specialRoles, "Collider", ...current, ...names.flatMap(name => [...(tags.get(name)?.keys() ?? [])])]);
   const choices = [...labels].map(label => ({label, picked:current.has(label), custom:false}));
   choices.push({label:"$(add) Add custom tag…", picked:false, custom:true});
   const selection = await vscode.window.showQuickPick(choices, {title:"Mesh tags · " + names[0], canPickMany:true,
@@ -35,7 +35,16 @@ export async function editMeshTags(uri: vscode.Uri, names: string[]) {
   const changes = new Map<string, boolean>();
   for (const label of new Set([...next, ...current])) if (next.has(label) !== current.has(label)) changes.set(label, next.has(label));
   if (!changes.size) return;
+  checkSidecar(uri);
+  writeMeshTags(uri.fsPath, names[0], changes, objectName);
+}
+
+function checkSidecar(uri:vscode.Uri) {
   const sidecar = vscode.Uri.file(meshSidecar(uri.fsPath)).toString();
-  if (vscode.workspace.textDocuments.some(doc => doc.uri.toString() === sidecar && doc.isDirty)) throw Error("Save your open mesh sidecar before changing tags in the viewer.");
-  writeMeshTags(uri.fsPath, names[0], changes);
+  if (vscode.workspace.textDocuments.some(doc => doc.uri.toString() === sidecar && doc.isDirty)) throw Error("Save your open mesh sidecar first.");
+}
+
+export function moveMeshInList(uri:vscode.Uri, message:{siblings:string[]; key:string; direction:number}) {
+  checkSidecar(uri);
+  moveMesh(uri.fsPath,message.siblings,message.key,message.direction);
 }

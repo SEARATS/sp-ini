@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { basename } from "node:path";
 import { isSeq, parseDocument } from "yaml";
 import type { MeshTags } from "./mesh-names";
+import { specialRoles } from "./export-roles";
 
 export const meshSidecar = (model: string) => model.replace(/\.(?:obj|fbx|blend)$/i, ".meshes.yaml");
 
@@ -43,20 +44,59 @@ function decode(source: string, file: string) {
 }
 
 export function readMeshTags(model: string): MeshTags {
+  return readMeshOverrides(model).tags;
+}
+
+export function readMeshOverrides(model: string) {
   const file = meshSidecar(model);
-  if (file === model) return new Map();
-  const source = read(file);
-  return source ? decode(source, file).tags : new Map();
+  const source = file === model ? undefined : read(file);
+  if (!source) return {tags:new Map() as MeshTags,order:[] as string[]};
+  const {doc,tags} = decode(source,file);
+  return {tags,order:meshOrder(doc)};
+}
+
+function meshOrder(doc: ReturnType<typeof parseDocument>): string[] {
+  const seq = doc.get("order",true);
+  if (seq === undefined) return [];
+  const names = isSeq(seq) && seq.toJSON();
+  if (!names || !names.every(s => typeof s === "string") || new Set(names).size !== names.length) throw Error("Mesh order must be a list of unique object names.");
+  return names;
+}
+
+export function moveMesh(model:string, siblings:string[], key:string, direction:number) {
+  if (!Array.isArray(siblings) || !siblings.every(s => typeof s === "string") || !siblings.includes(key) || ![-1,1].includes(direction)) return;
+  const file = meshSidecar(model);
+  if (file === model) throw Error("Choose an OBJ, FBX or Blend model.");
+  const before = read(file);
+  const {doc} = decode(before ?? "",file);
+  const order = meshOrder(doc), scope = new Set(siblings);
+  const current = [...order.filter(s => scope.has(s)), ...siblings.filter(s => !order.includes(s))];
+  const i = current.indexOf(key), j = i + direction;
+  if (j < 0 || j >= current.length) return;
+  [current[i],current[j]] = [current[j],current[i]];
+  let slot = 0;
+  doc.set("order",[...order.map(s => scope.has(s) ? current[slot++] : s),...current.slice(slot)]);
+  save(file,before,doc);
 }
 
 /** Re-read on acceptance so concurrent pickers only change their edited tags. */
-export function writeMeshTags(model: string, name: string, changes: Map<string, boolean>) {
+export function writeMeshTags(model: string, name: string, changes: Map<string, boolean>, objectName = name) {
   if (!changes.size) return;
   const file = meshSidecar(model);
   if (file === model) throw Error("Expected an OBJ, FBX or Blend model.");
   const before = read(file);
   const {doc} = decode(before ?? "", file);
-  const path = ["meshes", name];
+  const groups = new Map<string,Map<string,boolean>>();
+  for (const [label,value] of changes) {
+    const key = specialRoles.some(role => role === label) ? objectName : name;
+    if (!groups.has(key)) groups.set(key,new Map());
+    groups.get(key).set(label,value);
+  }
+  for (const [key,flags] of groups) applyTags(doc,["meshes",key],flags);
+  save(file,before,doc);
+}
+
+function applyTags(doc:ReturnType<typeof parseDocument>, path:string[], changes:Map<string,boolean>) {
   for (const key of ["add", "disable"] as const) {
     const sequence = doc.getIn([...path, key], true);
     const current = isSeq(sequence) ? sequence.toJSON() as string[] : [];
@@ -66,6 +106,9 @@ export function writeMeshTags(model: string, name: string, changes: Map<string, 
     else if (current.length) doc.deleteIn([...path, key]);
   }
   if (changes.has("Collider")) doc.setIn([...path, "type"], changes.get("Collider") ? "collider" : "mesh");
+}
+
+function save(file:string, before:string | undefined, doc:ReturnType<typeof parseDocument>) {
   const temp = file + "." + randomUUID() + ".tmp";
   try {
     writeFileSync(temp, doc.toString(), {flag:"wx"});

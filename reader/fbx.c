@@ -17,6 +17,10 @@ IMPORT(polygons) void polygons(const ufbx_string *name, size_t vertices, const u
 
 // FBX positions, normals and UVs can each index a different set of values.
 static bool emit_mesh(ufbx_mesh *m, int mode) {
+    if (mode == 3) {
+        mesh(&m->name, 0, NULL, NULL, NULL, m->num_triangles, NULL, NULL);
+        return true;
+    }
     if (mode == 2) {
         float *uvs = m->vertex_uv.exists ? calloc(m->num_indices, 2 * sizeof(float)) : NULL;
         if (m->num_indices && m->vertex_uv.exists && !uvs) return false;
@@ -64,7 +68,7 @@ int decode(const void *bytes, size_t size, int geometry, int original_ids) {
     opts.ignore_animation = true;
     opts.ignore_geometry = !geometry;
     opts.ignore_embedded = geometry != 1;
-    opts.generate_missing_normals = true;
+    opts.generate_missing_normals = geometry == 1;
     opts.retain_dom = original_ids;
     ufbx_error error;
     ufbx_scene *scene = ufbx_load_memory(bytes, size, &opts, &error);

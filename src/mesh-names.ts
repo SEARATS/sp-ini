@@ -10,5 +10,5 @@ export function tagOverride(tags: MeshTags, label: string, names: string[]): boo
 }
 
 export function colliderType(tags: MeshTags, ...names: string[]): boolean {
-  return tagOverride(tags, "Collider", names) ?? names.some(isColliderName);
+  return tagOverride(tags, "Hull collider", names) === true || (tagOverride(tags, "Collider", names) ?? names.some(isColliderName));
 }

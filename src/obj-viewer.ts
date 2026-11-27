@@ -4,6 +4,8 @@ import { loadObjDiffuseMaps, previewObj } from "./obj-geometry";
 import { isMissingTextureColor, markMissingMaps, type MissingTextureColor } from "./missing-textures";
 import { objLayout, type OutlineNode, type PreviewPart } from "./model-outline";
 import { meshFlagMatcher } from "./mesh-flags";
+import { orderedSiblings } from "./mesh-order";
+import { meshMoveButtons } from "./mesh-move-buttons";
 import { colliderType, type MeshTags } from "./mesh-names";
 import { applyDisplay, previewLayer, type DisplaySettings } from "./preview-display";
 import { assembledEntity, patchEntity } from "./entity-viewer";
@@ -122,6 +124,7 @@ let updateRows: (() => void)[] = [];
 let matchFlags = meshFlagMatcher([]);
 let meshTags: MeshTags = new Map();
 let canEditTags = false;
+let meshOrder:string[] = [], redrawOrder:() => void;
 let updateFlagRows: (() => void)[] = [];
 const inCategory = (part: PreviewPart) => part.widget ? settings.objects || (settings.arcs && arcGuides.has(part.id)) : part.collider ? settings.colliders : settings.meshes;
 function updateDisplay() {
@@ -172,6 +175,7 @@ for (const key of ["meshWireframe","colliderWireframe"] as const) {
 }
 
 function showOutline(nodes: OutlineNode[], note = "", uri?: string, preserve=false) {
+  redrawOrder = () => showOutline(nodes,note,uri,true);
   const expanded=new Map(Array.from(outline.querySelectorAll<HTMLDetailsElement>("details[data-branch]"),el=>[el.dataset.branch,el.open]));
   const scroll=outline.scrollTop;
   const entityTrees = nodes.some(node=>node.tree);
@@ -182,7 +186,11 @@ function showOutline(nodes: OutlineNode[], note = "", uri?: string, preserve=fal
   updateFlagRows = [];
   categories.clear();
   objectLabels.clear();
-  function row(node: OutlineNode, path: string, depth: number): {item: HTMLLIElement; subtree: PreviewPart[]} {
+  function rows(siblings:OutlineNode[], path:string, depth:number) {
+    const sorted = orderedSiblings(siblings,entityTrees ? [] : meshOrder), keys = sorted.map(s => s.key);
+    return sorted.map(({node,key}) => row(node,path,depth,key,keys));
+  }
+  function row(node: OutlineNode, path: string, depth: number, key:string, siblings:string[]): {item: HTMLLIElement; subtree: PreviewPart[]} {
     const item = document.createElement("li");
     const fullPath = path ? path + " / " + node.name : node.name;
     const label = document.createElement(node.children.length || node.tree ? "summary" : "span");
@@ -201,7 +209,7 @@ function showOutline(nodes: OutlineNode[], note = "", uri?: string, preserve=fal
     content.className = "row";
     label.append(content);
     if (uri) item.dataset.vscodeContext = JSON.stringify({ spIniExportUri:uri, spIniFbxUri: uri, spIniModelId: node.modelId, spIniLeaf: !node.children.length });
-    const children = node.children.map(child => row(child, fullPath, depth + 1));
+    const children = rows(node.children,fullPath,depth + 1);
     const subtree: PreviewPart[] = [...node.parts, ...children.flatMap(child => child.subtree)];
     const targets = node.parts.length ? node.parts : subtree;
     const classify = () => {
@@ -227,6 +235,8 @@ function showOutline(nodes: OutlineNode[], note = "", uri?: string, preserve=fal
     if (targets.length && !node.tree) content.append(check);
     if (node.colliderStyle) content.classList.add(node.colliderStyle);
     content.append(node.name || "(unnamed)");
+    if (!entityTrees && canEditTags && siblings.length > 1) content.append(meshMoveButtons(node.name,key,siblings,
+      direction => vscode.postMessage({type:"moveMesh",key,siblings,direction})));
     if (node.meshName || (!entityTrees && node.parts.length)) {
       const badges = document.createElement("span");
       badges.className = "mesh-flags";
@@ -238,7 +248,7 @@ function showOutline(nodes: OutlineNode[], note = "", uri?: string, preserve=fal
         edit.setAttribute("aria-label", "Edit tags for " + node.name);
         edit.onclick = event => {
           event.preventDefault(); event.stopPropagation();
-          vscode.postMessage({type:"editMeshTags", names:node.tagNames});
+          vscode.postMessage({type:"editMeshTags", names:node.tagNames, objectName:node.name});
         };
         content.append(edit);
       }
@@ -282,7 +292,7 @@ function showOutline(nodes: OutlineNode[], note = "", uri?: string, preserve=fal
     }
     return {item, subtree};
   }
-  outline.querySelector("ul").replaceChildren(...nodes.map(node => row(node, "", 0).item));
+  outline.querySelector("ul").replaceChildren(...rows(nodes,"",0).map(row => row.item));
   if (preserve) outline.scrollTop=scroll;
   updateDisplay();
 }
@@ -514,11 +524,14 @@ window.addEventListener("message", ({ data }) => {
   if (data.type === "meshFlags") {
     meshTags = new Map(data.entries.map(([name, flags]) => [name, new Map(flags)]));
     matchFlags = meshFlagMatcher(data.rules, meshTags);
+    const orderChanged = canEditTags !== data.editable || JSON.stringify(meshOrder) !== JSON.stringify(data.order ?? []);
+    meshOrder = data.order ?? [];
     canEditTags = data.editable;
     const error = document.getElementById("sidecar-error");
     error.textContent = data.error;
     error.hidden = !data.error;
-    updateFlagRows.forEach(update => update());
+    if (orderChanged && redrawOrder) redrawOrder();
+    else updateFlagRows.forEach(update => update());
     updateDisplay();
     return;
   }

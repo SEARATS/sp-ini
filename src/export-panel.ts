@@ -1,10 +1,16 @@
 import * as vscode from "vscode";
-import { basename } from "node:path";
+import { basename, dirname, extname, join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { readBlendPreview } from "./blend-export";
-import { changes, hierarchy } from "./hierarchy";
+import { changes, sceneHierarchy } from "./hierarchy";
+import { readFbx } from "./fbx-reader";
+import { modelTags } from "./model-tags";
+import { specialRoles } from "./export-roles";
 import { exportCategories, exportRows, objExportHierarchy, planExport, type ExportCategory, type ExportChoice } from "./export-plan";
-import { readMeshTags } from "./mesh-sidecar";
+import { readMeshOverrides } from "./mesh-sidecar";
+import { orderHierarchy } from "./mesh-order";
+import { editMeshTags, moveMeshInList, watchMeshTags } from "./mesh-tags-ui";
+import { meshFlagSetting } from "./mesh-flags";
 import { exportRigAssets, type RigAssets } from "./export-rig";
 
 export async function openExportPanel(context: vscode.ExtensionContext, uri: vscode.Uri) {
@@ -19,17 +25,22 @@ export async function openExportPanel(context: vscode.ExtensionContext, uri: vsc
         ? await readBlendPreview(uri.fsPath, vscode.workspace.getConfiguration("seapowerIni", uri).get("blenderPath"), controller.signal)
         : dirty ? Buffer.from(dirty.getText()) : Buffer.from(await vscode.workspace.fs.readFile(uri));
       if (token.isCancellationRequested) return;
-      const tags = readMeshTags(uri.fsPath);
-      const roots = /\.obj$/i.test(name) ? objExportHierarchy(bytes.toString("utf8"), tags) : hierarchy(bytes, tags);
+      const roots = /\.obj$/i.test(name) ? objExportHierarchy(bytes.toString("utf8"), new Map()) : sceneHierarchy(readFbx(bytes,"counts"));
       return {roots, bytes};
     } catch (error) { if (!token.isCancellationRequested) throw error; }
     finally { cancellation.dispose(); }
   });
   if (!source) return;
-  const {roots} = source;
+  let roots = source.roots;
   let rigAssets: RigAssets;
   const rigPreference = "export.showRig";
-  const rows = exportRows(roots), byPath = new Map(rows.map(row => [row.path, row]));
+  const readRows = () => {
+    const rules = vscode.workspace.getConfiguration(undefined,uri).get(meshFlagSetting);
+    const {order,tags} = readMeshOverrides(uri.fsPath);
+    roots = orderHierarchy(source.roots,order);
+    return exportRows(roots,modelTags(source.roots,name,tags,rules),rules);
+  };
+  let rows = readRows(), byPath = new Map(rows.map(row => [row.path,row]));
   const dist = vscode.Uri.joinPath(context.extensionUri, "dist");
   const panel = vscode.window.createWebviewPanel("seapower-ini.export", "Export INI · " + name, vscode.ViewColumn.Active,
     {enableScripts:true, retainContextWhenHidden:true, localResourceRoots:[dist]});
@@ -38,6 +49,7 @@ export async function openExportPanel(context: vscode.ExtensionContext, uri: vsc
   let plan: ReturnType<typeof planExport>;
   let enabled = new Set<ExportCategory>(exportCategories);
   const roles = new Map<string, ExportChoice>();
+  let distances: number[] = [];
   function refresh() {
     generation++;
     plan = undefined;
@@ -45,19 +57,36 @@ export async function openExportPanel(context: vscode.ExtensionContext, uri: vsc
     targetVersion = target?.version;
     let preview = "", error = "";
     try {
-      plan = planExport(name, roots, enabled, roles, before);
+      const choices = new Map(rows.map(row => [row.path, roles.get(row.path) ?? row.category]));
+      plan = planExport(name, roots, enabled, choices, before, distances);
       if (plan.count) preview = target ? changes(basename(target.fileName), before, plan.after) : plan.text;
     } catch (e) { error = e.message; }
     void web.postMessage({type:"preview", generation, request, preview, error, target:target?.fileName, rigIni:target ? plan?.text ?? "" : undefined,
-      count:plan?.count ?? 0, changed:!target || (plan && before !== plan.after)});
+      count:plan?.count ?? 0, note:plan?.note, changed:!target || (plan && before !== plan.after)});
   }
   const edits = vscode.workspace.onDidChangeTextDocument(e => { if (e.document === target) refresh(); });
-  panel.onDidDispose(() => edits.dispose());
+  function updateTags() {
+    try {
+      rows = readRows();
+      byPath = new Map(rows.map(row => [row.path,row]));
+      void web.postMessage({type:"tags",rows});
+      refresh();
+    } catch (error) { void vscode.window.showErrorMessage(error.message); }
+  }
+  const watcher = watchMeshTags(uri, updateTags);
+  const settings = vscode.workspace.onDidChangeConfiguration(e => { if (e.affectsConfiguration(meshFlagSetting,uri)) updateTags(); });
+  panel.onDidDispose(() => { edits.dispose(); watcher.dispose(); settings.dispose(); });
   web.onDidReceiveMessage(async message => {
     try {
       if (message.type === "ready") {
         await web.postMessage({type:"model", rows, categories:exportCategories, showRig:context.workspaceState.get(rigPreference,true)});
         refresh();
+      } else if (message.type === "moveMesh") {
+        moveMeshInList(uri,message);
+        updateTags();
+      } else if (message.type === "editTags") {
+        const row = byPath.get(message.path);
+        if (row?.mesh) { await editMeshTags(uri, [row.mesh, row.name],row.tags,row.name); updateTags(); }
       } else if (message.type === "rigAssets") {
         try {
           rigAssets ??= exportRigAssets(name, source.bytes);
@@ -72,8 +101,9 @@ export async function openExportPanel(context: vscode.ExtensionContext, uri: vsc
         roles.clear();
         for (const [path, role] of message.roles) {
           const row = byPath.get(path);
-          if (row && (role === "Skip" || role === "Helper" || (row.mesh && (role === "Mesh" || role === "Collider")))) roles.set(path, role);
+          if (row && (role === "Skip" || role === "Helper" || (row.mesh && (exportCategories.includes(role) || specialRoles.includes(role))))) roles.set(path, role);
         }
+        distances = Array.isArray(message.distances) ? message.distances.map(d => typeof d === "number" ? d : NaN) : [];
         request = message.request;
         refresh();
       } else if (message.type === "target") {
@@ -90,6 +120,14 @@ export async function openExportPanel(context: vscode.ExtensionContext, uri: vsc
         if (message.type === "copy" && !target) {
           await vscode.env.clipboard.writeText(plan.text);
           void vscode.window.showInformationMessage("Copied generated INI.");
+        } else if (message.type === "save" && !target) {
+          const suffix = enabled.size === 1 && enabled.has("Collider") ? "_colliders.ini" : ".ini";
+          const destination = await vscode.window.showSaveDialog({defaultUri:vscode.Uri.file(join(dirname(uri.fsPath),basename(name,extname(name)) + suffix)), filters:{INI:["ini"]}});
+          if (destination && message.generation === generation) {
+            if (!/\.ini$/i.test(destination.path)) throw Error("Choose an INI file.");
+            if (vscode.workspace.textDocuments.some(doc => doc.isDirty && doc.uri.toString() === destination.toString())) throw Error("Save your edits to the destination INI first.");
+            await vscode.workspace.fs.writeFile(destination, Buffer.from(plan.text));
+          }
         } else if (message.type === "new" && !target) {
           await vscode.window.showTextDocument(await vscode.workspace.openTextDocument({language:"seapower-ini", content:plan.text}));
         } else if (message.type === "apply" && target) {
@@ -114,10 +152,17 @@ export async function openExportPanel(context: vscode.ExtensionContext, uri: vsc
   <style nonce="${nonce}">
   *{box-sizing:border-box} body{display:grid;grid-template-rows:auto minmax(0,1fr) auto;height:100vh;margin:0;padding:16px;gap:12px}
   header,footer,.categories{display:flex;align-items:center;gap:12px;flex-wrap:wrap} h2{font-size:1em;margin:0 0 8px}
+  .preview-heading{display:flex;align-items:center;gap:8px;margin-bottom:8px}.preview-heading h2{margin:0}
   main{display:grid;grid-template-columns:minmax(260px,1fr) minmax(300px,1.35fr);gap:16px;min-height:0}
   section{min-width:0;min-height:0;display:flex;flex-direction:column} #objects,pre{overflow:auto;border:1px solid var(--vscode-panel-border);margin:0;flex:1}
   .row{display:flex;align-items:center;gap:8px;padding:4px 8px}.row:nth-child(even){background:var(--vscode-list-hoverBackground)}
   .row span{flex:1;overflow-wrap:anywhere}.off span{color:var(--vscode-descriptionForeground)}
+  #objects{container-type:inline-size}.row .tags{display:flex;align-items:center;gap:4px;max-width:35%;padding:2px 6px;white-space:nowrap}
+  .tags small{overflow:hidden;text-overflow:ellipsis}.tags small:empty{display:none}
+  .row .tags[hidden]{display:none}
+  .moves{display:inline-flex;gap:1px}.moves button{padding:1px 3px}
+  @container(max-width:440px){.tags small{display:none}.row{gap:4px}.row select{max-width:38%}.row span{min-width:3em;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}}
+  #lod-settings label{white-space:nowrap}#lod-settings input{width:5em}#lod-settings:empty{display:none}
   input,select{accent-color:var(--vscode-focusBorder)} select{color:var(--vscode-dropdown-foreground);background:var(--vscode-dropdown-background)}
   pre{padding:12px;font-family:var(--vscode-editor-font-family);user-select:text} #status{color:var(--vscode-descriptionForeground)}
   button{border:0;padding:6px 10px;background:var(--vscode-button-secondaryBackground);color:var(--vscode-button-secondaryForeground);cursor:pointer}
@@ -128,12 +173,13 @@ export async function openExportPanel(context: vscode.ExtensionContext, uri: vsc
   #rig canvas{display:block;width:100%;height:100%;touch-action:none} #rig-tools{position:absolute;bottom:5px;left:5px;display:flex;gap:8px;align-items:center;background:var(--vscode-editor-background)}
   #rig-note{position:absolute;top:4px;left:6px;max-width:95%;max-height:45%;overflow:auto;white-space:pre-line;background:var(--vscode-editor-background)}
   @media(max-width:620px){main{grid-template-columns:1fr;grid-template-rows:minmax(75px,1fr) minmax(180px,2fr)} #rig-view{height:clamp(85px,21vh,180px)}}
-  </style></head><body><header><strong>Export categories</strong><div class="categories"></div></header>
+  </style></head><body><header><strong>Export categories</strong><div class="categories"></div><button id="only-colliders">Colliders only</button><div id="lod-settings" class="categories"></div></header>
   <main><section><h2>Objects</h2><div id="objects"></div></section><section>
   <details id="rig"><summary>Rig preview</summary><div id="rig-view"><canvas aria-label="Exported submodel rig"></canvas>
   <span id="rig-note" role="status"></span><div id="rig-tools"><button id="fit-rig">Fit rig</button><label><input id="parent-links" type="checkbox" checked>Parent links</label></div></div></details>
-  <h2 id="heading">Planned INI</h2><small id="targetName"></small><pre id="preview" tabindex="0"></pre></section></main>
-  <footer><button id="copy" class="primary" disabled>Copy INI</button><button id="new" disabled>Open as new INI</button>
+  <div class="preview-heading"><h2 id="heading">Planned INI</h2><button id="copy" class="primary" disabled>Copy INI</button></div>
+  <small id="targetName"></small><pre id="preview" tabindex="0"></pre></section></main>
+  <footer><button id="new" disabled>Open as new INI</button><button id="save" disabled>Save INI as…</button>
   <button id="target">Choose target INI…</button><button id="apply" class="primary" hidden>Apply changes</button>
   <button id="clearTarget" hidden>Back to generated INI</button><span id="status" role="status"></span></footer>
   <script nonce="${nonce}" src="${script}"></script></body></html>`;

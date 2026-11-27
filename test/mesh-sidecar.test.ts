@@ -3,7 +3,7 @@ import test from "node:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { meshSidecar, readMeshTags, writeMeshTags } from "../src/mesh-sidecar";
+import { meshSidecar, moveMesh, readMeshOverrides, readMeshTags, writeMeshTags } from "../src/mesh-sidecar";
 import { colliderType } from "../src/mesh-names";
 import { meshFlagMatcher } from "../src/mesh-flags";
 
@@ -29,6 +29,10 @@ test("all model formats share exact-name tag edits while other models keep their
   assert.equal(colliderType(tags, "Hull_col", "Keel"), false);
   assert.deepEqual(meshFlagMatcher([{label:"Damaged", substrings:["Hull"]}], tags)("Hull_col"), []);
   assert.match(readFileSync(sidecar, "utf8"), /# author note/);
+  moveMesh(files[0],["A","B","C"],"C",-1);
+  moveMesh(files[2],["C","A","B"],"C",-1);
+  assert.deepEqual(readMeshOverrides(files[1]).order,["C","A","B"]);
+  assert.equal(readMeshTags(files[2]).get("Keel").get("Collider"),true);
   assert.equal(readMeshTags(join(dir, "different.obj")).size, 0);
   const bad = "meshes:\n  Keel:\n    add: Wrong\n";
   writeFileSync(sidecar, bad);
