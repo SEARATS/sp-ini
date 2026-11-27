@@ -54,7 +54,6 @@ export function objLayout(source: string) {
       else {
         if (!owner) startObject("(unnamed object)");
         groups = name ? [...new Set(name.split(/\s+/))] : [];
-        groups.forEach(groupRow);
       }
       // OBJLoader splits geometry at either declaration. A unique block index survives repeated names.
       block = parts.length;
@@ -74,6 +73,12 @@ export function objLayout(source: string) {
       owner.parts.push(part);
       groups.forEach(name => groupRow(name).parts.push(part));
     }
+  }
+  // Some exporters wrap every face in a single group named after its object.
+  for (const node of nodes) {
+    const [group] = node.children;
+    if (node.children.length === 1 && group.parts.length === node.parts.length &&
+        (group.name === node.name || group.name === node.name + "_0")) node.children = [];
   }
   return {nodes, parts, text: lines.join("\n")};
 }

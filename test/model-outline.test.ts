@@ -14,6 +14,16 @@ test("OBJ objects are peers and shared groups can belong to multiple objects", (
   assert.equal(objLayout("g Group\nf 1 2 3").nodes[0].name, "(unnamed object)");
 });
 
+test("OBJ outline omits empty groups and redundant exporter wrappers but retains distinct face groups", () => {
+  const source = "o Hull\ng Hull\nv 0 0 0\nv 1 0 0\nv 0 1 0\ng Hull_0\nf 1 2 3\n";
+  const layout = objLayout(source);
+  const [hull] = layout.nodes;
+  assert.deepEqual(hull.children, []);
+  assert.equal(previewObj(source, layout).children[0].userData.partId, hull.parts[0].id);
+  assert.deepEqual(objLayout(source + "g Hull_1\nf 1 3 2").nodes[0].children.map(g => g.name), ["Hull_0", "Hull_1"]);
+  assert.deepEqual(objLayout(source + "g\nf 1 3 2").nodes[0].children.map(g => g.name), ["Hull_0"]);
+});
+
 test("OBJ row visibility distinguishes repeated names and overlapping groups", () => {
   const source = "v 0 0 0\nv 1 0 0\nv 0 1 0\no Hull\ng A B\nf 1 2 3\no Hull\ng collider\nf 1 2 3";
   const layout = objLayout(source), model = previewObj(source,layout);
