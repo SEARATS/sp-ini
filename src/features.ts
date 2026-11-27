@@ -2,7 +2,8 @@ import { CompletionItemKind, DiagnosticSeverity, Range, SymbolKind } from "vscod
 import { family, normalize, submodelNames } from "./catalog";
 import { misplacedKey, placementCode } from "./section-placement";
 import { directives, sectionGroup, unitSection } from "./ini";
-import { choices, expected, validValue, valueRule } from "./values";
+import { countDiagnostics } from "./count-diagnostics";
+import { choices, expected, ignoredStepComponents, validValue, valueRule } from "./values";
 import { tokens, referenceContext, domainFor, reference } from "./references";
 import { ignoredRules } from "./ini-edits";
 
@@ -106,6 +107,7 @@ function diagnostics(doc, catalog, uri = "") {
     range: span(line, 0, doc.lines[line].length), severity: DiagnosticSeverity.Warning, source: "Sea Power INI", code: "syntax", message
   }));
   const group = family(uri, doc);
+  result.push(...countDiagnostics(doc, group));
   const ctx = catalog && referenceContext(doc, uri, catalog);
   const parts = ctx?.parts ?? submodelNames(doc);
   for (const ref of ctx?.inheritedParts || []) parts.add(ref.name.toLowerCase());
@@ -159,6 +161,13 @@ function diagnostics(doc, catalog, uri = "") {
       const message = rule.inferred ? "Vanilla examples use " + expected(rule.type) + " for " + key.name + "."
         : "Invalid " + key.name + " '" + key.value + "'. Expected " + expected(rule.type) + ".";
       report("invalid-value", rule.inferred ? DiagnosticSeverity.Warning : DiagnosticSeverity.Error, message);
+    } else if (rule?.type === "step") {
+      for (const part of ignoredStepComponents(key.value))
+        report("ignored-step-component", DiagnosticSeverity.Warning, part.message, key.valueStart + part.start, key.valueStart + part.end);
+    } else if (rule?.type === "count") {
+      const count = Number(key.value);
+      if (count < 0) report("negative-count", DiagnosticSeverity.Error, key.name + " must be zero or greater.");
+      else if (count > 2147483647) report("count-overflow", DiagnosticSeverity.Error, key.name + " exceeds the largest integer Sea Power can read (2147483647).");
     }
     const kind = unitSection.exec(key.section?.name || "")?.[1].toLowerCase();
     if (kind && /^type$/i.test(key.name) && catalog?.units.size && /^[\w.-]+$/.test(key.value)) {

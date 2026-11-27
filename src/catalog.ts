@@ -32,13 +32,15 @@ function family(rel, doc) {
   if (name.endsWith("_variants.ini")) return "variants";
   if (name.endsWith("_squadrons.ini")) return "squadrons";
   const folder = parts.at(-1);
-  if (Object.hasOwn(unitFolders, folder) || folder === "ammunition") return folder;
+  if (Object.hasOwn(unitFolders, folder) || folder === "ammunition" || folder === "animations") return folder;
   const unitType = doc.sections.find(s => s.name.toLowerCase() === "general")?.keys.find(k => k.name.toLowerCase() === "unittype");
   if (unitType) {
     for (const [dir, types] of Object.entries(unitFolders)) {
       if (types.includes(unitType.value.toLowerCase())) return dir;
     }
   }
+  if (doc.sections.some(s => /^animations$/i.test(s.name) &&
+    s.keys.some(k => /^(?:NumberOfAnimations|Animation[1-9]\d*)$/i.test(k.name)))) return "animations";
   return name;
 }
 
