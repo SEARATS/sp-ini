@@ -1,5 +1,6 @@
 import { Mesh, type Color, type Material, type Object3D } from "three";
 import { isColliderName } from "./mesh-names";
+import { missingTextureColors, type MissingTextureColor } from "./missing-textures";
 
 export const previewLayer = { mesh:0, collider:1, widget:2, highlight:3, arc:4 } as const;
 
@@ -10,6 +11,7 @@ export interface DisplaySettings {
   arcs?: boolean;
   meshWireframe: boolean;
   colliderWireframe: boolean;
+  missingTextureColor?: MissingTextureColor;
 }
 
 export function applyDisplay(model: Object3D, categories: Map<string, boolean>, hidden: Set<string>, settings: DisplaySettings) {
@@ -17,8 +19,11 @@ export function applyDisplay(model: Object3D, categories: Map<string, boolean>, 
   const alternate = new Map<Material, Material>();
   function styled(material: Material, wireframe: boolean, collider: boolean) {
     if (!("wireframe" in material)) return material;
-    if (material.userData.objBaseColor !== undefined && "color" in material) {
-      (material.color as Color).setHex(collider ? 0xff833d : material.userData.objBaseColor);
+    if ("color" in material) {
+      const base = material.userData.objBaseColor;
+      const color = collider && base !== undefined ? 0xff833d : material.userData.missingDiffuse
+        ? missingTextureColors[settings.missingTextureColor ?? "grey"] : base;
+      if (color !== undefined) (material.color as Color).setHex(color);
     }
     // An FBX may assign the same material to a visible surface and its collider.
     if (used.has(material) && material.wireframe !== wireframe) {

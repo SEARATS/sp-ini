@@ -84,6 +84,7 @@ export function assembledEntity(scene: EntityScene, manager: LoadingManager) {
       ? new MeshBasicMaterial({color:previewColors[rows.get(part.id).colliderStyle]})
       : new MeshPhongMaterial({color:map ? 0xffffff : 0xaaaaaa, map:map || null, alphaTest:alpha === "cutout" ? 0.5 : 0,
         transparent:alpha === "blend", depthWrite:alpha !== "blend"}));
+    if (part.missingDiffuse && !part.collider) surface.material.userData.missingDiffuse = true;
     for (const name of part.referencedBy || []) {
       const key = name.toLowerCase();
       if (!objectColliders.has(key)) objectColliders.set(key,[]);

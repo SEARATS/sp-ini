@@ -12,6 +12,7 @@ export interface EntityPart {
   collider: boolean; primitive?: "box" | "sphere"; visible: boolean;
   position: Vector; rotation: Vector; scale: Vector;
   source?: IniSource; meshName?: string;
+  missingDiffuse?: boolean;
   referencedBy?: string[];
   hullCollider?: boolean;
 }

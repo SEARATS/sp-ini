@@ -50,6 +50,7 @@ export async function entityAssets(doc: ReturnType<typeof parse>, uri: string, c
       warnings.add("Could not read geometry from "+file.rel);
     }
   }
+  const missingDiffuse = new Set<string>();
   for (const {part,mesh,material} of definitions) {
     signal.throwIfAborted();
     scene.parts.push(part);
@@ -98,10 +99,16 @@ export async function entityAssets(doc: ReturnType<typeof parse>, uri: string, c
         if (!image) warnings.add("Missing appearance texture "+override);
       }
       image ??= await resolvedDiffuse(stock,materials,catalog,file,material.value,matScope);
-      if (!image) warnings.add("No diffuse texture for "+material.value);
+      if (!image) {
+        warnings.add("No diffuse texture for "+material.value);
+        if (override || (file && (await materials.materialData(file,catalog)).maps.some(m => /^_(maintex|basemap|basecolormap)$/i.test(m.key.name) && m.key.value))) {
+          missingDiffuse.add(textureKey);
+        }
+      }
       textures.set(textureKey,image ? scene.textures.push(previewTexture(image,!!override && usesHullMaterial))-1 : undefined);
     }
     part.texture = textures.get(textureKey);
+    if (missingDiffuse.has(textureKey)) part.missingDiffuse = true;
   }
   scene.warnings = [...warnings];
   scene.objects = entityObjects(doc,scene.parts);

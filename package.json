@@ -2,7 +2,7 @@
   "name": "seapower-ini",
   "displayName": "Sea Power INI",
   "description": "Autocomplete, error checking and Go to Definition for Sea Power INI files.",
-  "version": "0.9.21",
+  "version": "0.9.22",
   "icon": "dist/icon.png",
   "publisher": "searats",
   "private": true,
@@ -360,6 +360,13 @@
     "configuration": {
       "title": "Sea Power INI",
       "properties": {
+        "seapowerIni.missingTextureColor": {
+          "type": "string",
+          "enum": ["black", "magenta", "grey"],
+          "default": "grey",
+          "scope": "resource",
+          "description": "Color used in 3D previews when a diffuse texture cannot be loaded. Changing the viewer dropdown saves this setting for the project."
+        },
         "seapowerIni.meshFlags": {
           "type": "array",
           "scope": "resource",

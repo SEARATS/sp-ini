@@ -1,5 +1,7 @@
 import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
-import { Mesh, MeshPhongMaterial } from "three";
+import { MTLLoader } from "three/addons/loaders/MTLLoader.js";
+import { Mesh, MeshPhongMaterial, RepeatWrapping, SRGBColorSpace, Texture, TextureLoader, type Group, type LoadingManager } from "three";
+import { localAssetUrl } from "./missing-textures";
 import { objLayout } from "./model-outline";
 
 export function previewObj(source: string, layout = objLayout(source)) {
@@ -24,4 +26,37 @@ export function previewObj(source: string, layout = objLayout(source)) {
   });
   for (const original of originals) original.dispose();
   return model;
+}
+
+export async function loadObjDiffuseMaps(model: Group, modelUrl: string, manager: LoadingManager) {
+  const libraries = (model as Group & {materialLibraries?: string[]}).materialLibraries ?? [];
+  const loader = new TextureLoader(manager);
+  const parser = new MTLLoader();
+  for (const library of new Set(libraries)) {
+    const url = localAssetUrl(library, modelUrl);
+    if (!url) continue;
+    let text: string;
+    try {
+      const response = await fetch(url);
+      if (!response.ok) continue;
+      text = await response.text();
+    } catch { continue; }
+    const mtl = parser.parse(text, new URL(".", url).href);
+    model.traverse(node => {
+      if (!(node instanceof Mesh)) return;
+      for (const material of [node.material].flat()) {
+        const map = mtl.materialsInfo[material.name]?.map_kd;
+        if (!map || material.map) continue;
+        const params = mtl.getTextureParams(map, {});
+        const source = localAssetUrl(params.url, url);
+        const texture = source ? loader.load(source) : new Texture();
+        texture.colorSpace = SRGBColorSpace;
+        texture.wrapS = texture.wrapT = RepeatWrapping;
+        texture.repeat.copy(params.scale);
+        texture.offset.copy(params.offset);
+        material.map = texture;
+        material.needsUpdate = true;
+      }
+    });
+  }
 }

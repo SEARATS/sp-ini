@@ -8,6 +8,7 @@ import type { IniSource } from "./ini";
 import type { EntityScene } from "./entity-model";
 import { previewColors } from "./preview-colors";
 import { meshFlagSetting } from "./mesh-flags";
+import { isMissingTextureColor, type MissingTextureColor } from "./missing-textures";
 import { readMeshTags } from "./mesh-sidecar";
 import { editMeshTags, watchMeshTags } from "./mesh-tags-ui";
 const viewType = "seapower-ini.obj";
@@ -25,6 +26,9 @@ function openSourceBeside(document, column) {
 
 function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event<void>) {
   const dist = vscode.Uri.joinPath(context.extensionUri, "dist");
+  const looseColorChanged = new vscode.EventEmitter<void>();
+  context.subscriptions.push(looseColorChanged);
+  let looseColor: MissingTextureColor;
   const openSource = vscode.commands.registerCommand("seapower-ini.openObjSource", async (url, line, column) => {
     const uri = vscode.Uri.parse(url);
     if (uri.scheme !== "file" || !/\.obj$/i.test(uri.path)) return;
@@ -53,9 +57,9 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
       });
       return;
     }
-    panel.webview.options = { enableScripts: true, localResourceRoots: [dist] };
+    panel.webview.options = { enableScripts: true, localResourceRoots: [dist, vscode.workspace.getWorkspaceFolder(document.uri)?.uri ?? vscode.Uri.joinPath(document.uri, "..")] };
     let timer;
-    const send = () => panel.webview.postMessage({ type: "model", text: document.getText() });
+    const send = () => panel.webview.postMessage({ type:"model", text:document.getText(), url:panel.webview.asWebviewUri(document.uri).toString() });
     const messages = panel.webview.onDidReceiveMessage(message => { if (message.type === "ready") send(); });
     let paired = false;
     function pair() {
@@ -79,6 +83,11 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
     pair();
   }
   function showViewer(panel: vscode.WebviewPanel, uri: vscode.Uri, loading = "Opening model…") {
+    const colorKey = "seapowerIni.missingTextureColor";
+    const hasProject = () => !!(vscode.workspace.workspaceFolders?.length || vscode.workspace.workspaceFile);
+    const sendColor = () => panel.webview.postMessage({type:"missingTextureColor", project:hasProject(),
+      value:(!hasProject() && looseColor) || vscode.workspace.getConfiguration(undefined, uri).get(colorKey, "grey")});
+    const looseChanges = looseColorChanged.event(() => { if (!hasProject()) void sendColor(); });
     const editable = uri.scheme === "file" && /\.(obj|fbx|blend)$/i.test(uri.path);
     const sendFlags = () => {
       let entries = [], error = "";
@@ -88,15 +97,26 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
     };
     const watcher = editable && watchMeshTags(uri, sendFlags);
     const ready = panel.webview.onDidReceiveMessage(async message => {
-      if (message.type === "ready") void sendFlags();
+      if (message.type === "ready") { void sendFlags(); void sendColor(); }
+      if (message.type === "setMissingTextureColor" && isMissingTextureColor(message.value)) {
+        if (hasProject()) {
+          const target = vscode.workspace.getWorkspaceFolder(uri) ? vscode.ConfigurationTarget.WorkspaceFolder : vscode.ConfigurationTarget.Workspace;
+          try { await vscode.workspace.getConfiguration(undefined, uri).update(colorKey, message.value, target); }
+          catch (error) { void vscode.window.showErrorMessage(error.message); }
+        } else { looseColor = message.value; looseColorChanged.fire(); }
+        void sendColor();
+      }
       if (editable && message.type === "editMeshTags" && Array.isArray(message.names) && message.names.length &&
           message.names.every(name => typeof name === "string" && name.length)) {
         try { await editMeshTags(uri, message.names); await sendFlags(); }
         catch (error) { void vscode.window.showErrorMessage(error.message); }
       }
     });
-    const changes = vscode.workspace.onDidChangeConfiguration(event => { if (event.affectsConfiguration(meshFlagSetting, uri)) void sendFlags(); });
-    panel.onDidDispose(() => { ready.dispose(); changes.dispose(); if (watcher) watcher.dispose(); });
+    const changes = vscode.workspace.onDidChangeConfiguration(event => {
+      if (event.affectsConfiguration(meshFlagSetting, uri)) void sendFlags();
+      if (event.affectsConfiguration(colorKey, uri)) void sendColor();
+    });
+    panel.onDidDispose(() => { ready.dispose(); changes.dispose(); looseChanges.dispose(); if (watcher) watcher.dispose(); });
     const nonce = randomBytes(18).toString("base64");
     const script = panel.webview.asWebviewUri(vscode.Uri.joinPath(dist, "obj-viewer.js"));
     const icons = panel.webview.asWebviewUri(vscode.Uri.joinPath(dist, "codicon.css"));
@@ -143,6 +163,7 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
       <select id="meshWireframe" aria-label="Mesh render mode"><option value="shaded">Shaded</option><option value="wireframe">Wireframe</option></select>
       <label><input id="colliders" type="checkbox" checked>Colliders</label>
       <select id="colliderWireframe" aria-label="Collider render mode"><option value="shaded">Shaded</option><option value="wireframe" selected>Wireframe</option></select>
+      <label for="missing-texture">Missing texture</label><select id="missing-texture"><option value="black">Black</option><option value="magenta">Magenta</option><option value="grey" selected>Grey</option></select>
       <div id="object-filter" hidden><label><input id="objects" type="checkbox" checked>Object markers</label></div>
       <div id="arc-filter" hidden><label><input id="arcs" type="checkbox" checked>System arcs</label></div></div>
       <p></p><p id="sidecar-error" role="status" hidden></p><details id="entity-warnings" hidden><summary></summary><div></div></details><ul></ul></details>

@@ -129,6 +129,10 @@ Open an FBX in VS Code for the 3D preview. The extension includes its own reader
 
 Run `pnpm run test:fbx` to check geometry, mesh lookup and hierarchy export against public Max and Maya files and other exporter samples. The first source build uses Python and pip to install Zig 0.13.0 in the build cache and compile the pinned ufbx reader. Installed editor packages include the compiled reader.
 
+## Missing textures
+
+In a 3D preview, **Missing texture** sets the color for a diffuse map that fails to load. Choose **Black**, **Magenta**, or **Grey** (default). The dropdown saves `seapowerIni.missingTextureColor` for the project folder and updates its open previews. With no project open, the choice lasts for that VS Code window.
+
 ## Mesh flags
 
 Search Settings for `seapowerIni.meshFlags` and choose **Edit in settings.json**. Each flag has a label, a Codicon name and a list of literal `substrings` or regex `patterns`. The model and entity hierarchies show every match against the object or mesh name, ignoring case. Hover an icon to read its label.

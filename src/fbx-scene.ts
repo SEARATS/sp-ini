@@ -1,5 +1,6 @@
 import { BufferAttribute, BufferGeometry, Color, Group, LoadingManager, Matrix4, Mesh, MeshPhongMaterial, SRGBColorSpace, TextureLoader } from "three";
 import type { FbxScene } from "./fbx-reader";
+import { localAssetUrl } from "./missing-textures";
 
 export function fbxBasis(axes: number[]) {
   const matrix = new Matrix4();
@@ -16,16 +17,12 @@ export function previewFbx(scene: FbxScene, base: string, manager: LoadingManage
     const material = new MeshPhongMaterial({name: source.name, color: new Color().fromArray(source.color)});
     let url: string;
     if (source.content?.length) url = URL.createObjectURL(new Blob([Uint8Array.from(source.content)]));
-    else if (source.path && !/^(?:[a-z]+:|[/\\])/i.test(source.path)) url = new URL(source.path.replaceAll("\\", "/"), base).href;
+    else if (source.path) url = localAssetUrl(source.path, base);
     if (url) {
       const release = () => { if (source.content?.length) URL.revokeObjectURL(url); };
-      loader.load(url, texture => {
-        texture.colorSpace = SRGBColorSpace;
-        material.map = texture;
-        material.needsUpdate = true;
-        release();
-      }, undefined, release);
-    }
+      material.map = loader.load(url, release, undefined, release);
+      material.map.colorSpace = SRGBColorSpace;
+    } else if (source.path) material.userData.missingDiffuse = true;
     return material;
   });
   const fallback = new MeshPhongMaterial({color: 0xcccccc});

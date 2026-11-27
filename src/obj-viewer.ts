@@ -1,6 +1,7 @@
 import type { ModelSourceChoice } from "./entity-resources";
 import { previewFbx } from "./fbx-scene";
-import { previewObj } from "./obj-geometry";
+import { loadObjDiffuseMaps, previewObj } from "./obj-geometry";
+import { isMissingTextureColor, markMissingMaps, type MissingTextureColor } from "./missing-textures";
 import { objLayout, type OutlineNode, type PreviewPart } from "./model-outline";
 import { meshFlagMatcher } from "./mesh-flags";
 import { colliderType, type MeshTags } from "./mesh-names";
@@ -21,6 +22,9 @@ const status = document.querySelector("[role=status]");
 const fit = document.querySelector("button");
 const canvas = document.querySelector("canvas");
 const outline = document.querySelector<HTMLDetailsElement>("#outline");
+const textureSelect = document.querySelector<HTMLSelectElement>("#missing-texture");
+let missingTextureColor: MissingTextureColor = "grey";
+textureSelect.onchange = () => vscode.postMessage({type:"setMissingTextureColor", value:textureSelect.value});
 const scene = new Scene();
 const camera = new PerspectiveCamera(42, 1, 0.01, 10000);
 const bounds = new Sphere();
@@ -122,7 +126,7 @@ let updateFlagRows: (() => void)[] = [];
 const inCategory = (part: PreviewPart) => part.widget ? settings.objects || (settings.arcs && arcGuides.has(part.id)) : part.collider ? settings.colliders : settings.meshes;
 function updateDisplay() {
   updateRows.forEach(update => update());
-  if (model) { applyDisplay(model, categories, hidden, settings); draw(); }
+  if (model) { applyDisplay(model, categories, hidden, {...settings, missingTextureColor}); draw(); }
 }
 function changed() {
   updateDisplay();
@@ -369,6 +373,7 @@ async function loadEntity(id:string, next:EntityScene, documentUri:string) {
       staged=assembledEntity(next,manager);
       if (next.textures.length) await loaded;
       if (current!==revision) { dispose(staged.model); return; }
+      markMissingMaps(staged.model);
     }
     const view=staged || active.view;
     const extent=new Box3().setFromObject(view.model).getBoundingSphere(new Sphere());
@@ -419,9 +424,14 @@ async function load(data, layout?: ReturnType<typeof objLayout>) {
   if (model) { scene.remove(model); dispose(model); model = undefined; }
   try {
     let next;
+    let loading = false;
+    const manager = new LoadingManager();
+    manager.onStart = () => { loading = true; };
+    manager.onLoad = () => {
+      loading = false;
+      if (current === revision && next && model === next) { markMissingMaps(next); updateDisplay(); }
+    };
     if (data.type === "fbx") {
-      const manager = new LoadingManager();
-      manager.onLoad = () => { if (current === revision) draw(); };
       if (data.error) throw Error(data.error);
       const base = new URL(".", data.url).href;
       if (data.scene) next = previewFbx(data.scene, base, manager);
@@ -441,15 +451,18 @@ async function load(data, layout?: ReturnType<typeof objLayout>) {
       }
     } else {
       next = previewObj(data.text, layout);
+      if (data.url) await loadObjDiffuseMaps(next, data.url, manager);
+      if (current !== revision) { dispose(next); return; }
     }
     model = next;
+    if (!loading) markMissingMaps(model);
     new Box3().setFromObject(model).getBoundingSphere(bounds);
     if (!Number.isFinite(bounds.radius) || bounds.isEmpty()) throw Error("No drawable geometry in this model.");
     bounds.radius ||= 1;
     model.position.sub(bounds.center);
     bounds.center.set(0,0,0);
     scene.add(model);
-    applyDisplay(model, categories, hidden, settings);
+    applyDisplay(model, categories, hidden, {...settings, missingTextureColor});
     frame();
     fit.hidden = false;
     status.textContent = "Drag to orbit · Scroll to zoom";
@@ -492,6 +505,12 @@ try {
 
 let fbxUri: string;
 window.addEventListener("message", ({ data }) => {
+  if (data.type === "missingTextureColor" && isMissingTextureColor(data.value)) {
+    textureSelect.value = missingTextureColor = data.value;
+    textureSelect.title = data.project ? "Saved in project settings" : "Applies to this window. Open a folder to save a project setting.";
+    updateDisplay();
+    return;
+  }
   if (data.type === "meshFlags") {
     meshTags = new Map(data.entries.map(([name, flags]) => [name, new Map(flags)]));
     matchFlags = meshFlagMatcher(data.rules, meshTags);
