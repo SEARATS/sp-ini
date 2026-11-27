@@ -23,14 +23,15 @@ function annotation(comment: string, list: boolean) {
   if (/^min\.?$/i.test(text)) return;
   if (!list && /^additional flow noise per knot in db\b/i.test(text)) return "dB/kt";
   const prefix = /^(?:(?:min(?:imum)?|max(?:imum)?|default|base|output|seeker|passive|active|turn|launch|search|sound|peak|typical|target|radar|total)\s+)*(?:speed|turnrate|turn rate|field-of-view|range|altitude|depth|power|gain|time|delay|velocity|level|distance)\s+in\s+/i;
-  const candidate = (list ? text : text.replace(prefix, "")).replace(/^in\s+/i, "");
+  const noise = /^(?:additional )?noise (?:for \w+ )?in\s+/i;
+  const candidate = (list ? text : text.replace(prefix, "").replace(noise, "")).replace(/^in\s+/i, "");
   for (const [unit, regex] of patterns) {
     const match = regex.exec(candidate);
     if (!match) continue;
     const tail = candidate.slice(match[0].length).trim();
     if (!tail || tail === ".") return unit;
     // Only accept explanatory prose following an explicit scalar measurement.
-    if (!list && candidate !== text && /^(?:[.,;]|for\b|where\b|at\b|before\b|after\b)/i.test(tail)) return unit;
+    if (!list && candidate !== text && /^(?:[.,;]|for\b|when\b|where\b|at\b|before\b|after\b)/i.test(tail)) return unit;
     if (!list && /^nautical miles?\s+-\s+flavour text$/i.test(text)) return unit;
     return;
   }

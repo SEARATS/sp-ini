@@ -4,6 +4,11 @@ import { parse } from "../src/ini";
 import { unitHints } from "../src/unit-hints";
 
 const all = { start: { line: 0, character: 0 }, end: { line: 100, character: 0 } };
+test("Spruance cavitation and flow noise show their distinct units", async () => {
+  const doc = parse("[SensorData]\nCavitationNoise=5\nFlowNoise=1");
+  const hints = await unitHints(doc, "vessels/usn_dd_spruance_vls.ini", all);
+  assert.deepEqual(hints.map(h => [h.position.line, h.position.character, h.label]), [[1, 17, "dB"], [2, 11, "dB/kt"]]);
+});
 test("hints follow vanilla field context and end at the numeric value", async () => {
   const doc = parse("[Performance]\n EmptyMass = 51710  // in kg\nMaxFuel=5e4\nPerEngineMaxThrust=91600\nBypassRatio=0.3\nAltitudes=100, 200\nMaxFuel=unknown\n[Other]\nEmptyMass=51710");
   const hints = await unitHints(doc, "aircraft/mod.ini", all);
