@@ -1,3 +1,4 @@
+import { registerBlendExport } from "./blend-export-ui";
 import { registerHierarchy } from "./hierarchy-ui";
 import { watchFile, unwatchFile, type Stats } from "node:fs";
 import * as vscode from "vscode";
@@ -71,6 +72,7 @@ async function activate(context) {
     context.subscriptions.push({ dispose: () => unwatchFile(stamp, onBuild) });
   }
   registerHierarchy(context);
+  registerBlendExport(context);
   const indexed = new vscode.EventEmitter<void>();
   context.subscriptions.push(registerUnitCard(context,(params,token)=>client.sendRequest("seapower/entityPreview",params,token),indexed.event));
   context.subscriptions.push(indexed, registerModIniLanguage(), registerObjPreview(context,(params,token)=>client.sendRequest("seapower/entityPreview",params,token),indexed.event), registerIniActions());

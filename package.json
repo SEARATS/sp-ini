@@ -2,7 +2,7 @@
   "name": "seapower-ini",
   "displayName": "Sea Power INI",
   "description": "Autocomplete, error checking and Go to Definition for Sea Power INI files.",
-  "version": "0.9.11",
+  "version": "0.9.12",
   "icon": "dist/icon.png",
   "publisher": "searats",
   "private": true,
@@ -100,6 +100,16 @@
       }
     ],
     "commands": [
+      {
+        "command": "seapower-ini.exportBlendFBX",
+        "title": "Export Blender Scene as FBX…",
+        "category": "Sea Power INI"
+      },
+      {
+        "command": "seapower-ini.exportBlendOBJ",
+        "title": "Export Blender Scene as OBJ…",
+        "category": "Sea Power INI"
+      },
       {
         "command": "seapower-ini.previewObj",
         "title": "Preview OBJ",
@@ -206,6 +216,16 @@
       ],
       "explorer/context": [
         {
+          "command": "seapower-ini.exportBlendFBX",
+          "when": "!explorerResourceIsFolder && resourceScheme == file && resourceExtname =~ /[.]blend$/i",
+          "group": "seapower@1"
+        },
+        {
+          "command": "seapower-ini.exportBlendOBJ",
+          "when": "!explorerResourceIsFolder && resourceScheme == file && resourceExtname =~ /[.]blend$/i",
+          "group": "seapower@2"
+        },
+        {
           "command": "seapower-ini.previewObj",
           "when": "resourceExtname =~ /[.]obj$/i && !explorerResourceIsFolder"
         },
@@ -227,6 +247,14 @@
         }
       ],
       "commandPalette": [
+        {
+          "command": "seapower-ini.exportBlendFBX",
+          "when": "false"
+        },
+        {
+          "command": "seapower-ini.exportBlendOBJ",
+          "when": "false"
+        },
         {
           "command": "seapower-ini.previewObj",
           "when": "resourceExtname =~ /[.]obj$/i"
@@ -294,6 +322,12 @@
     "configuration": {
       "title": "Sea Power INI",
       "properties": {
+        "seapowerIni.blenderPath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Full path to Blender for exporting .blend files. Leave empty to detect Blender automatically."
+        },
         "seapowerIni.unitHints.enabled": {
           "type": "boolean",
           "default": true,

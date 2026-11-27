@@ -107,6 +107,10 @@ The entity preview screenshots use the installed Spruance INI. The script captur
 
 Pass `-GameDirectory` for a different Steam library. The script opens an isolated VS Code window, exports selected stock Spruance VLS meshes and textures into a temporary workspace, and exercises the extension on a copy of the ship INI. It crops the rendered widgets and relevant source lines, then writes the PNGs, a Markdown gallery and `index.html` to the output folder.
 
+## Export Blender scenes
+
+Right-click a `.blend` file in the VS Code Explorer and choose **Export Blender Scene as FBX…** or **Export Blender Scene as OBJ…**. Choose where to save the model. The FBX export uses a global scale of `1.45329` and OBJ uses `0.68810`. Blender runs in the background. Set **Sea Power INI: Blender Path** if your Blender installation is outside the standard locations and PATH.
+
 ## FBX models
 
 Open an FBX in VS Code for the 3D preview. The extension includes its own reader for older FBX exports and big-endian files. You can inspect the mesh hierarchy and copy submodels or colliders directly from an FBX 2009 export.
