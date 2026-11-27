@@ -162,9 +162,15 @@ export async function openExportPanel(context: vscode.ExtensionContext, uri: vsc
   .row>span{flex:1;overflow-wrap:anywhere}.off>span{color:var(--vscode-descriptionForeground)}
   #objects{container-type:inline-size}.tags,.tag-list{display:flex;align-items:center;gap:3px;justify-content:flex-end}
   .tags{max-width:38%;min-width:0}.tag-list{min-width:0;flex-wrap:wrap}.tags[hidden],.tag-list:empty{display:none}
-  .tag-chip{display:inline-flex;align-items:center;max-width:100%;padding-left:5px;border-radius:4px;background:var(--vscode-badge-background);color:var(--vscode-badge-foreground);font-size:.9em}
+  .tag-chip{display:inline-flex;align-items:center;min-width:0;max-width:100%;padding:0 4px;border-radius:4px;background:var(--vscode-badge-background);color:var(--vscode-badge-foreground);font-size:.9em}
   .tag-chip span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .tags button{background:transparent;color:inherit;padding:1px 4px;font:inherit}.tag-chip button{flex:none}
+  .tags button{background:transparent;color:inherit;padding:1px 4px;font:inherit}.tag-chip button{flex:none;inline-size:1.3em;padding:0;overflow:hidden}
+  @media(hover:hover) and (pointer:fine){
+    @container(min-width:441px){
+      .tag-list:not(:has(>:nth-child(4))){flex-wrap:nowrap}
+      .tag-list:not(:has(>:nth-child(4)))>.tag-chip:not(:hover):not(:focus-within)>button{inline-size:0}
+    }
+  }
   .tags button:focus-visible{outline:1px solid var(--vscode-focusBorder)}
   .tags .add-tag{font-size:1.15em}.add-tag:hover{background:var(--vscode-toolbar-hoverBackground)}
   .moves{display:inline-flex;gap:1px}.moves button{padding:1px 3px}
