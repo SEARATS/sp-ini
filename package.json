@@ -2,7 +2,7 @@
   "name": "seapower-ini",
   "displayName": "Sea Power INI",
   "description": "Autocomplete, error checking and Go to Definition for Sea Power INI files.",
-  "version": "0.9.22",
+  "version": "0.9.23",
   "icon": "dist/icon.png",
   "publisher": "searats",
   "private": true,
@@ -124,6 +124,7 @@
       }
     ],
     "commands": [
+      { "command": "seapower-ini.exportIniData", "title": "Export INI Data…", "category": "Sea Power INI" },
       {
         "command": "seapower-ini.previewBlend",
         "title": "Preview Blender Scene",
@@ -244,6 +245,7 @@
         }
       ],
       "explorer/context": [
+        { "command": "seapower-ini.exportIniData", "when": "resourceScheme == file && resourceExtname =~ /[.](obj|fbx|blend)$/i", "group": "seapower@0" },
         {
           "command": "seapower-ini.previewBlend",
           "when": "!explorerResourceIsFolder && resourceScheme == file && resourceExtname =~ /[.]blend$/i",
@@ -323,6 +325,7 @@
         }
       ],
       "view/item/context": [
+        { "command": "seapower-ini.exportIniData", "when": "view == seapower-ini.hierarchy", "group": "seapower@0" },
         {
           "command": "seapower-ini.generateFromModel",
           "when": "view == seapower-ini.hierarchy && viewItem == spIniParent"
@@ -337,6 +340,7 @@
         }
       ],
       "editor/title/context": [
+        { "command": "seapower-ini.exportIniData", "when": "resourceScheme == file && resourceExtname =~ /[.](obj|fbx|blend)$/i", "group": "seapower@0" },
         {
           "command": "seapower-ini.copyHierarchy",
           "when": "resourceExtname =~ /[.]fbx$/i"
@@ -347,6 +351,7 @@
         }
       ],
       "webview/context": [
+        { "command": "seapower-ini.exportIniData", "when": "spIniExportUri", "group": "seapower@0" },
         {
           "command": "seapower-ini.copyHierarchy",
           "when": "spIniFbxUri && !spIniLeaf"

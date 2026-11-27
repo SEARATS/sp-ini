@@ -15,7 +15,7 @@ async function compile() {
       bundle: true, platform: "node", target: "node18", external: ["vscode"] }),
     build({ entryPoints: ["test/preview-smoke.ts", "test/stock-smoke.ts", "test/vscode-smoke.ts", "scripts/gallery/capture.ts"],
       outdir: "dist/dev", entryNames: "[name]", bundle: true, platform: "node", target: "node18", external: ["vscode"] }),
-    build({ entryPoints: ["src/obj-viewer.ts","src/unit-card-viewer.ts"], outdir: "dist", bundle: true, minify: true, target: "chrome114" })
+    build({ entryPoints: ["src/obj-viewer.ts","src/unit-card-viewer.ts","src/export-viewer.ts"], outdir: "dist", bundle: true, minify: true, target: "chrome114" })
   ]);
   const licenses = [];
   for (const name of ["diff","three","yaml","@vscode/codicons"]) {

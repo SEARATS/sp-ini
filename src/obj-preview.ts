@@ -59,7 +59,7 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
     }
     panel.webview.options = { enableScripts: true, localResourceRoots: [dist, vscode.workspace.getWorkspaceFolder(document.uri)?.uri ?? vscode.Uri.joinPath(document.uri, "..")] };
     let timer;
-    const send = () => panel.webview.postMessage({ type:"model", text:document.getText(), url:panel.webview.asWebviewUri(document.uri).toString() });
+    const send = () => panel.webview.postMessage({ type:"model", sourceUri:document.uri.toString(), text:document.getText(), url:panel.webview.asWebviewUri(document.uri).toString() });
     const messages = panel.webview.onDidReceiveMessage(message => { if (message.type === "ready") send(); });
     let paired = false;
     function pair() {
@@ -185,7 +185,7 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
         const send = async (fallback = false) => {
           const current = ++revision;
           conversion?.abort();
-          const message = { type: "fbx", uri: blend ? undefined : document.uri.toString(), url: panel.webview.asWebviewUri(document.uri).toString() };
+          const message = { type: "fbx", sourceUri:document.uri.toString(), uri: blend ? undefined : document.uri.toString(), url: panel.webview.asWebviewUri(document.uri).toString() };
           try {
             if (blend && document.uri.scheme !== "file") throw Error("Open a local .blend file to preview it with Blender.");
             if (blend) conversion = new AbortController();

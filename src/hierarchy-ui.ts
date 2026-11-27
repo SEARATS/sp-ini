@@ -7,6 +7,7 @@ import { parse } from "./ini";
 import { meshFlagMatcher, meshFlagSetting } from "./mesh-flags";
 import { watchMeshTags } from "./mesh-tags-ui";
 import { readMeshTags } from "./mesh-sidecar";
+import { openExportPanel } from "./export-panel";
 
 export function registerHierarchy(context: vscode.ExtensionContext) {
   const changed = new vscode.EventEmitter<void>();
@@ -165,7 +166,15 @@ export function registerHierarchy(context: vscode.ExtensionContext) {
     if (uri?.scheme==="file" && /\.fbx$/i.test(uri.path))
       return run(from,undefined,uri,"spIniModelId" in target ? target.spIniModelId : undefined).catch(e=>vscode.window.showErrorMessage(String(e)));
   });
-  context.subscriptions.push(copy("copyHierarchy","copy"),copy("copyColliders","colliders"),changed,tree,preview,command("generate","palette"),command("generateFromModel","model"),
+  const exportData = vscode.commands.registerCommand("seapower-ini.exportIniData", async (target?: vscode.Uri | ModelNode | {spIniExportUri?:string}) => {
+    const tab = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
+    const activeUri = tab instanceof vscode.TabInputCustom || tab instanceof vscode.TabInputText ? tab.uri : undefined;
+    const uri = target && "fsPath" in target ? target : target && "children" in target ? file :
+      target && "spIniExportUri" in target && target.spIniExportUri ? vscode.Uri.parse(target.spIniExportUri) : activeUri;
+    const model = uri && /\.(obj|fbx|blend)$/i.test(uri.path) ? uri : (await vscode.window.showOpenDialog({filters:{Models:["obj","fbx","blend"]}}))?.[0];
+    if (model) await openExportPanel(context, model).catch(error => vscode.window.showErrorMessage(error.message));
+  });
+  context.subscriptions.push(exportData,copy("copyHierarchy","copy"),copy("copyColliders","colliders"),changed,tree,preview,command("generate","palette"),command("generateFromModel","model"),
     {dispose:() => watcher?.dispose()},
     vscode.workspace.onDidChangeConfiguration(event => {
       if (event.affectsConfiguration(meshFlagSetting, file)) { matchFlags = readFlags(); changed.fire(); }

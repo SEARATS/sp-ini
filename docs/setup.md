@@ -133,6 +133,12 @@ Run `pnpm run test:fbx` to check geometry, mesh lookup and hierarchy export agai
 
 In a 3D preview, **Missing texture** sets the color for a diffuse map that fails to load. Choose **Black**, **Magenta**, or **Grey** (default). The dropdown saves `seapowerIni.missingTextureColor` for the project folder and updates its open previews. With no project open, the choice lasts for that VS Code window.
 
+## Export INI data
+
+Right-click an OBJ, FBX or Blender model in Explorer or its preview and choose **Export INI Data…**. The panel starts with every object selected. Toggle **Meshes**, **Colliders** and **Transform helpers**, or change an object's export role. The planned INI updates as you edit. Copy it, open it in a new INI tab, or choose an existing INI to review and apply a diff. Applying leaves the edit open for saving or undo.
+
+The exporter reads the model's collider overrides. Role changes in the export panel apply to that export. OBJ objects use model-space vertices and export at zero offset. FBX and Blender use local hierarchy positions.
+
 ## Mesh flags
 
 Search Settings for `seapowerIni.meshFlags` and choose **Edit in settings.json**. Each flag has a label, a Codicon name and a list of literal `substrings` or regex `patterns`. The model and entity hierarchies show every match against the object or mesh name, ignoring case. Hover an icon to read its label.

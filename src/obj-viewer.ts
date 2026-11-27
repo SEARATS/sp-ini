@@ -200,7 +200,7 @@ function showOutline(nodes: OutlineNode[], note = "", uri?: string, preserve=fal
     const content = document.createElement("span");
     content.className = "row";
     label.append(content);
-    if (uri) item.dataset.vscodeContext = JSON.stringify({ spIniFbxUri: uri, spIniModelId: node.modelId, spIniLeaf: !node.children.length });
+    if (uri) item.dataset.vscodeContext = JSON.stringify({ spIniExportUri:uri, spIniFbxUri: uri, spIniModelId: node.modelId, spIniLeaf: !node.children.length });
     const children = node.children.map(child => row(child, fullPath, depth + 1));
     const subtree: PreviewPart[] = [...node.parts, ...children.flatMap(child => child.subtree)];
     const targets = node.parts.length ? node.parts : subtree;
@@ -560,13 +560,11 @@ window.addEventListener("message", ({ data }) => {
   }
   if (data.type !== "model" && data.type !== "fbx") return;
   fbxUri = data.type === "fbx" ? data.uri : undefined;
+  document.body.dataset.vscodeContext = JSON.stringify({spIniExportUri:data.sourceUri, spIniFbxUri:fbxUri});
   let layout: ReturnType<typeof objLayout>;
   if (data.type === "fbx") {
-    if (fbxUri) document.body.dataset.vscodeContext = JSON.stringify({spIniFbxUri: fbxUri});
-    else delete document.body.dataset.vscodeContext;
     showOutline([], data.error || "Reading model hierarchy…");
   } else {
-    delete document.body.dataset.vscodeContext;
     outline.querySelector("summary").textContent = "Objects and groups";
     layout = objLayout(data.text);
     showOutline(layout.nodes);

@@ -32,7 +32,7 @@ export function sceneHierarchy(scene: FbxScene) {
   return assignPaths(roots);
 }
 
-function assignPaths(roots: ModelNode[]) {
+export function assignPaths(roots: ModelNode[]) {
   function paths(siblings: ModelNode[], base: string) {
     const counts = new Map<string,number>();
     for (const n of siblings) {
@@ -67,11 +67,16 @@ export function generate(original: string, model: string, root: ModelNode, roles
   const begin = "; sp-ini " + id + " begin", end = "; sp-ini " + id + " end";
   const eol = original.includes("\r\n") ? "\r\n" : "\n";
   const lines: string[] = [];
+  const previousLists = new Set<string>();
   let owned = false;
   for (const line of original.split(/\r\n|\n/)) {
     if (line === begin) { if (owned) throw Error("Nested generator markers"); owned = true; }
     else if (line === end) { if (!owned) throw Error("Unmatched generator marker"); owned = false; }
     else if (!owned) lines.push(line);
+    else {
+      const key = /^\s*(SubModel|MeshCollider)\d+\s*=/i.exec(line);
+      if (key) previousLists.add(key[1].toLowerCase());
+    }
   }
   if (owned) throw Error("Unclosed generator marker");
   const existing = parse(lines.join("\n"));
@@ -103,6 +108,7 @@ export function generate(original: string, model: string, root: ModelNode, roles
   for (const role of ["Submodel","Collider"] as const) {
     const title = role === "Collider" ? "Colliders" : "Submodels";
     const prefix = role === "Collider" ? "MeshCollider" : "SubModel";
+    if (!groups[role].length && !previousLists.has(prefix.toLowerCase())) continue;
     const countKey = role === "Collider" ? "NumberOfMeshColliders" : "NumberOfSubmodels";
     const current = parse(lines.join("\n"));
     const section = current.sections.find(s=>s.name.toLowerCase()===title.toLowerCase());
