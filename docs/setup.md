@@ -139,6 +139,8 @@ Right-click an OBJ, FBX or Blender model in Explorer or its preview and choose *
 
 The exporter reads the model's collider overrides. Role changes in the export panel apply to that export. OBJ objects use model-space vertices and export at zero offset. FBX and Blender use local hierarchy positions.
 
+**Rig preview** shows the parts and parent positions in the planned INI. Meshes are shaded, colliders are wireframe, and **Parent links** shows pivots and connections. Drag to orbit or scroll to zoom. Collapse **Rig preview** for more room to read the INI. The export panel remembers this choice.
+
 ## Mesh flags
 
 Search Settings for `seapowerIni.meshFlags` and choose **Edit in settings.json**. Each flag has a label, a Codicon name and a list of literal `substrings` or regex `patterns`. The model and entity hierarchies show every match against the object or mesh name, ignoring case. Hover an icon to read its label.

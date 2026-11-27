@@ -34,7 +34,7 @@ export function exportRows(nodes: ModelNode[], depth = 0): ExportRow[] {
 export function planExport(model: string, roots: ModelNode[], enabled: ReadonlySet<ExportCategory>,
     overrides: ReadonlyMap<string, ExportChoice>, original?: string) {
   const reserved = new Set(flatten(roots).map(n => n.name.toLowerCase()));
-  const used = new Set(["visibleparent", "colliders", "submodels"]), roles: Record<string, Role> = {};
+  const used = new Set(["visibleparent", "models", "colliders", "submodels"]), roles: Record<string, Role> = {};
   let count = 0;
   function prepare(node: ModelNode): ModelNode {
     const category = overrides.get(node.path) ?? categoryOf(node);

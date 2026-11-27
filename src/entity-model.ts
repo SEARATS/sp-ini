@@ -127,6 +127,19 @@ export function entityParts(doc: ReturnType<typeof parse>, warnings: Set<string>
   return parts;
 }
 
+/** An export snippet supplies the children of the implicit VisibleParent. */
+export function exportRigScene(ini: string, geometry: ReadonlyMap<string, number>): EntityScene {
+  const warnings = new Set<string>();
+  const parts = entityParts(parse("[Models]\n" + ini), warnings).map(({part, mesh}) => {
+    if (mesh && !part.primitive && !/^dummy$/i.test(mesh.value)) {
+      part.geometry = geometry.get(mesh.value);
+      if (part.geometry === undefined) warnings.add("Missing mesh " + mesh.value);
+    }
+    return part;
+  });
+  return {parts, geometry:[], textures:[], warnings:[...warnings]};
+}
+
 export function entityObjects(doc: ReturnType<typeof parse>, parts: EntityPart[]): EntityObject[] {
   const anchors = new Map(parts.map(part => [part.id,part.id]));
   const root = parts.find(part => part.id === "models");

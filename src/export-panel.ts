@@ -5,11 +5,12 @@ import { readBlendPreview } from "./blend-export";
 import { changes, hierarchy } from "./hierarchy";
 import { exportCategories, exportRows, objExportHierarchy, planExport, type ExportCategory, type ExportChoice } from "./export-plan";
 import { readMeshTags } from "./mesh-sidecar";
+import { exportRigAssets, type RigAssets } from "./export-rig";
 
 export async function openExportPanel(context: vscode.ExtensionContext, uri: vscode.Uri) {
   if (uri.scheme !== "file" || !/\.(fbx|obj|blend)$/i.test(uri.path)) throw Error("Choose an OBJ, FBX or Blender file.");
   const name = basename(uri.fsPath);
-  const roots = await vscode.window.withProgress({location:vscode.ProgressLocation.Notification, title:"Reading " + name, cancellable:true}, async (_, token) => {
+  const source = await vscode.window.withProgress({location:vscode.ProgressLocation.Notification, title:"Reading " + name, cancellable:true}, async (_, token) => {
     const controller = new AbortController();
     const cancellation = token.onCancellationRequested(() => controller.abort());
     try {
@@ -19,11 +20,15 @@ export async function openExportPanel(context: vscode.ExtensionContext, uri: vsc
         : dirty ? Buffer.from(dirty.getText()) : Buffer.from(await vscode.workspace.fs.readFile(uri));
       if (token.isCancellationRequested) return;
       const tags = readMeshTags(uri.fsPath);
-      return /\.obj$/i.test(name) ? objExportHierarchy(bytes.toString("utf8"), tags) : hierarchy(bytes, tags);
+      const roots = /\.obj$/i.test(name) ? objExportHierarchy(bytes.toString("utf8"), tags) : hierarchy(bytes, tags);
+      return {roots, bytes};
     } catch (error) { if (!token.isCancellationRequested) throw error; }
     finally { cancellation.dispose(); }
   });
-  if (!roots) return;
+  if (!source) return;
+  const {roots} = source;
+  let rigAssets: RigAssets;
+  const rigPreference = "export.showRig";
   const rows = exportRows(roots), byPath = new Map(rows.map(row => [row.path, row]));
   const dist = vscode.Uri.joinPath(context.extensionUri, "dist");
   const panel = vscode.window.createWebviewPanel("seapower-ini.export", "Export INI · " + name, vscode.ViewColumn.Active,
@@ -43,7 +48,7 @@ export async function openExportPanel(context: vscode.ExtensionContext, uri: vsc
       plan = planExport(name, roots, enabled, roles, before);
       if (plan.count) preview = target ? changes(basename(target.fileName), before, plan.after) : plan.text;
     } catch (e) { error = e.message; }
-    void web.postMessage({type:"preview", generation, request, preview, error, target:target?.fileName,
+    void web.postMessage({type:"preview", generation, request, preview, error, target:target?.fileName, rigIni:target ? plan?.text ?? "" : undefined,
       count:plan?.count ?? 0, changed:!target || (plan && before !== plan.after)});
   }
   const edits = vscode.workspace.onDidChangeTextDocument(e => { if (e.document === target) refresh(); });
@@ -51,8 +56,16 @@ export async function openExportPanel(context: vscode.ExtensionContext, uri: vsc
   web.onDidReceiveMessage(async message => {
     try {
       if (message.type === "ready") {
-        await web.postMessage({type:"model", rows, categories:exportCategories});
+        await web.postMessage({type:"model", rows, categories:exportCategories, showRig:context.workspaceState.get(rigPreference,true)});
         refresh();
+      } else if (message.type === "rigAssets") {
+        try {
+          rigAssets ??= exportRigAssets(name, source.bytes);
+          source.bytes = undefined;
+          await web.postMessage({type:"rigAssets", assets:rigAssets});
+        } catch (error) { await web.postMessage({type:"rigAssets", error:error.message}); }
+      } else if (message.type === "showRig" && typeof message.visible === "boolean") {
+        await context.workspaceState.update(rigPreference,message.visible);
       } else if (message.type === "selection") {
         if (!Array.isArray(message.categories) || !Array.isArray(message.roles)) return;
         enabled = new Set(exportCategories.filter(c => message.categories.includes(c)));
@@ -109,9 +122,17 @@ export async function openExportPanel(context: vscode.ExtensionContext, uri: vsc
   pre{padding:12px;font-family:var(--vscode-editor-font-family);user-select:text} #status{color:var(--vscode-descriptionForeground)}
   button{border:0;padding:6px 10px;background:var(--vscode-button-secondaryBackground);color:var(--vscode-button-secondaryForeground);cursor:pointer}
   button.primary{background:var(--vscode-button-background);color:var(--vscode-button-foreground)}button:disabled{opacity:.5;cursor:default}
-  #targetName{overflow-wrap:anywhere} @media(max-width:620px){main{grid-template-columns:1fr;grid-template-rows:1fr 1fr}}
+  #targetName{overflow-wrap:anywhere}
+  #rig{margin-bottom:8px} #rig summary{cursor:pointer;font-weight:600;padding:3px 0}
+  #rig-view{position:relative;height:clamp(110px,31vh,420px);border:1px solid var(--vscode-panel-border)}
+  #rig canvas{display:block;width:100%;height:100%;touch-action:none} #rig-tools{position:absolute;bottom:5px;left:5px;display:flex;gap:8px;align-items:center;background:var(--vscode-editor-background)}
+  #rig-note{position:absolute;top:4px;left:6px;max-width:95%;max-height:45%;overflow:auto;white-space:pre-line;background:var(--vscode-editor-background)}
+  @media(max-width:620px){main{grid-template-columns:1fr;grid-template-rows:minmax(75px,1fr) minmax(180px,2fr)} #rig-view{height:clamp(85px,21vh,180px)}}
   </style></head><body><header><strong>Export categories</strong><div class="categories"></div></header>
-  <main><section><h2>Objects</h2><div id="objects"></div></section><section><h2 id="heading">Planned INI</h2><small id="targetName"></small><pre id="preview" tabindex="0"></pre></section></main>
+  <main><section><h2>Objects</h2><div id="objects"></div></section><section>
+  <details id="rig"><summary>Rig preview</summary><div id="rig-view"><canvas aria-label="Exported submodel rig"></canvas>
+  <span id="rig-note" role="status"></span><div id="rig-tools"><button id="fit-rig">Fit rig</button><label><input id="parent-links" type="checkbox" checked>Parent links</label></div></div></details>
+  <h2 id="heading">Planned INI</h2><small id="targetName"></small><pre id="preview" tabindex="0"></pre></section></main>
   <footer><button id="copy" class="primary" disabled>Copy INI</button><button id="new" disabled>Open as new INI</button>
   <button id="target">Choose target INI…</button><button id="apply" class="primary" hidden>Apply changes</button>
   <button id="clearTarget" hidden>Back to generated INI</button><span id="status" role="status"></span></footer>

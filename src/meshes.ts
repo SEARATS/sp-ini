@@ -5,16 +5,27 @@ import { reference, referenceContext, isMesh } from "./references";
 
 const objectHeader = /^\s*o\s+([^#]+?)(?:\s*#.*)?$/;
 
-function parseObj(text) {
+function parseObj(text: string, groupObjects = false) {
   const vertices = [], uvs = [], objects = [], libraries = [];
   let object, material;
+  const groups = new Map<string, typeof object>();
+  let activeGroups = [];
   for (const [line, raw] of text.split(/\r\n|\n|\r/).entries()) {
     const data = raw.split("#", 1)[0].trim();
-    if (/^o(?:\s|$)/.test(data)) {
+    if (!groupObjects && /^o(?:\s|$)/.test(data)) {
       const name = data.slice(1).trim();
       object = { name, line, start: raw.indexOf(name, raw.indexOf("o") + 1),
         faces: [], firstVertex: vertices.length, vertexCount: 0 };
       if (name) objects.push(object);
+    } else if (groupObjects && /^g(?:\s|$)/.test(data)) {
+      activeGroups = [...new Set(data.slice(1).trim().split(/\s+/).filter(Boolean))].map(name => {
+        if (!groups.has(name)) {
+          const group = {name, line, start:raw.indexOf(name), faces:[], firstVertex:0, vertexCount:0};
+          groups.set(name, group);
+          objects.push(group);
+        }
+        return groups.get(name);
+      });
     } else if (/^mtllib\s/.test(data)) {
       libraries.push(data.slice(6).trim());
     } else if (/^usemtl\s/.test(data)) {
@@ -26,17 +37,35 @@ function parseObj(text) {
       const point = data.slice(1).trim().split(/\s+/, 3).map(Number);
       vertices.push(point.length === 3 && point.every(Number.isFinite) ? point : null);
       if (object) object.vertexCount++;
-    } else if (object && /^f\s/.test(data)) {
+    } else if ((object || activeGroups.length) && /^f\s/.test(data)) {
       const indices = [], texcoords = [];
       for (const token of data.slice(1).trim().split(/\s+/)) {
         const [v, t] = token.split("/", 2).map(Number);
         indices.push(v < 0 ? vertices.length + v : v - 1);
         texcoords.push(t < 0 ? uvs.length + t : t - 1);
       }
-      if (indices.length >= 3) object.faces.push({ indices, texcoords, material });
+      if (indices.length >= 3) {
+        const face = { indices, texcoords, material };
+        if (object) object.faces.push(face);
+        else activeGroups.forEach(group => group.faces.push(face));
+      }
     }
   }
   return { vertices, uvs, objects, libraries };
+}
+
+export function triangles(model: ReturnType<typeof parseObj>, object: ReturnType<typeof parseObj>["objects"][number]) {
+  const positions: number[] = [], uvs: number[] = [];
+  for (const face of object.faces) for (let j=1; j+1<face.indices.length; j++) {
+    const corners = [0,j,j+1];
+    if (corners.some(i=>!model.vertices[face.indices[i]])) continue;
+    for (const i of corners) {
+      positions.push(...model.vertices[face.indices[i]]);
+      uvs.push(...(model.uvs[face.texcoords[i]] || [0,0]));
+    }
+  }
+  const encode = (values: number[]) => Buffer.from(new Float32Array(values).buffer).toString("base64");
+  return positions.length ? {positions:encode(positions),uvs:encode(uvs)} : undefined;
 }
 
 class MeshFiles {

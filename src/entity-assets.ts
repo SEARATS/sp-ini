@@ -2,27 +2,13 @@ import { posix as path } from "node:path";
 import { PNG } from "pngjs";
 import { Catalog, normalize } from "./catalog";
 import { Materials } from "./materials";
-import { MeshFiles, parseObj } from "./meshes";
+import { MeshFiles, parseObj, triangles } from "./meshes";
 import { referenceContext } from "./references";
 import { StockAssets, resolvedDiffuse } from "./stock-assets";
 import { field, entityParts, entityObjects, type EntityScene } from "./entity-model";
 import { entityResourceSources, modelResource } from "./entity-resources";
 import { type parse } from "./ini";
 import { paintTexture, type Appearance } from "./entity-selection";
-
-function triangles(model: ReturnType<typeof parseObj>, object: ReturnType<typeof parseObj>["objects"][number]) {
-  const positions: number[] = [], uvs: number[] = [];
-  for (const face of object.faces) for (let j=1; j+1<face.indices.length; j++) {
-    const corners = [0,j,j+1];
-    if (corners.some(i=>!model.vertices[face.indices[i]])) continue;
-    for (const i of corners) {
-      positions.push(...model.vertices[face.indices[i]]);
-      uvs.push(...(model.uvs[face.texcoords[i]] || [0,0]));
-    }
-  }
-  const encode = (values: number[]) => Buffer.from(new Float32Array(values).buffer).toString("base64");
-  return positions.length ? {positions:encode(positions),uvs:encode(uvs)} : undefined;
-}
 
 function previewTexture(image: PNG, opaque: boolean): EntityScene["textures"][number] {
   let alpha: "opaque" | "cutout" | "blend" = "opaque";

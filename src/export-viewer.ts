@@ -1,4 +1,6 @@
 import type { ExportCategory, ExportChoice, ExportRow } from "./export-plan";
+import type { RigAssets } from "./export-rig";
+import { createRigViewer } from "./entity-rig-viewer";
 
 declare function acquireVsCodeApi(): {postMessage(message: unknown): void};
 const vscode = acquireVsCodeApi();
@@ -8,6 +10,36 @@ const enabled = new Set<ExportCategory>(), overrides = new Map<string, ExportCho
 const options = new Map<HTMLSelectElement, HTMLDivElement>();
 const labels = {Mesh:"Meshes", Collider:"Colliders", Helper:"Transform helpers"};
 let generation = 0, request = 0;
+const rig = get("rig") as HTMLDetailsElement, links = get("parent-links") as HTMLInputElement;
+let assets: RigAssets, viewer: ReturnType<typeof createRigViewer>, assetsRequested = false;
+let plannedIni = "", drawnIni: string, rigError = "";
+
+function updateRig() {
+  if (!rig.open) return;
+  const note = get("rig-note");
+  if (rigError) { note.textContent = rigError; return; }
+  if (!assets) {
+    note.textContent = "Loading rig…";
+    if (!assetsRequested) { assetsRequested = true; vscode.postMessage({type:"rigAssets"}); }
+    return;
+  }
+  if (drawnIni === plannedIni) return;
+  try {
+    viewer ??= createRigViewer(rig.querySelector("canvas"), assets);
+    note.textContent = viewer.update(plannedIni) || (plannedIni ? "" : "No rig to display.");
+    viewer.showLinks(links.checked);
+    drawnIni = plannedIni;
+  } catch (e) { note.textContent = "Rig preview unavailable: " + e.message; }
+}
+rig.querySelector("summary").onclick = event => {
+  event.preventDefault();
+  rig.open = !rig.open;
+  vscode.postMessage({type:"showRig", visible:rig.open});
+  updateRig();
+};
+button("fit-rig").onclick = () => viewer?.fit();
+links.onchange = () => viewer?.showLinks(links.checked);
+window.addEventListener("pagehide", () => viewer?.dispose(), {once:true});
 
 function changed() {
   for (const [select, row] of options) row.classList.toggle("off", !enabled.has(select.value as ExportCategory));
@@ -55,9 +87,15 @@ for (const type of ["copy","new","target","apply","clearTarget"]) {
   button(type).onclick = () => vscode.postMessage({type, generation});
 }
 window.addEventListener("message", ({data}) => {
-  if (data.type === "model") render(data.rows, data.categories);
+  if (data.type === "model") { render(data.rows, data.categories); rig.open = data.showRig; updateRig(); }
+  if (data.type === "rigAssets") {
+    assets = data.assets; rigError = data.error || "";
+    updateRig();
+  }
   if (data.type !== "preview" || data.request !== request || data.generation < generation) return;
   generation = data.generation;
+  plannedIni = data.rigIni ?? data.preview;
+  updateRig();
   get("heading").textContent = data.target ? "Planned changes" : "Planned INI";
   get("targetName").textContent = data.target ?? "";
   get("preview").textContent = data.preview;

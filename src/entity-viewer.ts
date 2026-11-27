@@ -13,7 +13,15 @@ function transform(node:Group, position:Vector, rotation:Vector) {
   node.rotation.set(rx,-ry,-rz,"YXZ");
 }
 
-export function assembledEntity(scene: EntityScene, manager: LoadingManager) {
+export function entityGeometry(data: EntityScene["geometry"][number]) {
+  const geometry = new BufferGeometry();
+  geometry.setAttribute("position",new BufferAttribute(floats(data.positions),3));
+  geometry.setAttribute("uv",new BufferAttribute(floats(data.uvs),2));
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+export function assembledEntity(scene: EntityScene, manager: LoadingManager, meshes = scene.geometry.map(entityGeometry)) {
   const model = new Group();
   const tree = (name: string): OutlineNode => ({name, tree:true, children:[], parts:[]});
   const meshTree = tree("Meshes"), colliderTree = tree("Colliders"), objectTree = tree("Objects");
@@ -34,13 +42,6 @@ export function assembledEntity(scene: EntityScene, manager: LoadingManager) {
     if ([part.name,part.meshName].some(name=>name && magazineName.test(name))) return "magazine";
     return "unassigned";
   }
-  const meshes = scene.geometry.map(data=>{
-    const geometry = new BufferGeometry();
-    geometry.setAttribute("position",new BufferAttribute(floats(data.positions),3));
-    geometry.setAttribute("uv",new BufferAttribute(floats(data.uvs),2));
-    geometry.computeVertexNormals();
-    return geometry;
-  });
   const loader = new TextureLoader(manager);
   const textures = scene.textures.map(({png})=>{
     const texture = loader.load("data:image/png;base64,"+png);
