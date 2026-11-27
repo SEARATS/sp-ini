@@ -10,12 +10,26 @@ permissions:
   contents: read
 
 jobs:
+  quiet-period:
+    name: Wait for 60 quiet minutes on main
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    concurrency:
+      group: release-quiet-period-main
+      cancel-in-progress: true
+    environment: release-quiet-period
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Release quiet period elapsed."
+
   build:
     if: github.event_name == 'push'
     uses: ./.github/workflows/release.yml
 
   github-release:
-    needs: build
+    needs: [build, quiet-period]
+    if: >-
+      !cancelled() && needs.build.result == 'success' &&
+      (needs.quiet-period.result == 'success' || startsWith(github.ref, 'refs/tags/v'))
     concurrency: github-release-${{ needs.build.outputs.tag }}
     outputs:
       publish: ${{ steps.release.outputs.publish }}
@@ -38,6 +52,13 @@ jobs:
           RELEASE_TAG: ${{ needs.build.outputs.tag }}
         run: |
           commit=$(git rev-parse HEAD)
+          if [[ "$GITHUB_REF" == refs/heads/main ]]; then
+            latest=$(gh api "repos/$GH_REPO/git/ref/heads/main" --jq .object.sha)
+            if [[ "$latest" != "$commit" ]]; then
+              echo "A newer push restarted the release quiet period."
+              exit 0
+            fi
+          fi
           if git show-ref --verify --quiet "refs/tags/$RELEASE_TAG"; then
             if [ "$(git rev-list -1 "$RELEASE_TAG")" != "$commit" ]; then
               echo "$RELEASE_TAG already belongs to an earlier commit. Build passed."
