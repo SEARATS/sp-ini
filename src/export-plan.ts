@@ -38,7 +38,7 @@ export function exportRows(nodes: ModelNode[], tags?: MeshTags, rules?: unknown)
     return nodes.flatMap(n => {
       const labels = n.mesh ? match(n.mesh, n.name).map(flag => flag.label) : [];
       const collider = tags ? colliderType(tags, n.mesh, n.name) || labels.includes("Collider") : categoryOf(n) === "Collider";
-      if (n.mesh && collider && !labels.includes("Collider")) labels.push("Collider");
+      if (n.mesh && collider && !labels.includes("Collider") && !(tags && tagOverride(tags,"Collider",[n.mesh,n.name]) === false)) labels.push("Collider");
       const category: ExportChoice = !n.mesh ? "Helper" : labels.includes("Hull collider") ? "Hull collider" : collider ? "Collider" :
         labels.includes("Primary damage mesh") ? "Primary damage mesh" : labels.includes("Primary mesh") ? "Primary mesh" :
         labels.includes("LOD") ? "LOD" : labels.includes("Damaged") ? "Damaged" : "Mesh";

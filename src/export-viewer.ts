@@ -9,7 +9,7 @@ const vscode = acquireVsCodeApi();
 const get = (id: string) => document.getElementById(id);
 const button = (id: string) => get(id) as HTMLButtonElement;
 const enabled = new Set<ExportCategory>(), overrides = new Map<string, ExportChoice>();
-const controls = new Map<string, {row:HTMLDivElement; select:HTMLSelectElement; tags:HTMLButtonElement; node:ExportRow}>();
+const controls = new Map<string, {row:HTMLDivElement; select:HTMLSelectElement; chips:HTMLDivElement; add:HTMLButtonElement; node:ExportRow}>();
 const labels = {Mesh:"Meshes", Collider:"Colliders", LOD:"LODs", Damaged:"Damage models", Helper:"Transform helpers"};
 const distances: number[] = [];
 let generation = 0, request = 0;
@@ -79,21 +79,36 @@ function updateTags(rows: ExportRow[]) {
     if (!groups.has(path)) groups.set(path,[]);
     groups.get(path).push(key(row));
   }
-  const list = get("objects"), fragment = document.createDocumentFragment();
-  for (const node of rows) {
+  const list = get("objects");
+  for (const [index,node] of rows.entries()) {
     const control = controls.get(node.path);
     if (!control) continue;
     control.node = node;
     control.select.options[0].text = "Auto · " + node.category;
-    control.tags.querySelector("small").textContent = node.tags.join(", ");
-    control.tags.title = ["Edit mesh tags", ...node.tags].join("\n");
+    const {chips,add} = control;
+    const tagKey = JSON.stringify(node.tags);
+    if (chips.dataset.tags !== tagKey) {
+      if (chips.contains(document.activeElement)) add.focus();
+      chips.dataset.tags = tagKey;
+      chips.replaceChildren(...node.tags.map(tag => {
+        const chip = document.createElement("span"), label = document.createElement("span"), remove = document.createElement("button");
+        chip.className = "tag-chip";
+        label.textContent = label.title = tag;
+        remove.textContent = "×";
+        remove.title = "Remove " + tag + " from " + node.name;
+        remove.setAttribute("aria-label",remove.title);
+        remove.onclick = () => vscode.postMessage({type:"removeTag",path:node.path,tag});
+        chip.append(label,remove);
+        return chip;
+      }));
+    }
     const siblings = groups.get(parent(node)), id = key(node);
     const moves = meshMoveButtons(node.name,id,siblings,direction => vscode.postMessage({type:"moveMesh",key:id,siblings,direction}));
     control.row.querySelector(".moves")?.remove();
     control.row.insertBefore(moves,control.select);
-    fragment.append(control.row);
+    const current = list.children[index];
+    if (current !== control.row) list.insertBefore(control.row,current ?? null);
   }
-  list.append(fragment);
   updateControls();
 }
 
@@ -129,12 +144,16 @@ function render(rows: ExportRow[], categories: ExportCategory[]) {
       else overrides.set(node.path, select.value as ExportChoice);
       changed();
     };
-    const tags = document.createElement("button");
+    const tags = document.createElement("div"), chips = document.createElement("div"), add = document.createElement("button");
     tags.className = "tags"; tags.hidden = !node.mesh;
-    tags.setAttribute("aria-label", "Edit tags for " + node.path);
-    tags.append("Tags", document.createElement("small"));
-    tags.onclick = () => vscode.postMessage({type:"editTags",path:node.path});
-    controls.set(node.path,{node,row,select,tags});
+    chips.className = "tag-list";
+    add.className = "add-tag";
+    add.textContent = "+";
+    add.title = "Add tags to " + node.name;
+    add.setAttribute("aria-label",add.title);
+    add.onclick = () => vscode.postMessage({type:"addTags",path:node.path});
+    tags.append(chips,add);
+    controls.set(node.path,{node,row,select,chips,add});
     row.append(name, tags, select);
     list.append(row);
   }

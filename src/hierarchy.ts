@@ -132,7 +132,9 @@ export function generate(original: string, model: string, root: ModelNode, roles
     names.add(name.toLowerCase());
     groups[role].push(name);
     sections.push("", "["+name+"]", (role==="Collider"?"Collider=":"Mesh=")+mesh,
-      "Parent="+(name.toLowerCase()===parent.toLowerCase() && parent===root.name ? "VisibleParent" : parent), "Position="+new Vector3().setFromMatrixPosition(local).toArray().map(v=>Number(v.toFixed(7))).join(","));
+      "Parent="+(name.toLowerCase()===parent.toLowerCase() && parent===root.name ? "VisibleParent" : parent));
+    const position = new Vector3().setFromMatrixPosition(local).toArray().map(v => Number(v.toFixed(7)));
+    if (position.some(v => v !== 0)) sections.push("Position=" + position.join(","));
     n.children.forEach(c=>visit(c,name,new Matrix4()));
   }
   root.children.forEach(n=>visit(n,root.name,new Matrix4()));

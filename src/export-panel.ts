@@ -9,7 +9,7 @@ import { specialRoles } from "./export-roles";
 import { exportCategories, exportRows, objExportHierarchy, planExport, type ExportCategory, type ExportChoice } from "./export-plan";
 import { readMeshOverrides } from "./mesh-sidecar";
 import { orderHierarchy } from "./mesh-order";
-import { editMeshTags, moveMeshInList, watchMeshTags } from "./mesh-tags-ui";
+import { editMeshTags, moveMeshInList, saveMeshTagChanges, watchMeshTags } from "./mesh-tags-ui";
 import { meshFlagSetting } from "./mesh-flags";
 import { exportRigAssets, type RigAssets } from "./export-rig";
 
@@ -84,9 +84,12 @@ export async function openExportPanel(context: vscode.ExtensionContext, uri: vsc
       } else if (message.type === "moveMesh") {
         moveMeshInList(uri,message);
         updateTags();
-      } else if (message.type === "editTags") {
+      } else if (message.type === "addTags" || message.type === "removeTag") {
         const row = byPath.get(message.path);
-        if (row?.mesh) { await editMeshTags(uri, [row.mesh, row.name],row.tags,row.name); updateTags(); }
+        if (!row?.mesh) return;
+        if (message.type === "addTags") await editMeshTags(uri,[row.mesh,row.name],row.tags,row.name,"add");
+        else if (row.tags.includes(message.tag)) saveMeshTagChanges(uri,row.mesh,row.name,new Map([[message.tag,false]]));
+        updateTags();
       } else if (message.type === "rigAssets") {
         try {
           rigAssets ??= exportRigAssets(name, source.bytes);
@@ -156,12 +159,17 @@ export async function openExportPanel(context: vscode.ExtensionContext, uri: vsc
   main{display:grid;grid-template-columns:minmax(260px,1fr) minmax(300px,1.35fr);gap:16px;min-height:0}
   section{min-width:0;min-height:0;display:flex;flex-direction:column} #objects,pre{overflow:auto;border:1px solid var(--vscode-panel-border);margin:0;flex:1}
   .row{display:flex;align-items:center;gap:8px;padding:4px 8px}.row:nth-child(even){background:var(--vscode-list-hoverBackground)}
-  .row span{flex:1;overflow-wrap:anywhere}.off span{color:var(--vscode-descriptionForeground)}
-  #objects{container-type:inline-size}.row .tags{display:flex;align-items:center;gap:4px;max-width:35%;padding:2px 6px;white-space:nowrap}
-  .tags small{overflow:hidden;text-overflow:ellipsis}.tags small:empty{display:none}
-  .row .tags[hidden]{display:none}
+  .row>span{flex:1;overflow-wrap:anywhere}.off>span{color:var(--vscode-descriptionForeground)}
+  #objects{container-type:inline-size}.tags,.tag-list{display:flex;align-items:center;gap:3px;justify-content:flex-end}
+  .tags{max-width:38%;min-width:0}.tag-list{min-width:0;flex-wrap:wrap}.tags[hidden],.tag-list:empty{display:none}
+  .tag-chip{display:inline-flex;align-items:center;max-width:100%;padding-left:5px;border-radius:4px;background:var(--vscode-badge-background);color:var(--vscode-badge-foreground);font-size:.9em}
+  .tag-chip span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tags button{background:transparent;color:inherit;padding:1px 4px;font:inherit}.tag-chip button{opacity:0;flex:none}
+  .tag-chip:hover button,.tag-chip:focus-within button{opacity:1}.tags button:focus-visible{outline:1px solid var(--vscode-focusBorder)}
+  .tags .add-tag{font-size:1.15em}.add-tag:hover{background:var(--vscode-toolbar-hoverBackground)}
+  @media(hover:none){.tag-chip button{opacity:1}}
   .moves{display:inline-flex;gap:1px}.moves button{padding:1px 3px}
-  @container(max-width:440px){.tags small{display:none}.row{gap:4px}.row select{max-width:38%}.row span{min-width:3em;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}}
+  @container(max-width:440px){.row{gap:4px}.row select{max-width:32%}.row>span{min-width:3em;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}}
   #lod-settings label{white-space:nowrap}#lod-settings input{width:5em}#lod-settings:empty{display:none}
   input,select{accent-color:var(--vscode-focusBorder)} select{color:var(--vscode-dropdown-foreground);background:var(--vscode-dropdown-background)}
   pre{padding:12px;font-family:var(--vscode-editor-font-family);user-select:text} #status{color:var(--vscode-descriptionForeground)}

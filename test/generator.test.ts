@@ -46,11 +46,13 @@ test("FBX subtree regeneration preserves manual INI text and child-local offsets
   const text=generate(original,"ship.fbx",parent);
   assert.match(text,/NumberOfMeshColliders=2 ; existing/);
   assert.match(text,/Parent=House\r\nPosition=-4,5,6/);
+  assert.doesNotMatch(text,/^Position=0,0,0\r?$/m);
   assert.match(text,/MeshCollider2=Hull_Col/);
   assert.match(text,/Collider=Handwritten/);
   assert.equal(generate(text,"ship.fbx",parent),text);
   const paste=snippet("ship.fbx",parent,{"/Hull/House":"Skip"});
   assert.match(paste,/Parent=Hull\nPosition=-5,7,9/);
+  assert.doesNotMatch(paste,/^Position=0,0,0$/m);
   assert.match(paste,/Collider=Hull_Col/);
   assert.doesNotMatch(paste,/sp-ini|Handwritten/);
   assert.equal(isColliderName("Hull_Col"),true);
