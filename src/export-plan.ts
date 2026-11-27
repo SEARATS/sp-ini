@@ -1,10 +1,22 @@
-import { assignPaths, defaultRole, flatten, generate, snippet, type ModelNode, type Role } from "./hierarchy";
+import { assignPaths, defaultRole, flatten, generate, snippet, type ModelNode, type Role, type PrimitiveCollider } from "./hierarchy";
+import type { MeshBounds } from "./export-rig";
 import { colliderType, tagOverride, type MeshTags } from "./mesh-names";
 import { meshFlagMatcher } from "./mesh-flags";
-import { categoryFor, lodLevel, type ExportCategory, type ExportChoice } from "./export-roles";
+import { categoryFor, lodLevel, primitiveTags, type ExportCategory, type ExportChoice } from "./export-roles";
 export { exportCategories, type ExportCategory, type ExportChoice } from "./export-roles";
 
 export interface ExportRow { path: string; name: string; mesh: string; depth: number; category: ExportChoice; tags: string[]; triangles?: number }
+
+export function fitTaggedColliders(rows:ExportRow[], bounds:() => ReadonlyMap<string,MeshBounds>) {
+  const primitives:PrimitiveCollider[] = [];
+  for (const row of rows) for (const [tag,shape] of Object.entries(primitiveTags)) {
+    if (!row.tags.includes(tag)) continue;
+    const fit = bounds().get(row.path);
+    if (!fit || ![...fit.center,...fit.pivot,...fit.size,fit.diameter].every(Number.isFinite)) throw Error("Cannot fit " + tag + " to " + row.path + ": no valid mesh faces.");
+    primitives.push({name:"col_" + row.name + "_" + shape.toLowerCase(),path:row.path,shape,fit});
+  }
+  return primitives;
+}
 
 export function objExportHierarchy(text: string, tags: MeshTags) {
   const objects: {name:string; triangles:number}[] = [], groups = new Map<string, number>();
@@ -50,13 +62,14 @@ export function exportRows(nodes: ModelNode[], tags?: MeshTags, rules?: unknown)
 
 /** Export all scene roots, including single-part models. INI section names must be unique. */
 export function planExport(model: string, roots: ModelNode[], enabled: ReadonlySet<ExportCategory>,
-    overrides: ReadonlyMap<string, ExportChoice>, original?: string, distances: readonly number[] = []) {
+    overrides: ReadonlyMap<string, ExportChoice>, original?: string, distances: readonly number[] = [], primitives:PrimitiveCollider[] = []) {
   const reserved = new Set(flatten(roots).map(n => n.name.toLowerCase()));
   const used = new Set(["visibleparent", "models", "colliders", "submodels"]), roles: Record<string, Role> = {};
   let count = 0;
   let levels = 0;
   const damage = new Set<string>();
   const modelFields = new Map<string,string>();
+  let primaryPath:string;
   function prepare(node: ModelNode): ModelNode {
     const choice = overrides.get(node.path) ?? categoryOf(node);
     const category = categoryFor(choice);
@@ -69,6 +82,7 @@ export function planExport(model: string, roots: ModelNode[], enabled: ReadonlyS
       if (modelFields.has(modelKey)) throw Error("Choose only one " + choice.toLowerCase() + ".");
       if (/[\r\n\[\];#=]|\/\//.test(reference)) throw Error("Invalid mesh name: " + reference);
       modelFields.set(modelKey,reference);
+      if (choice === "Primary mesh") primaryPath = node.path;
       if (choice !== "Hull collider") count++;
     } else if (selected && variant) {
       if (category === "LOD") {
@@ -97,10 +111,11 @@ export function planExport(model: string, roots: ModelNode[], enabled: ReadonlyS
   const scene: ModelNode = {name:"VisibleParent", mesh:"", path:"/!export-scene", id:"", position:[0,0,0], children:roots.map(prepare)};
   const lod = Array.from({length:levels}, (_, i) => distances[i] ?? (i + 1) * 0.5);
   if (lod.some((v,i) => !Number.isFinite(v) || v <= (lod[i-1] ?? 0))) throw Error("LOD distances must be positive and increase with each level.");
-  count += damage.size;
-  const variants = {lod, damage:[...damage], fields:modelFields};
+  const hitboxes = enabled.has("Collider") ? primitives : [];
+  count += damage.size + hitboxes.length;
+  const variants = {lod, damage:[...damage], fields:modelFields,primitives:hitboxes,primaryPath};
   const text = count ? snippet(model, scene, roles, variants) : "";
-  const after = original === undefined || !count ? original : generate(original, model, scene, roles, variants);
+  const after = original === undefined ? undefined : generate(original, model, scene, roles, variants);
   const primary = modelFields.get("ResourcesMesh"), wreck = modelFields.get("ResourcesDamagedMesh");
   const note = primary && wreck && wreck.toLowerCase() !== primary.toLowerCase() + "_d" ?
     "Sea Power looks for " + primary + "_d as the primary damage mesh." : "";

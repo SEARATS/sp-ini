@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { Box3, LoadingManager } from "three";
+import { Box3, LoadingManager, Mesh, Vector3 } from "three";
 import { ufbxRevision } from "./build-fbx";
 import { readFbx } from "../src/fbx-reader";
 import { previewFbx } from "../src/fbx-scene";
 import { fbxGeometry } from "../src/fbx-geometry";
 import { flatten, hierarchy, snippet } from "../src/hierarchy";
+import { readExportGeometry } from "../src/export-rig";
 
 async function main() {
   const dir = resolve("node_modules/.cache/fbx-tests", ufbxRevision);
@@ -50,10 +51,25 @@ async function main() {
     const bounds = new Box3().setFromObject(previewFbx(scene, "file:///", new LoadingManager()));
     assert.ok(!bounds.isEmpty() && bounds.min.toArray().every(Number.isFinite), file + " preview");
   }
-  const nested = hierarchy(await sample("max_geometry_transform_instances_6100_binary"))[0];
+  const instanceFile = await sample("max_geometry_transform_instances_6100_binary");
+  const nested = hierarchy(instanceFile)[0];
   assert.deepEqual(flatten([nested]).map(n=>n.name), ["Box001","Box002","Box003","Box004"]);
   assert.ok(Math.abs(nested.children[0].children[0].position[1]-20) < 1e-5);
   assert.match(snippet("instances.fbx",nested), /Parent=Box002\nPosition=0,20,/);
+  const scene = readFbx(instanceFile), preview = previewFbx(scene,"file:///",new LoadingManager());
+  preview.updateMatrixWorld(true);
+  const fitted = readExportGeometry("instances.fbx",instanceFile).bounds;
+  for (const node of flatten([nested]).filter(n=>n.mesh)) {
+    const mesh = preview.getObjectByName(node.name).children.find(c=>c instanceof Mesh) as Mesh;
+    const vertices = mesh.geometry.getAttribute("position"), indices = mesh.geometry.index;
+    const points = Array.from(indices.array,i=>new Vector3().fromBufferAttribute(vertices,i).applyMatrix4(mesh.matrixWorld));
+    const expected = new Box3().setFromPoints(points), fit = fitted.get(node.path);
+    const center = new Vector3().fromArray(fit.center).add(new Vector3().fromArray(fit.pivot));
+    center.x *= -1;
+    assert.ok(center.distanceTo(expected.getCenter(new Vector3())) < 1e-4,node.path+" center");
+    assert.ok(expected.getSize(new Vector3()).distanceTo(new Vector3().fromArray(fit.size)) < 1e-4,node.path+" box");
+    assert.ok(points.every(p=>p.distanceTo(center) <= fit.diameter/2 + 1e-4),node.path+" sphere");
+  }
   console.log(`Passed ${cases.length} FBX encoding and geometry checks plus nested hierarchy export.`);
 }
 main().catch(error=>{ console.error(error); process.exitCode=1; });

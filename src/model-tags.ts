@@ -1,7 +1,7 @@
 import { flatten, type ModelNode } from "./hierarchy";
 import { meshFlagMatcher } from "./mesh-flags";
 import { colliderType, tagOverride, type MeshTags } from "./mesh-names";
-import { specialRoles } from "./export-roles";
+import { primitiveTags, specialRoles } from "./export-roles";
 
 /** Infer model-wide roles without writing suggestions to the user's sidecar. */
 export function modelTags(roots: ModelNode[], filename: string, saved: MeshTags, rules: unknown): MeshTags {
@@ -41,7 +41,7 @@ export function modelTags(roots: ModelNode[], filename: string, saved: MeshTags,
     if (names.includes(stem)) return 5;
     if (p.n.triangles && (prefixes.get(names[1]) ?? 0) >= Math.max(2,parts.length / 3)) return 4;
     if (names.some(s => /(?:^|_)(?:hull|fuselage)$/.test(s))) return 3;
-    return !p.flags.length && p.n.triangles > 0 ? 1 : 0;
+    return p.flags.every(f => Object.hasOwn(primitiveTags,f)) && p.n.triangles > 0 ? 1 : 0;
   });
   if (primary) infer("Primary damage mesh", p => p !== primary && !p.collider &&
     p.names.some(s => primary.names.some(n => s.toLowerCase() === n.toLowerCase() + "_d")) ? 1 : 0);

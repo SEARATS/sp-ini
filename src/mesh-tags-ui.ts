@@ -3,7 +3,7 @@ import { dirname } from "node:path";
 import { colliderType, tagOverride } from "./mesh-names";
 import { meshFlagMatcher, meshFlagSetting } from "./mesh-flags";
 import { meshSidecar, moveMesh, readMeshTags, writeMeshTags } from "./mesh-sidecar";
-import { specialRoles } from "./export-roles";
+import { primitiveTags, specialRoles } from "./export-roles";
 
 export function watchMeshTags(uri: vscode.Uri, refresh: () => void) {
   const file = vscode.Uri.file(meshSidecar(uri.fsPath)).toString();
@@ -20,7 +20,7 @@ export async function editMeshTags(uri: vscode.Uri, names: string[], effective?:
   const match = meshFlagMatcher(vscode.workspace.getConfiguration(undefined, uri).get(meshFlagSetting), tags);
   const current = new Set(effective ?? match(...names).map(flag => flag.label));
   if (colliderType(tags, ...names) && tagOverride(tags,"Collider",names) !== false) current.add("Collider");
-  const labels = new Set([...match.labels, ...specialRoles, "Collider", ...current, ...names.flatMap(name => [...(tags.get(name)?.keys() ?? [])])]);
+  const labels = new Set([...match.labels, ...specialRoles, ...Object.keys(primitiveTags), "Collider", ...current, ...names.flatMap(name => [...(tags.get(name)?.keys() ?? [])])]);
   const adding = mode === "add";
   const choices = [...labels].filter(label => !adding || !current.has(label)).map(label => ({label, picked:current.has(label), custom:false}));
   choices.push({label:"$(add) Add custom tag…", picked:false, custom:true});

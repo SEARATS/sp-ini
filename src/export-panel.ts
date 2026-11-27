@@ -6,12 +6,12 @@ import { changes, sceneHierarchy } from "./hierarchy";
 import { readFbx } from "./fbx-reader";
 import { modelTags } from "./model-tags";
 import { specialRoles } from "./export-roles";
-import { exportCategories, exportRows, objExportHierarchy, planExport, type ExportCategory, type ExportChoice } from "./export-plan";
+import { exportCategories, exportRows, fitTaggedColliders, objExportHierarchy, planExport, type ExportCategory, type ExportChoice } from "./export-plan";
 import { readMeshOverrides } from "./mesh-sidecar";
 import { orderHierarchy } from "./mesh-order";
 import { editMeshTags, moveMeshInList, saveMeshTagChanges, watchMeshTags } from "./mesh-tags-ui";
 import { meshFlagSetting } from "./mesh-flags";
-import { exportRigAssets, type RigAssets } from "./export-rig";
+import { readExportGeometry } from "./export-rig";
 
 export async function openExportPanel(context: vscode.ExtensionContext, uri: vscode.Uri) {
   if (uri.scheme !== "file" || !/\.(fbx|obj|blend)$/i.test(uri.path)) throw Error("Choose an OBJ, FBX or Blender file.");
@@ -32,7 +32,11 @@ export async function openExportPanel(context: vscode.ExtensionContext, uri: vsc
   });
   if (!source) return;
   let roots = source.roots;
-  let rigAssets: RigAssets;
+  let geometry:ReturnType<typeof readExportGeometry>;
+  function getGeometry() {
+    if (!geometry) { geometry = readExportGeometry(name,source.bytes); source.bytes = undefined; }
+    return geometry;
+  }
   const rigPreference = "export.showRig";
   const readRows = () => {
     const rules = vscode.workspace.getConfiguration(undefined,uri).get(meshFlagSetting);
@@ -58,8 +62,9 @@ export async function openExportPanel(context: vscode.ExtensionContext, uri: vsc
     let preview = "", error = "";
     try {
       const choices = new Map(rows.map(row => [row.path, roles.get(row.path) ?? row.category]));
-      plan = planExport(name, roots, enabled, choices, before, distances);
-      if (plan.count) preview = target ? changes(basename(target.fileName), before, plan.after) : plan.text;
+      const primitives = enabled.has("Collider") ? fitTaggedColliders(rows,() => getGeometry().bounds) : [];
+      plan = planExport(name, roots, enabled, choices, before, distances, primitives);
+      if (plan.count || (target && plan.after !== before)) preview = target ? changes(basename(target.fileName), before, plan.after) : plan.text;
     } catch (e) { error = e.message; }
     void web.postMessage({type:"preview", generation, request, preview, error, target:target?.fileName, rigIni:target ? plan?.text ?? "" : undefined,
       count:plan?.count ?? 0, note:plan?.note, changed:!target || (plan && before !== plan.after)});
@@ -92,9 +97,7 @@ export async function openExportPanel(context: vscode.ExtensionContext, uri: vsc
         updateTags();
       } else if (message.type === "rigAssets") {
         try {
-          rigAssets ??= exportRigAssets(name, source.bytes);
-          source.bytes = undefined;
-          await web.postMessage({type:"rigAssets", assets:rigAssets});
+          await web.postMessage({type:"rigAssets", assets:getGeometry().assets});
         } catch (error) { await web.postMessage({type:"rigAssets", error:error.message}); }
       } else if (message.type === "showRig" && typeof message.visible === "boolean") {
         await context.workspaceState.update(rigPreference,message.visible);
@@ -119,7 +122,7 @@ export async function openExportPanel(context: vscode.ExtensionContext, uri: vsc
       } else if (message.type === "clearTarget") {
         target = undefined;
         refresh();
-      } else if (message.generation === generation && plan?.count) {
+      } else if (message.generation === generation && plan && (plan.count || (target && message.type === "apply" && plan.after !== target.getText()))) {
         if (message.type === "copy" && !target) {
           await vscode.env.clipboard.writeText(plan.text);
           void vscode.window.showInformationMessage("Copied generated INI.");

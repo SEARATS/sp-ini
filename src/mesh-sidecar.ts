@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { basename } from "node:path";
 import { isSeq, parseDocument } from "yaml";
 import type { MeshTags } from "./mesh-names";
-import { specialRoles } from "./export-roles";
+import { primitiveTags, specialRoles } from "./export-roles";
 
 export const meshSidecar = (model: string) => model.replace(/\.(?:obj|fbx|blend)$/i, ".meshes.yaml");
 
@@ -88,7 +88,7 @@ export function writeMeshTags(model: string, name: string, changes: Map<string, 
   const {doc} = decode(before ?? "", file);
   const groups = new Map<string,Map<string,boolean>>();
   for (const [label,value] of changes) {
-    const key = specialRoles.some(role => role === label) ? objectName : name;
+    const key = specialRoles.some(role => role === label) || Object.hasOwn(primitiveTags,label) ? objectName : name;
     if (!groups.has(key)) groups.set(key,new Map());
     groups.get(key).set(label,value);
   }

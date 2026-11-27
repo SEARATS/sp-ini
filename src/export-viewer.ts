@@ -184,6 +184,6 @@ window.addEventListener("message", ({data}) => {
     button(action).disabled = !data.count || !!data.error;
   }
   button("apply").hidden = button("clearTarget").hidden = !data.target;
-  button("apply").disabled = !data.count || !data.changed || !!data.error;
+  button("apply").disabled = !data.changed || !!data.error;
 });
 vscode.postMessage({type:"ready"});

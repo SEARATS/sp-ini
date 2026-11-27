@@ -5,6 +5,8 @@ import { createHash } from "node:crypto";
 import { createTwoFilesPatch } from "diff";
 import { parse } from "./ini";
 import { colliderType, isColliderName, type MeshTags } from "./mesh-names";
+import type { PrimitiveShape } from "./export-roles";
+import type { MeshBounds } from "./export-rig";
 
 export type Role = "Submodel" | "Collider" | "Skip";
 export interface ModelNode {
@@ -55,7 +57,8 @@ export function selectParent(roots: ModelNode[], parent: string) {
 export function defaultRole(n: ModelNode): Role { return (n.colliderOverride ?? (isColliderName(n.name) || isColliderName(n.mesh))) ? "Collider" : "Submodel"; }
 
 type ExportRole = Role | "Existing parent";
-interface ModelVariants { lod: number[]; damage: string[]; fields: Map<string,string> }
+export interface PrimitiveCollider { name:string; path:string; shape:PrimitiveShape; fit:MeshBounds }
+interface ModelVariants { lod: number[]; damage: string[]; fields: Map<string,string>; primitives?: PrimitiveCollider[]; primaryPath?:string }
 
 export function colliderSnippet(model: string, roots: ModelNode[], selected: ReadonlySet<string>) {
   const roles: Record<string, ExportRole> = {};
@@ -76,7 +79,7 @@ export function generate(original: string, model: string, root: ModelNode, roles
     else if (line === end) { if (!owned) throw Error("Unmatched generator marker"); owned = false; }
     else if (!owned) lines.push(line);
     else {
-      const key = /^\s*(SubModel|MeshCollider|DamageModel)\d+\s*=/i.exec(line);
+      const key = /^\s*(SubModel|MeshCollider|Collider|DamageModel)\d+\s*=/i.exec(line);
       if (key) previousLists.add(key[1].toLowerCase());
     }
   }
@@ -114,15 +117,17 @@ export function generate(original: string, model: string, root: ModelNode, roles
   const names = new Set(existing.sections.map(s=>s.name.toLowerCase()));
   const groups = {Submodel:[] as string[],Collider:[] as string[]};
   const sections: string[] = [];
-  function visit(n: ModelNode,parent: string, inherited: Matrix4) {
+  const pivots = new Map<string,number[]>();
+  if (variants?.primaryPath) pivots.set(variants.primaryPath,[0,0,0]);
+  function visit(n: ModelNode,parent: string, inherited: Matrix4, parentPosition:number[]) {
     if (roles[n.path] === "Existing parent") {
-      n.children.forEach(child => visit(child, n.name, new Matrix4()));
+      n.children.forEach(child => visit(child, n.name, new Matrix4(),parentPosition));
       return;
     }
     const local = inherited.clone().multiply(n.transform || new Matrix4().makeTranslation(n.position[0],n.position[1],n.position[2]));
     const role = roles[n.path] ?? defaultRole(n);
     if (role === "Skip") {
-      n.children.forEach(c=>visit(c,parent,local));
+      n.children.forEach(c=>visit(c,parent,local,parentPosition));
       return;
     }
     if (!(role in groups)) throw Error("Unknown role for " + n.path);
@@ -135,22 +140,49 @@ export function generate(original: string, model: string, root: ModelNode, roles
       "Parent="+(name.toLowerCase()===parent.toLowerCase() && parent===root.name ? "VisibleParent" : parent));
     const position = new Vector3().setFromMatrixPosition(local).toArray().map(v => Number(v.toFixed(7)));
     if (position.some(v => v !== 0)) sections.push("Position=" + position.join(","));
-    n.children.forEach(c=>visit(c,name,new Matrix4()));
+    const pivot = position.map((v,i) => v + parentPosition[i]);
+    pivots.set(n.path,pivot);
+    n.children.forEach(c=>visit(c,name,new Matrix4(),pivot));
   }
-  root.children.forEach(n=>visit(n,root.name,new Matrix4()));
-  for (const role of ["Submodel","Collider"] as const) {
-    const title = role === "Collider" ? "Colliders" : "Submodels";
-    const prefix = role === "Collider" ? "MeshCollider" : "SubModel";
-    if (!groups[role].length && !previousLists.has(prefix.toLowerCase())) continue;
-    const countKey = role === "Collider" ? "NumberOfMeshColliders" : "NumberOfSubmodels";
+  root.children.forEach(n=>visit(n,root.name,new Matrix4(),[0,0,0]));
+  const primitives: string[] = [];
+  for (const hitbox of variants?.primitives ?? []) {
+    if (/[\r\n\[\];#=]|\/\//.test(hitbox.name)) throw Error("Invalid INI collider name: " + hitbox.name);
+    let name = hitbox.name;
+    for (let i = 2; names.has(name.toLowerCase()); i++) name = hitbox.name + "_" + i;
+    names.add(name.toLowerCase());
+    primitives.push(name);
+    sections.push("","["+name+"]","Collider="+hitbox.shape);
+    // Primitives attach to the unit, even when their source is a nested or skipped mesh.
+    const fit = hitbox.fit, pivot = pivots.get(hitbox.path) ?? fit.pivot;
+    const center = fit.center.map((v,i) => v + pivot[i]);
+    const position = center.map(v => Number(v.toFixed(7)));
+    const offset = position.map((v,i) => Math.abs(v-center[i]));
+    const outward = (v:number) => Math.max(1,Math.ceil(v*1e7))/1e7;
+    const scale = hitbox.shape === "Box" ? fit.size.map((v,i) => outward(v+2*offset[i])) :
+      Array(3).fill(outward(fit.diameter+2*Math.hypot(...offset)));
+    if (position.some(n => n !== 0)) sections.push("Position="+position.join(","));
+    sections.push("Scale="+scale.join(","));
+  }
+  for (const [title,lists] of [
+    ["Submodels",[["SubModel","NumberOfSubmodels",groups.Submodel]]],
+    ["Colliders",[["MeshCollider","NumberOfMeshColliders",groups.Collider],["Collider","NumberOfColliders",primitives]]]
+  ] as const) {
+    if (!lists.some(([prefix,,entries]) => entries.length || previousLists.has(prefix.toLowerCase()))) continue;
     const current = parse(lines.join("\n"));
     const section = current.sections.find(s=>s.name.toLowerCase()===title.toLowerCase());
     const keys = section?.keys || [];
-    let index = Math.max(0,...keys.map(k=>Number(new RegExp("^"+prefix+"(\\d+)$","i").exec(k.name)?.[1]) || 0));
-    const added = groups[role].map(name=>prefix+(++index)+"="+name);
-    const count = keys.find(k=>k.name.toLowerCase() === countKey.toLowerCase());
-    if (count) lines[count.line] = lines[count.line].slice(0,count.valueStart)+index+lines[count.line].slice(count.valueStart+count.value.length);
-    if (role==="Collider" && !count && added.length) added.unshift(countKey+"="+index);
+    const added:string[] = [];
+    for (const [prefix,countKey,entries] of lists) {
+      if (!entries.length && !previousLists.has(prefix.toLowerCase())) continue;
+      const pattern = new RegExp("^"+prefix+"(\\d+)$","i");
+      let index = Math.max(0,...keys.map(k=>Number(pattern.exec(k.name)?.[1]) || 0));
+      const numbered = entries.map(name=>prefix+(++index)+"="+name);
+      const count = keys.find(k=>k.name.toLowerCase() === countKey.toLowerCase());
+      if (count) lines[count.line] = lines[count.line].slice(0,count.valueStart)+index+lines[count.line].slice(count.valueStart+count.value.length);
+      else if (title==="Colliders" && numbered.length) added.push(countKey+"="+index);
+      added.push(...numbered);
+    }
     if (!added.length) continue;
     if (section) lines.splice(section.line+1,0,begin,...added,end);
     else lines.push(begin,"["+title+"]",...added,end);
