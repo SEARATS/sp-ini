@@ -55,7 +55,7 @@ function registerObjFolding() {
 
 function options() {
   const config = vscode.workspace.getConfiguration("seapowerIni");
-  return { unitHints: config.get("unitHints.enabled"), search: config.get("search"), searchPaths: config.get("searchPaths"),
+  return { blenderPath:config.get("blenderPath"), unitHints: config.get("unitHints.enabled"), search: config.get("search"), searchPaths: config.get("searchPaths"),
     gameDirectory: config.get("gameDirectory"), localModDirectories: config.get("localModDirectories"),
     workshopDirectories: config.get("workshopDirectories") };
 }
@@ -115,7 +115,7 @@ async function activate(context) {
   const update = () => rebuild().catch(error => client.error("Rebuilding content index", error));
   const textures = ["[pP][nN][gG]","[jJ][pP][gG]","[jJ][pP][eE][gG]","[tT][gG][aA]","[dD][dD][sS]"];
   const watcher = vscode.workspace.createFileSystemWatcher("**/*.{[iI][nN][iI]," + textures.map(ext=>ext+".meta").join(",") + "}");
-  const assets = vscode.workspace.createFileSystemWatcher("**/*.{[oO][bB][jJ],[fF][bB][xX],[mM][aA][tT]," + textures.join(",") + "}", false, true, false);
+  const assets = vscode.workspace.createFileSystemWatcher("**/*.{[oO][bB][jJ],[fF][bB][xX],[bB][lL][eE][nN][dD],[mM][aA][tT]," + textures.join(",") + "}", false, true, false);
   let timer;
   const schedule = () => {
     clearTimeout(timer);
@@ -156,7 +156,7 @@ async function activate(context) {
     vscode.workspace.onDidChangeConfiguration(event => {
       if (event.affectsConfiguration("seapowerIni.unitHints.enabled"))
         void client.sendNotification("seapower/unitHints", options().unitHints);
-      if (["search", "searchPaths", "gameDirectory", "localModDirectories", "workshopDirectories"]
+      if (["blenderPath","search", "searchPaths", "gameDirectory", "localModDirectories", "workshopDirectories"]
         .some(key => event.affectsConfiguration("seapowerIni." + key))) update();
     }),
     vscode.workspace.onDidChangeWorkspaceFolders(update)

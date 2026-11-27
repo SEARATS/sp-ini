@@ -203,7 +203,7 @@ async function buildCatalog(roots: ContentRoot[]) {
     for (const entry of childrenHere.sort((a, b) => a.name.localeCompare(b.name))) {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory() && !entry.name.startsWith(".") && !excluded.has(entry.name)) await walk(full, base, source, omit);
-      else if (entry.isFile() && /\.(ini|png|jpe?g|tga|dds|obj|mtl|fbx|prefab|mat|wav|ogg|xml|json|txt)$/i.test(entry.name) && !seen.has(full)) {
+      else if (entry.isFile() && /\.(ini|png|jpe?g|tga|dds|obj|mtl|fbx|blend|prefab|mat|wav|ogg|xml|json|txt)$/i.test(entry.name) && !seen.has(full)) {
         seen.add(full);
         const file = { full, rel: path.relative(base, full).replaceAll("\\", "/"), uri: pathToFileURL(full).href, source };
         if (entry.name.toLowerCase().endsWith(".ini")) files.push(file);

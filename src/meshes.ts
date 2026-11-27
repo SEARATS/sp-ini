@@ -1,3 +1,4 @@
+import { readBlendPreview } from "./blend-export";
 import { fbxGeometry } from "./fbx-geometry";
 import * as fs from "node:fs/promises";
 import { reference, referenceContext, isMesh } from "./references";
@@ -42,17 +43,20 @@ class MeshFiles {
   constructor(private readonly openDocument: (uri: string) => Pick<import('vscode-languageserver-textdocument').TextDocument, 'getText' | 'version'> = () => undefined) {}
   cache = new Map();
 
-  async model(file) {
+  async model(file, blend?: {blender:string;signal:AbortSignal}) {
     const doc = this.openDocument(file.uri);
     const stamp = doc ? undefined : await fs.stat(file.full).catch(() => null);
     if (!stamp && !doc) return;
-    const version = doc ? "open:" + doc.version : stamp.mtimeMs + ":" + stamp.size;
+    const version = doc ? "open:" + doc.version : stamp.mtimeMs + ":" + stamp.size + ":" + (blend?.blender || "");
     const cached = this.cache.get(file.uri);
     if (cached?.version === version && cached.doc === doc) return cached.model;
     let model;
     try {
       const text = doc?.getText();
-      if (/\.fbx$/i.test(file.full)) {
+      if (/\.blend$/i.test(file.full)) {
+        if (!blend?.blender) return;
+        model = fbxGeometry(await readBlendPreview(file.full,blend.blender,blend.signal));
+      } else if (/\.fbx$/i.test(file.full)) {
         const bytes = text !== undefined && !text.startsWith("Kaydara FBX Binary") ? Buffer.from(text) : await fs.readFile(file.full);
         model = fbxGeometry(bytes);
       } else model = parseObj(text ?? await fs.readFile(file.full, "utf8"));

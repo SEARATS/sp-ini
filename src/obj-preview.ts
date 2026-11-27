@@ -112,7 +112,7 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
       <canvas aria-label="3D model"></canvas><aside><div id="arc-values" hidden></div><button hidden>Fit model</button> <span role="status">${loading}</span></aside>
       <div id="part-tip" role="tooltip" hidden></div>
       <details id="outline" open><summary>Model hierarchy</summary>
-      <div id="entity-pickers" hidden><label>Entity<select id="entity"></select></label><div hidden><label><span id="appearance-label">Appearance</span><select id="appearance"></select></label></div></div>
+      <div id="entity-pickers" hidden><label>Entity<select id="entity"></select></label><div hidden><label><span id="appearance-label">Appearance</span><select id="appearance"></select></label></div><div id="model-sources"></div></div>
       <div id="filters"><label><input id="meshes" type="checkbox" checked>Meshes</label>
       <select id="meshWireframe" aria-label="Mesh render mode"><option value="shaded">Shaded</option><option value="wireframe">Wireframe</option></select>
       <label><input id="colliders" type="checkbox" checked>Colliders</label>
@@ -180,6 +180,7 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
     resolveCustomTextEditor(document,panel) {
       panel.webview.options = {enableScripts:true,localResourceRoots:[dist]};
       let pending: vscode.CancellationTokenSource, timer, entity: string, appearance: string;
+      let modelSources:Record<string,string> = {};
       let serial=0, sources = new Map<string,IniSource>();
       const stagedSources=new Map<number,Map<string,IniSource>>();
       function cancel() { pending?.cancel(); pending?.dispose(); pending = undefined; clearTimeout(timer); }
@@ -206,14 +207,15 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
         cancel();
         const source = pending = new vscode.CancellationTokenSource();
         const token = source.token;
-        const request = {uri:document.uri.toString(),text:document.getText(),entity,appearance};
+        const request = {uri:document.uri.toString(),text:document.getText(),entity,appearance,modelSources};
         try {
           await panel.webview.postMessage({type:"entityLoading"});
           const choices = await entityRequest(request,token);
           if (token.isCancellationRequested) return;
           entity = choices.entity; appearance = choices.appearance;
+          modelSources = Object.fromEntries((choices.modelSources ?? []).filter(c=>c.selected).map(c=>[c.key,c.selected]));
           await panel.webview.postMessage({type:"entityChoices",...choices});
-          const scene: EntityScene = await entityRequest({...request,entity,appearance,render:true},token);
+          const scene: EntityScene = await entityRequest({...request,entity,appearance,modelSources,render:true},token);
           if (token.isCancellationRequested) return;
           const version=++serial;
           const next=new Map<string,IniSource>();
@@ -236,7 +238,7 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
           return;
         }
         if (message.type !== "ready" && message.type !== "selectEntity") return;
-        entity = message.entity; appearance = message.appearance;
+        entity = message.entity; appearance = message.appearance; modelSources = message.modelSources ?? {};
         void update();
       });
       const edits = vscode.workspace.onDidChangeTextDocument(event=>{

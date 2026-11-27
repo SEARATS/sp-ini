@@ -113,6 +113,10 @@ Hover over `Material=` in a unit INI, or right-click a material `.mat` or `.ini`
 
 The **Properties** list shows saved material values. Problems in typed INI properties and Unity numeric fields appear in the preview and in VS Code. **Analyze INI Files…** also checks saved Unity materials.
 
+## INI preview model sources
+
+In the entity preview hierarchy, **Model source** lists same-name files in the referenced model folder. **Auto** tries FBX, OBJ, then Blender. Choose a file to pin that model to it. A single available file appears as plain text. Blender files appear when Blender is installed.
+
 ## Blender scenes
 
 Open a local `.blend` file or right-click it and choose **Preview Blender Scene**. The preview shows the saved scene at its original scale. Use the hierarchy to toggle objects and switch between shaded and wireframe views. Saving in Blender refreshes the preview. Procedural shaders and animations are outside the scope of the static preview.

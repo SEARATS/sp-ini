@@ -6,7 +6,9 @@ import { MeshFiles, parseObj } from "./meshes";
 import { referenceContext } from "./references";
 import { StockAssets, resolvedDiffuse } from "./stock-assets";
 import { field, entityParts, entityObjects, type EntityScene } from "./entity-model";
-import { entityDocument, paintTexture, type Appearance } from "./entity-selection";
+import { entityResourceSources, modelResource } from "./entity-resources";
+import { type parse } from "./ini";
+import { paintTexture, type Appearance } from "./entity-selection";
 
 function triangles(model: ReturnType<typeof parseObj>, object: ReturnType<typeof parseObj>["objects"][number]) {
   const positions: number[] = [], uvs: number[] = [];
@@ -32,30 +34,48 @@ function previewTexture(image: PNG, opaque: boolean): EntityScene["textures"][nu
   return {png:PNG.sync.write(image).toString("base64"),alpha};
 }
 
-export async function entityAssets(text: string, uri: string, catalog: Catalog, meshes: MeshFiles, materials: Materials, stock: StockAssets, paint: Appearance, cancelled: () => boolean) {
-  const doc = await entityDocument(text,uri,catalog,materials);
+export async function entityAssets(doc: ReturnType<typeof parse>, uri: string, catalog: Catalog, meshes: MeshFiles, materials: Materials, stock: StockAssets, paint: Appearance, resources: Awaited<ReturnType<typeof entityResourceSources>>, signal:AbortSignal) {
   const ctx = referenceContext(doc,uri,catalog), warnings = new Set<string>();
   const definitions = entityParts(doc,warnings), models = definitions[0].mesh?.section || doc.sections.find(s=>/^models$/i.test(s.name));
   const scene: EntityScene = {parts:[],geometry:[],textures:[],warnings:[]};
   const geometry = new Map<string,number | undefined>(), textures = new Map<string,number | undefined>(), modelFiles = new Map();
+  if (resources.needsBlender) warnings.add("Install Blender or set Sea Power INI: Blender Path to preview .blend sources.");
+  const chosenModels = new Map<string,ReturnType<typeof parseObj>>();
+  for (const choice of resources.choices) {
+    const files = resources.groups.get(choice.key);
+    for (const file of choice.selected ? files.filter(f=>f.uri===choice.selected) : files) {
+      signal.throwIfAborted();
+      const model = await meshes.model(file,/\.blend$/i.test(file.full) ? {blender:resources.blender,signal} : undefined);
+      if (model?.objects.some(o=>o.faces.length)) { chosenModels.set(choice.key,model); break; }
+      warnings.add("Could not read geometry from "+file.rel);
+    }
+  }
   for (const {part,mesh,material} of definitions) {
-    if (cancelled()) throw Error("Preview cancelled.");
+    signal.throwIfAborted();
     scene.parts.push(part);
     if (part.primitive || !mesh || /^dummy$/i.test(mesh.value)) continue;
     const root = field(mesh.section,"rootmesh")?.value || field(models,"resourcesroot")?.value || "";
     const folder = field(mesh.section,"resourcesmeshfolder")?.value || ctx.resources || "";
     const scope = path.join(folder, root);
-    const key = JSON.stringify([scope,mesh.value]);
+    const resource = modelResource(mesh.section,models);
+    const key = JSON.stringify([resource?.key ?? scope,mesh.value]);
     if (!geometry.has(key)) {
-      const [ref] = await meshes.resolve(doc,uri,{...mesh,name:part.collider ? "Collider" : "Mesh"},catalog,ctx,modelFiles);
-      const data = await catalog.withPacked(ref?.file,async()=>triangles(ref.model,ref.object),async()=>{
-        if (/\.(?:obj|fbx)$/i.test(root)) return;
-        const packed = await stock.read("Mesh",mesh.value,scope);
-        if (packed) {
-          const model = parseObj(packed.obj), object = model.objects.find(o=>o.faces.length);
-          if (object) return triangles(model,object);
-        }
-      });
+      let data:ReturnType<typeof triangles>;
+      if (resource && resources.groups.has(resource.key)) {
+        const model = chosenModels.get(resource.key);
+        const object = model?.objects.find(o=>o.name===mesh.value);
+        if (object) data = triangles(model,object);
+      } else {
+        const [ref] = await meshes.resolve(doc,uri,{...mesh,name:part.collider ? "Collider" : "Mesh"},catalog,ctx,modelFiles);
+        data = await catalog.withPacked(ref?.file,async()=>triangles(ref.model,ref.object),async()=>{
+          if (/\.(?:obj|fbx)$/i.test(root)) return;
+          const packed = await stock.read("Mesh",mesh.value,scope);
+          if (packed) {
+            const model = parseObj(packed.obj), object = model.objects.find(o=>o.faces.length);
+            if (object) return triangles(model,object);
+          }
+        });
+      }
       if (!data) warnings.add("Missing mesh "+mesh.value);
       geometry.set(key,data ? scene.geometry.push(data)-1 : undefined);
     }

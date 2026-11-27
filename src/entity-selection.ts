@@ -6,7 +6,7 @@ import { field, expandEntityIni } from "./entity-model";
 
 export interface Choice { id: string; label: string }
 export interface Appearance { general?: IniSection; defaults?: IniSection; selected?: IniSection }
-export interface PreviewRequest {uri: string; text: string; entity?: string; appearance?: string; render?: boolean; card?: boolean; locale?: string}
+export interface PreviewRequest {uri: string; text: string; entity?: string; appearance?: string; render?: boolean; modelSources?: Record<string,string>; card?: boolean; locale?: string}
 
 export async function entityDocument(text: string, uri: string, catalog: Catalog, materials: Materials, ancestors = new Set<string>(), copySources?: string[]) {
   const doc = expandEntityIni(text, uri);

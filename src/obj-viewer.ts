@@ -1,3 +1,4 @@
+import type { ModelSourceChoice } from "./entity-resources";
 import { previewFbx } from "./fbx-scene";
 import { previewObj } from "./obj-geometry";
 import { objLayout, type OutlineNode, type PreviewPart } from "./model-outline";
@@ -11,7 +12,7 @@ import { Texture, Box3, Color, DirectionalLight, HemisphereLight, LoadingManager
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
-type SavedDisplay = Partial<DisplaySettings> & {hidden?: string[]; wireframe?: boolean; entity?: string; appearance?: string};
+type SavedDisplay = Partial<DisplaySettings> & {hidden?: string[]; wireframe?: boolean; entity?: string; appearance?: string; modelSources?:Record<string,string>};
 declare function acquireVsCodeApi(): { postMessage(message: unknown): void; getState(): SavedDisplay | undefined; setState(value: SavedDisplay): void };
 const vscode = acquireVsCodeApi();
 const status = document.querySelector("[role=status]");
@@ -100,6 +101,7 @@ function selectObject(id: string, reveal: boolean) {
 }
 const saved = vscode.getState();
 let selectedEntity = saved?.entity, selectedAppearance = saved?.appearance;
+let selectedSources:Record<string,string> = saved?.modelSources ?? {};
 let initializedEntity = saved?.entity;
 const picker = document.querySelector<HTMLElement>("#entity-pickers");
 const entitySelect = picker.querySelector<HTMLSelectElement>("#entity"), appearanceSelect = picker.querySelector<HTMLSelectElement>("#appearance");
@@ -118,10 +120,36 @@ function updateDisplay() {
 }
 function changed() {
   updateDisplay();
-  vscode.setState({...settings, hidden: [...hidden], entity:selectedEntity, appearance:selectedAppearance});
+  vscode.setState({...settings, hidden: [...hidden], entity:selectedEntity, appearance:selectedAppearance, modelSources:selectedSources});
 }
 entitySelect.onchange = () => vscode.postMessage({type:"selectEntity",entity:entitySelect.value});
-appearanceSelect.onchange = () => vscode.postMessage({type:"selectEntity",entity:entitySelect.value,appearance:appearanceSelect.value});
+appearanceSelect.onchange = () => vscode.postMessage({type:"selectEntity",entity:entitySelect.value,appearance:appearanceSelect.value,modelSources:selectedSources});
+function showModelSources(choices: ModelSourceChoice[]) {
+  selectedSources = Object.fromEntries(choices.filter(c=>c.selected).map(c=>[c.key,c.selected]));
+  document.getElementById("model-sources").replaceChildren(...choices.map(choice=>{
+    const label = document.createElement("label");
+    label.append(choices.length === 1 ? "Model source" : "Model source · " + choice.key);
+    label.title = choice.key;
+    if (choice.files.length === 1) {
+      const value = document.createElement("span");
+      value.textContent = choice.files[0].label;
+      label.append(value);
+    } else {
+      const select = document.createElement("select");
+      select.add(new Option("Auto (" + choice.files[0].label + " first)", ""));
+      for (const file of choice.files) select.add(new Option(file.label,file.id));
+      select.value = choice.selected;
+      select.onchange = () => {
+        if (select.value) selectedSources[choice.key] = select.value;
+        else delete selectedSources[choice.key];
+        changed();
+        vscode.postMessage({type:"selectEntity",entity:selectedEntity,appearance:selectedAppearance,modelSources:selectedSources});
+      };
+      label.append(select);
+    }
+    return label;
+  }));
+}
 for (const category of ["meshes","colliders","objects","arcs"] as const) {
   const input = document.querySelector<HTMLInputElement>("#"+category);
   input.checked = settings[category];
@@ -431,6 +459,7 @@ window.addEventListener("message", ({ data }) => {
         select.replaceChildren(...choices.map(c=>new Option(c.label,c.id)));
       if (select.value!==(value || "")) select.value=value || "";
     }
+    showModelSources(data.modelSources ?? []);
     picker.hidden = false;
     entitySelect.disabled = data.entities.length === 1;
     picker.querySelector("#appearance-label").textContent = data.appearances.some(c=>/^squadron/i.test(c.id)) ? "Squadron" : "Variant";
@@ -466,4 +495,4 @@ window.addEventListener("message", ({ data }) => {
   }
   if (controls) void load(data, layout);
 });
-vscode.postMessage({ type: "ready",entity:selectedEntity,appearance:selectedAppearance });
+vscode.postMessage({ type: "ready",entity:selectedEntity,appearance:selectedAppearance,modelSources:selectedSources });

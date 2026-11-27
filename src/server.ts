@@ -17,6 +17,7 @@ import { colliderSection, primitiveHover } from "./colliders";
 import { parse } from "./ini";
 import { unitHints } from "./unit-hints";
 import { moveMisplacedKey } from "./section-placement";
+import { entityResourceSources } from "./entity-resources";
 import { entityAssets } from "./entity-assets";
 import { entityDocument, selectEntity, type PreviewRequest } from "./entity-selection";
 import {unitCard} from "./unit-card";
@@ -111,9 +112,18 @@ connection.onRequest("seapower/entityPreview", async (request: PreviewRequest, t
   await building;
   if (request.card) return unitCard(request,catalog,materials,stock);
   const {sourceText,sourceUri,paint,...choices} = await selectEntity(request,catalog,materials);
-  if (!request.render) return choices;
-  if (!sourceText) throw Error("Missing model definition for "+choices.entities.find(e=>e.id === choices.entity)?.label);
-  return entityAssets(sourceText,sourceUri,catalog,meshes,materials,stock,paint,()=>token.isCancellationRequested);
+  if (!sourceText) {
+    if (!request.render) return {...choices,modelSources:[]};
+    throw Error("Missing model definition for "+choices.entities.find(e=>e.id === choices.entity)?.label);
+  }
+  const doc = await entityDocument(sourceText,sourceUri,catalog,materials);
+  const sources = await entityResourceSources(doc,sourceUri,catalog,request.modelSources,options.blenderPath);
+  if (!request.render) return {...choices,modelSources:sources.choices};
+  const abort = new AbortController();
+  const listener = token.onCancellationRequested(()=>abort.abort());
+  if (token.isCancellationRequested) abort.abort();
+  try { return await entityAssets(doc,sourceUri,catalog,meshes,materials,stock,paint,sources,abort.signal); }
+  finally { listener.dispose(); }
 });
 connection.onRequest("seapower/rebuild", params => {
   if (params) { options = params.options; folders = params.folders; }
