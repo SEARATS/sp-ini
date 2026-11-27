@@ -164,10 +164,9 @@ export async function openExportPanel(context: vscode.ExtensionContext, uri: vsc
   .tags{max-width:38%;min-width:0}.tag-list{min-width:0;flex-wrap:wrap}.tags[hidden],.tag-list:empty{display:none}
   .tag-chip{display:inline-flex;align-items:center;max-width:100%;padding-left:5px;border-radius:4px;background:var(--vscode-badge-background);color:var(--vscode-badge-foreground);font-size:.9em}
   .tag-chip span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .tags button{background:transparent;color:inherit;padding:1px 4px;font:inherit}.tag-chip button{opacity:0;flex:none}
-  .tag-chip:hover button,.tag-chip:focus-within button{opacity:1}.tags button:focus-visible{outline:1px solid var(--vscode-focusBorder)}
+  .tags button{background:transparent;color:inherit;padding:1px 4px;font:inherit}.tag-chip button{flex:none}
+  .tags button:focus-visible{outline:1px solid var(--vscode-focusBorder)}
   .tags .add-tag{font-size:1.15em}.add-tag:hover{background:var(--vscode-toolbar-hoverBackground)}
-  @media(hover:none){.tag-chip button{opacity:1}}
   .moves{display:inline-flex;gap:1px}.moves button{padding:1px 3px}
   @container(max-width:440px){.row{gap:4px}.row select{max-width:32%}.row>span{min-width:3em;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}}
   #lod-settings label{white-space:nowrap}#lod-settings input{width:5em}#lod-settings:empty{display:none}
