@@ -11,15 +11,19 @@ function entries(properties?: SavedProperties) {
 }
 
 // Unity writes each serialized object as a tagged YAML document. A .mat may also contain editor metadata.
+export function materialBody(text: string) {
+  const match = /^\uFEFF?Material:[^\S\n]*$/m.exec(text);
+  if (!match) return;
+  const offset = match.index + (match[0].startsWith("\uFEFF") ? 1 : 0);
+  return {offset,text:text.slice(offset).split(/^---/m,1)[0]};
+}
 export function unityMaterial(text: string) {
-  text = text.replace(/^\uFEFF/, "");
-  const start = text.search(/^Material:\s*$/m);
-  if (start < 0) return;
-  const body = text.slice(start).split(/^---/m,1)[0];
+  const body = materialBody(text);
+  if (!body) return;
   let material: UnityMaterial;
   try {
     // Keep all-digit GUIDs and leading zeroes intact.
-    material = parseYaml(body, {schema:"failsafe", maxAliasCount:0}).Material;
+    material = parseYaml(body.text, {schema:"failsafe", maxAliasCount:0}).Material;
   } catch { return; }
   const saved = material?.m_SavedProperties;
   if (!saved) return;
@@ -36,7 +40,7 @@ export function unityMaterial(text: string) {
   const doc = parse(["[Shader]", "Path="+shader, "[Properties]", ...[...properties].map(([k,v])=>k+"="+v)].join("\n"));
   const maps = entries(saved.m_TexEnvs).flatMap(([name,slot]) => {
     const ref = (slot as {m_Texture?: {guid?:string; fileID?:string}})?.m_Texture;
-    if (!ref?.guid || ref.fileID === "0") return [];
+    if (typeof ref?.guid !== "string" || !ref.guid || ref.fileID === "0") return [];
     return [{name,guid:ref.guid.toLowerCase()}];
   });
   return {doc,maps};

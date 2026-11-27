@@ -6,6 +6,7 @@ import * as jpeg from "jpeg-js";
 import { parse } from "./ini";
 import { normalize } from "./catalog";
 import { reference, referenceContext } from "./references";
+import { materialProperties, unityPropertyDiagnostics } from "./material-properties";
 import { unityMaterial } from "./unity-material";
 import { materialSwatch } from "./material-swatch";
 
@@ -113,33 +114,34 @@ class Materials {
     }));
   }
 
-  async materialData(file,catalog) {
+  async materialData(file,catalog,check = false) {
     if (!/\.mat$/i.test(file.rel)) {
       const doc = await this.readIni(file);
-      return {doc,maps:this.maps(file,catalog,doc)};
+      return {doc,maps:this.maps(file,catalog,doc),issues:check && doc ? materialProperties(doc) : []};
     }
-    const asset = unityMaterial(await fs.readFile(file.full,"utf8").catch(() => ""));
+    const text = await fs.readFile(file.full,"utf8").catch(() => "");
+    const asset = unityMaterial(text);
     const maps = (asset?.maps ?? []).map(({name,guid}) => {
       const texture = catalog.textureByGuid(guid,file.full);
       return {key:{name,value:texture?.rel ?? guid},file:texture};
     });
-    return {doc:asset?.doc,maps};
+    return {doc:asset?.doc,maps,issues:check ? unityPropertyDiagnostics(text) : []};
   }
 
-  async preview(file, catalog, images = true) {
-    const {doc,maps} = await this.materialData(file,catalog);
+  async preview(file, catalog, images = true, check = false) {
+    const {doc,maps,issues} = await this.materialData(file,catalog,check);
     const textures = new Map();
     if (images) for (const map of maps) textures.set(map.key.name.toLowerCase(), await this.texture(map.file));
     const preview = this.tiles(file.rel,doc,maps,textures,images);
     if (!doc && /\.mat$/i.test(file.rel)) preview.note = "Preview requires a text-serialized Unity material (.mat).";
-    return preview;
+    return {...preview,issues:issues.map(d=>"Line "+(d.range.start.line+1)+". "+d.message)};
   }
 
   tiles(name, doc, maps, textures, images = true) {
     const props = doc?.sections.find(s => /^properties$/i.test(s.name))?.keys || [];
     const swatch = images && materialSwatch(textures, new Map(props.map(k => [k.name.toLowerCase(), k.value])));
     const budget = Math.floor(84000 / (maps.length + 1));
-    return {name, lit:swatch ? imageUri(swatch,budget) : undefined, note:"",
+    return {name, properties:props.map(k=>({name:k.name,value:k.value})), lit:swatch ? imageUri(swatch,budget) : undefined, note:"",
       maps:maps.map(({key,file}) => {
         const raw = textures.get(key.name.toLowerCase());
         const image = /^_(maintex|basemap|basecolormap)$/i.test(key.name) ? diffusePreview(raw,doc) : raw;

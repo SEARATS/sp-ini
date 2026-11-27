@@ -111,6 +111,8 @@ Pass `-GameDirectory` for a different Steam library. The script opens an isolate
 
 Hover over `Material=` in a unit INI, or right-click a material `.mat` or `.ini` file and choose **Open With… → Sea Power Material Preview**. For text-serialized Unity materials, keep each texture's `.meta` beside the texture. The preview finds it by GUID across enabled search folders and can display PNG, JPEG and TGA maps.
 
+The **Properties** list shows saved material values. Problems in typed INI properties and Unity numeric fields appear in the preview and in VS Code. **Analyze INI Files…** also checks saved Unity materials.
+
 ## Blender scenes
 
 Open a local `.blend` file or right-click it and choose **Preview Blender Scene**. The preview shows the saved scene at its original scale. Use the hierarchy to toggle objects and switch between shaded and wireframe views. Saving in Blender refreshes the preview. Procedural shaders and animations are outside the scope of the static preview.

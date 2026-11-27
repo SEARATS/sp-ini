@@ -3,6 +3,7 @@ import { TextDocument } from "vscode-languageserver-textdocument";
 import * as path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import type { PublishDiagnosticsParams } from "vscode-languageserver";
+import { unityPropertyDiagnostics } from "./material-properties";
 import { analyze } from "./analysis";
 import { StockAssets, resolvedDiffuse, stockHover } from "./stock-assets";
 import { roots } from "./roots";
@@ -104,7 +105,7 @@ connection.onRequest("seapower/materialPreview", async ({uri}: {uri:string}) => 
   await building;
   const full = fileURLToPath(uri);
   const file = catalog.filesByUri.get(uriKey(uri)) ?? {uri,full,rel:path.basename(full)};
-  return materials.preview(file,catalog);
+  return materials.preview(file,catalog,true,true);
 });
 connection.onRequest("seapower/entityPreview", async (request: PreviewRequest, token) => {
   await building;
@@ -128,7 +129,7 @@ connection.onRequest("seapower/analyze", async ({vanilla}: {vanilla: boolean}, t
     next.set(uriKey(uri),{uri,diagnostics});
   }, cancelled);
   if (cancelled()) return;
-  const opened = new Set([...parsed.keys()].map(uriKey));
+  const opened = new Set(documents.all().map(doc=>uriKey(doc.uri)));
   for (const [key,{uri}] of scanned) if (!next.has(key) && !opened.has(key)) connection.sendDiagnostics({uri,diagnostics:[]});
   for (const [key,result] of next) if (!opened.has(key)) connection.sendDiagnostics(result);
   scanned = next;
@@ -136,6 +137,10 @@ connection.onRequest("seapower/analyze", async ({vanilla}: {vanilla: boolean}, t
 });
 documents.onDidSave(({document}) => scanned.delete(uriKey(document.uri)));
 documents.onDidChangeContent(({ document }) => {
+  if (/\.mat$/i.test(document.uri)) {
+    connection.sendDiagnostics({uri:document.uri,version:document.version,diagnostics:unityPropertyDiagnostics(document.getText())});
+    return;
+  }
   if (document.languageId === "wavefront-obj") {
     openModels.set(uriKey(document.uri), document);
     return;

@@ -2,6 +2,7 @@ import { CompletionItemKind, DiagnosticSeverity, Range, SymbolKind } from "vscod
 import { family, normalize, submodelNames } from "./catalog";
 import { misplacedKey, placementCode } from "./section-placement";
 import { directives, sectionGroup, unitSection } from "./ini";
+import { materialProperties } from "./material-properties";
 import { countDiagnostics } from "./count-diagnostics";
 import { choices, expected, ignoredStepComponents, validValue, valueRule } from "./values";
 import { tokens, referenceContext, domainFor, reference } from "./references";
@@ -152,6 +153,7 @@ function diagnostics(doc, catalog, uri = "") {
       if (!prior) seen.set(name, { first: key });
     }
   }
+  result.push(...materialProperties(doc));
   for (const key of doc.entries) {
     if (/[{}]/.test(key.value)) continue;
     const report = (code, severity, message, start = key.valueStart, end = start + key.value.length) =>

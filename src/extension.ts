@@ -80,7 +80,7 @@ async function activate(context) {
   client = new LanguageClient("seapower-ini", "Sea Power INI",
     { module: context.asAbsolutePath("dist/server.js"), transport: TransportKind.ipc },
     { documentSelector: [{ language: "seapower-ini", scheme: "file" }, { language: "seapower-ini", scheme: "untitled" },
-        { language: "wavefront-obj", scheme: "file" }],
+        { language: "wavefront-obj", scheme: "file" }, {scheme:"file",pattern:"**/*.[mM][aA][tT]"}],
       initializationOptions: options(), middleware: {
         async provideDocumentLinks(doc, token, next) {
           const links = await next(doc, token);

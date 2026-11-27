@@ -2,7 +2,7 @@
   "name": "seapower-ini",
   "displayName": "Sea Power INI",
   "description": "Autocomplete, error checking and Go to Definition for Sea Power INI files.",
-  "version": "0.9.15",
+  "version": "0.9.16",
   "icon": "dist/icon.png",
   "publisher": "searats",
   "private": true,
@@ -19,7 +19,8 @@
   "main": "./dist/extension.js",
   "activationEvents": [
     "onLanguage:wavefront-obj",
-    "workspaceContains:**/_info.ini"
+    "workspaceContains:**/_info.ini",
+    "workspaceContains:**/*.[mM][aA][tT]"
   ],
   "contributes": {
     "languages": [
