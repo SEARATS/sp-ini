@@ -23,6 +23,9 @@ importers:
       '@types/vscode':
         specifier: 1.82.0
         version: 1.82.0
+      '@vscode/codicons':
+        specifier: 0.0.36
+        version: 0.0.36
       '@vscode/vsce':
         specifier: 4.1.1
         version: 4.1.1
@@ -634,6 +637,9 @@ packages:
   '@typespec/ts-http-runtime@0.3.11':
     resolution: {integrity: sha512-KZlacW7zFdcIOAcpNiV5U9fy0Tfgw7xdEc4rVyuUtQS+UR1Sn32PXuAz+AJ70Y0yzTWh62/pEEpFmWUJl6YySw==}
     engines: {node: '>=22.0.0'}
+
+  '@vscode/codicons@0.0.36':
+    resolution: {integrity: sha512-wsNOvNMMJ2BY8rC2N2MNBG7yOowV3ov8KlvUE/AiVUlHKTfWsw3OgAOQduX7h0Un6GssKD3aoTVH+TF3DSQwKQ==}
 
   '@vscode/vsce-sign-alpine-arm64@2.0.8':
     resolution: {integrity: sha512-3HSEDf4R2zhI3/eckZPWBoeFUiLpnG9O0/NBW8xCM3j+Ri0uhmOPvCDuCYsUmIsFVUJETaMu+JMY2DF8v8hNPg==}
@@ -1537,6 +1543,8 @@ snapshots:
       tslib: 2.9.1
     transitivePeerDependencies:
       - supports-color
+
+  '@vscode/codicons@0.0.36': {}
 
   '@vscode/vsce-sign-alpine-arm64@2.0.8':
     optional: true

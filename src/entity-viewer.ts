@@ -54,7 +54,7 @@ export function assembledEntity(scene: EntityScene, manager: LoadingManager) {
     transform(node,part.position,part.rotation);
     node.scale.fromArray(part.scale);
     nodes.set(part.id,node);
-    rows.set(part.id,{name:part.name,entityId:part.id,children:[],parts:[],
+    rows.set(part.id,{name:part.name,meshName:part.meshName,entityId:part.id,children:[],parts:[],
       colliderStyle:part.collider ? colliderColor(part) : undefined});
   }
   for (const part of scene.parts) {

@@ -2,7 +2,7 @@
   "name": "seapower-ini",
   "displayName": "Sea Power INI",
   "description": "Autocomplete, error checking and Go to Definition for Sea Power INI files.",
-  "version": "0.9.17",
+  "version": "0.9.18",
   "icon": "dist/icon.png",
   "publisher": "searats",
   "private": true,
@@ -360,6 +360,37 @@
     "configuration": {
       "title": "Sea Power INI",
       "properties": {
+        "seapowerIni.meshFlags": {
+          "type": "array",
+          "scope": "resource",
+          "markdownDescription": "Flag meshes in model and entity hierarchies. Each row shows every matching flag in list order. Substrings and JavaScript regular expressions match either the object or mesh name, ignoring case. Edit the list in settings.json. Use an empty list to hide all flags. These labels do not change collider export or visibility.",
+          "items": {
+            "type": "object",
+            "required": ["label"],
+            "additionalProperties": false,
+            "properties": {
+              "label": { "type": "string", "minLength": 1, "description": "Flag name shown on hover." },
+              "icon": { "type": "string", "pattern": "^[a-z0-9-]+$", "default": "tag", "description": "VS Code Codicon name, such as flame, layers or package." },
+              "enabled": { "type": "boolean", "default": true, "description": "Display this flag when a name matches." },
+              "substrings": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "Literal text to find anywhere in a name." },
+              "patterns": { "type": "array", "items": { "type": "string", "minLength": 1, "format": "regex" }, "description": "Regular expressions without surrounding slashes." }
+            }
+          },
+          "default": [
+            { "label": "Collider", "icon": "package", "substrings": ["coll"], "patterns": ["(?:^|_)col(?=$|[_.0-9])"] },
+            { "label": "Damaged", "icon": "flame", "patterns": ["_d(?:_?[0-9]+)?(?=$|_lod_?[0-9]+(?:$|_))"] },
+            { "label": "LOD", "icon": "layers", "patterns": ["(?:^|_)lod_?[0-9]+(?:$|_)"] },
+            { "label": "Glass", "icon": "eye", "patterns": ["(?:^|_)glass(?:$|_)"] },
+            { "label": "Transparent", "icon": "color-mode", "patterns": ["(?:^|_)trans(?:$|_)"] },
+            { "label": "Rotor / propeller disc", "icon": "circle-outline", "patterns": ["(?:^|_)disc(?:$|_)"] },
+            { "label": "Parked", "icon": "debug-pause", "patterns": ["(?:^|_)parked(?:$|_)"] },
+            { "label": "Folded", "icon": "fold", "patterns": ["(?:^|_)folded(?:$|_)"] },
+            { "label": "Marking", "icon": "paintcan", "substrings": ["_decal", "_emblem", "_hullnumber", "_serial", "_modex"] },
+            { "label": "Animated flag", "icon": "symbol-event", "substrings": ["_animatedflag"] },
+            { "label": "Dummy", "icon": "symbol-field", "patterns": ["(?:^|_)dummy(?:$|_)"] },
+            { "label": "Shadow", "icon": "circle-filled", "patterns": ["(?:^|_)shadow(?:$|_)"] }
+          ]
+        },
         "seapowerIni.blenderPath": {
           "type": "string",
           "default": "",
@@ -549,6 +580,7 @@
     "@types/pngjs": "^6.0.5",
     "@types/three": "0.183.1",
     "@types/vscode": "1.82.0",
+    "@vscode/codicons": "0.0.36",
     "@vscode/vsce": "4.1.1",
     "diff": "8.0.2",
     "esbuild": "0.28.2",

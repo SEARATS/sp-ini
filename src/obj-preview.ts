@@ -7,6 +7,7 @@ import { fbxOutline } from "./model-outline";
 import type { IniSource } from "./ini";
 import type { EntityScene } from "./entity-model";
 import { previewColors } from "./preview-colors";
+import { meshFlagSetting } from "./mesh-flags";
 const viewType = "seapower-ini.obj";
 
 function openSourceBeside(document, column) {
@@ -72,14 +73,20 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
       visibility.dispose();
       edits.dispose();
     });
-    showViewer(panel);
+    showViewer(panel, document.uri);
     pair();
   }
-  function showViewer(panel, loading = "Opening model…") {
+  function showViewer(panel: vscode.WebviewPanel, uri: vscode.Uri, loading = "Opening model…") {
+    const sendFlags = () => panel.webview.postMessage({ type:"meshFlags", rules:vscode.workspace.getConfiguration(undefined, uri).get(meshFlagSetting) });
+    const ready = panel.webview.onDidReceiveMessage(message => { if (message.type === "ready") void sendFlags(); });
+    const changes = vscode.workspace.onDidChangeConfiguration(event => { if (event.affectsConfiguration(meshFlagSetting, uri)) void sendFlags(); });
+    panel.onDidDispose(() => { ready.dispose(); changes.dispose(); });
     const nonce = randomBytes(18).toString("base64");
     const script = panel.webview.asWebviewUri(vscode.Uri.joinPath(dist, "obj-viewer.js"));
+    const icons = panel.webview.asWebviewUri(vscode.Uri.joinPath(dist, "codicon.css"));
     panel.webview.html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
-      <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'; connect-src ${panel.webview.cspSource}; img-src ${panel.webview.cspSource} blob: data:">
+      <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'; font-src ${panel.webview.cspSource}; connect-src ${panel.webview.cspSource}; img-src ${panel.webview.cspSource} blob: data:">
+      <link nonce="${nonce}" rel="stylesheet" href="${icons}">
       <meta name="viewport" content="width=device-width, initial-scale=1">
       <style nonce="${nonce}">
       body { margin:0; overflow:hidden; background:var(--vscode-editor-background); color:var(--vscode-editor-foreground); }
@@ -167,7 +174,7 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
         watcher.onDidChange(refresh);
         watcher.onDidCreate(refresh);
         panel.onDidDispose(() => { revision++; conversion?.abort(); clearTimeout(timer); watcher.dispose(); messages.dispose(); });
-        showViewer(panel, blend ? "Opening scene in Blender…" : undefined);
+        showViewer(panel, document.uri, blend ? "Opening scene in Blender…" : undefined);
       }
     }, {webviewOptions:{retainContextWhenHidden:blend}});
   }
@@ -247,7 +254,7 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
       });
       const indexed = onIndexChanged(()=>void update());
       panel.onDidDispose(()=>{cancel();messages.dispose();edits.dispose();indexed.dispose();});
-      showViewer(panel);
+      showViewer(panel, document.uri);
     }
   });
   return vscode.Disposable.from(command, openSource, openBlend, modelProvider(false), modelProvider(true), openEntity, entity, vscode.window.registerCustomEditorProvider(viewType, { resolveCustomTextEditor }));

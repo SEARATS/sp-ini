@@ -31,7 +31,8 @@ test("INI and model context commands share the CLI preview and respect the clipb
         createTreeView:()=>({}),showOpenDialog:()=>[ini],
         showQuickPick:(items,options)=>options.canPickMany ? items.filter(i=>i.picked && picks[0]!=="cancel") : chooser(items,picks.shift()),showTextDocument:d=>{visible=d;},
         showInformationMessage:noop,showErrorMessage:message=>assert.fail(message)},
-      workspace:{registerTextDocumentContentProvider:(scheme,p)=>{provider=p;},onDidCloseTextDocument:noop,
+      workspace:{getConfiguration:()=>({get:()=>[]}),onDidChangeConfiguration:noop,
+        registerTextDocumentContentProvider:(scheme,p)=>{provider=p;},onDidCloseTextDocument:noop,
         openTextDocument:uri=>uri===ini ? doc : provider.provideTextDocumentContent(uri),
         applyEdit:e=>{applied=e.text;return true;}}
     };

@@ -129,6 +129,12 @@ Open an FBX in VS Code for the 3D preview. The extension includes its own reader
 
 Run `pnpm run test:fbx` to check geometry, mesh lookup and hierarchy export against public Max and Maya files and other exporter samples. The first source build uses Python and pip to install Zig 0.13.0 in the build cache and compile the pinned ufbx reader. Installed editor packages include the compiled reader.
 
+## Mesh flags
+
+Search Settings for `seapowerIni.meshFlags` and choose **Edit in settings.json**. Each flag has a label, a Codicon name and a list of literal `substrings` or regex `patterns`. The model and entity hierarchies show every match against the object or mesh name, ignoring case. Hover an icon to read its label.
+
+For example, add `{ "label": "Flight deck", "icon": "tag", "substrings": ["flight_deck"], "patterns": ["_helipad[0-9]*$"] }` to the list. Set `"enabled": false` on any flag to hide it.
+
 ## Release
 
 Bump `version` in `package.json` and push to `main`. CI builds and tests each push immediately. The `release-quiet-period` GitHub environment has a 60-minute wait timer. Every push to `main` restarts it. After an hour without another push and a successful build, CI publishes the latest unreleased version to GitHub Releases and, when `PUBLISH_MARKETPLACE=true`, the VS Code Marketplace.

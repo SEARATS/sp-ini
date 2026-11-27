@@ -2,6 +2,7 @@ import type { ModelSourceChoice } from "./entity-resources";
 import { previewFbx } from "./fbx-scene";
 import { previewObj } from "./obj-geometry";
 import { objLayout, type OutlineNode, type PreviewPart } from "./model-outline";
+import { meshFlagMatcher } from "./mesh-flags";
 import { applyDisplay, previewLayer, type DisplaySettings } from "./preview-display";
 import { assembledEntity, patchEntity } from "./entity-viewer";
 import type { EntityScene } from "./entity-model";
@@ -113,6 +114,8 @@ const settings: DisplaySettings = {
 const hidden = new Set<string>(saved?.hidden);
 const categories = new Map<string, boolean>();
 let updateRows: (() => void)[] = [];
+let matchFlags = meshFlagMatcher([]);
+let updateFlagRows: (() => void)[] = [];
 const inCategory = (part: PreviewPart) => part.widget ? settings.objects || (settings.arcs && arcGuides.has(part.id)) : part.collider ? settings.colliders : settings.meshes;
 function updateDisplay() {
   updateRows.forEach(update => update());
@@ -167,6 +170,7 @@ function showOutline(nodes: OutlineNode[], note: string, uri?: string, preserve=
   const entityTrees = nodes.some(node=>node.tree);
   outline.querySelector("p").textContent = note;
   updateRows = [];
+  updateFlagRows = [];
   categories.clear();
   objectLabels.clear();
   function row(node: OutlineNode, path: string, depth: number): {item: HTMLLIElement; subtree: PreviewPart[]} {
@@ -208,6 +212,27 @@ function showOutline(nodes: OutlineNode[], note: string, uri?: string, preserve=
     if (node.colliderStyle) content.classList.add(node.colliderStyle);
     else if (node.parts.length && node.parts.every(part => part.collider)) content.classList.add("collider");
     content.append(node.name || "(unnamed)");
+    if (node.meshName || (!entityTrees && node.parts.length)) {
+      const badges = document.createElement("span");
+      badges.className = "mesh-flags";
+      content.append(badges);
+      const title = label.title;
+      const update = () => {
+        const flags = matchFlags(node.name, node.meshName);
+        badges.hidden = !flags.length;
+        badges.replaceChildren(...flags.map(flag => {
+          const icon = document.createElement("span");
+          icon.className = "codicon codicon-" + flag.icon;
+          icon.title = flag.label;
+          icon.setAttribute("role", "img");
+          icon.setAttribute("aria-label", flag.label);
+          return icon;
+        }));
+        label.title = [title, flags.map(flag => flag.label).join(", ")].filter(Boolean).join("\n");
+      };
+      updateFlagRows.push(update);
+      update();
+    }
     updateRows.push(() => {
       const active = targets.filter(inCategory);
       const visible = active.filter(part => !hidden.has(part.id)).length;
@@ -444,6 +469,11 @@ try {
 
 let fbxUri: string;
 window.addEventListener("message", ({ data }) => {
+  if (data.type === "meshFlags") {
+    matchFlags = meshFlagMatcher(data.rules);
+    updateFlagRows.forEach(update => update());
+    return;
+  }
   if (data.type === "entityLoading" || data.type === "entityError") {
     revision++;
     if (data.message || !model) status.textContent = data.message || "Assembling entity…";

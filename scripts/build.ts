@@ -18,12 +18,16 @@ async function compile() {
     build({ entryPoints: ["src/obj-viewer.ts","src/unit-card-viewer.ts"], outdir: "dist", bundle: true, minify: true, target: "chrome114" })
   ]);
   const licenses = [];
-  for (const name of ["diff","three","yaml"]) {
+  for (const name of ["diff","three","yaml","@vscode/codicons"]) {
     const root = path.join("node_modules", name);
     const file = (await fs.readdir(root)).find(f => /^licen[sc]e(?:$|[.-])/i.test(f));
     if (file) licenses.push(name+"\n"+await fs.readFile(path.join(root,file),"utf8"));
   }
   await fs.writeFile("dist/third-party-licenses.txt",licenses.join("\n\n"));
+  for (const file of ["codicon.css","codicon.ttf"]) {
+    await fs.copyFile("node_modules/@vscode/codicons/dist/" + file, "dist/" + file);
+  }
+  await fs.copyFile("node_modules/@vscode/codicons/LICENSE-CODE", "dist/codicon-code-LICENSE.txt");
   await fs.copyFile("node_modules/three/LICENSE", "dist/three-LICENSE.txt");
   await fs.copyFile("node_modules/pngjs/LICENSE", "dist/pngjs-LICENSE.txt");
   await fs.copyFile("node_modules/jpeg-js/LICENSE", "dist/jpeg-js-LICENSE.txt");

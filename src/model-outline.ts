@@ -5,6 +5,7 @@ import type { PreviewColor } from "./preview-colors";
 export interface PreviewPart { id: string; collider: boolean; widget?: boolean }
 export interface OutlineNode {
   name: string;
+  meshName?: string;
   children: OutlineNode[];
   parts: PreviewPart[];
   modelId?: string;
@@ -15,7 +16,7 @@ export interface OutlineNode {
 
 export function fbxOutline(nodes: ModelNode[]): OutlineNode[] {
   return nodes.map(node => ({
-    name: node.name, modelId: node.id, children: fbxOutline(node.children),
+    name: node.name, meshName: node.mesh, modelId: node.id, children: fbxOutline(node.children),
     parts: node.mesh ? [{id: node.id, collider: isColliderName(node.name) || isColliderName(node.mesh)}] : []
   }));
 }

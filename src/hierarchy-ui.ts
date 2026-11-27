@@ -4,13 +4,17 @@ import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { ModelNode, Role, changes, colliderSnippet, defaultRole, flatten, generate, hierarchy, snippet } from "./hierarchy";
 import { parse } from "./ini";
+import { meshFlagMatcher, meshFlagSetting } from "./mesh-flags";
 
 export function registerHierarchy(context: vscode.ExtensionContext) {
   const changed = new vscode.EventEmitter<void>();
   let file: vscode.Uri, loading: Promise<ModelNode[]> = Promise.resolve([]);
+  const readFlags = () => meshFlagMatcher(vscode.workspace.getConfiguration(undefined, file).get(meshFlagSetting));
+  let matchFlags = readFlags();
   const select = (uri: vscode.Uri) => {
     if (!uri || !/\.fbx$/i.test(uri.path) || file?.toString()===uri.toString()) return;
     file = uri;
+    matchFlags = readFlags();
     loading = readFile(uri.fsPath).then(hierarchy);
     loading.catch(() => {});
     changed.fire();
@@ -25,9 +29,13 @@ export function registerHierarchy(context: vscode.ExtensionContext) {
     getTreeItem: (node: ModelNode) => {
       const item = new vscode.TreeItem(node.name, node.children.length ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None);
       item.id = node.path;
-      if (node.mesh && defaultRole(node) === "Collider") item.iconPath = new vscode.ThemeIcon("package");
+      const flags = node.mesh ? matchFlags(node.name, node.mesh) : [];
+      if (flags.length) {
+        item.iconPath = new vscode.ThemeIcon(flags[0].icon);
+        item.description = flags.map(flag => flag.label).join(", ");
+      }
       item.contextValue = node.children.length ? "spIniParent" : "spIniLeaf";
-      item.tooltip = node.path;
+      item.tooltip = [node.path, item.description].filter(Boolean).join("\n");
       return item;
     }
   }});
@@ -149,6 +157,9 @@ export function registerHierarchy(context: vscode.ExtensionContext) {
       return run(from,undefined,uri,"spIniModelId" in target ? target.spIniModelId : undefined).catch(e=>vscode.window.showErrorMessage(String(e)));
   });
   context.subscriptions.push(copy("copyHierarchy","copy"),copy("copyColliders","colliders"),changed,tree,preview,command("generate","palette"),command("generateFromModel","model"),
+    vscode.workspace.onDidChangeConfiguration(event => {
+      if (event.affectsConfiguration(meshFlagSetting, file)) { matchFlags = readFlags(); changed.fire(); }
+    }),
     command("generateFromIni","ini"),vscode.window.tabGroups.onDidChangeTabs(active),
     vscode.workspace.onDidCloseTextDocument(d=>previews.delete(d.uri.toString())));
   active();
