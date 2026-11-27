@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { constants } from "node:fs";
-import { access, lstat, mkdtemp, readdir, rename, rm, rmdir } from "node:fs/promises";
+import { access, lstat, mkdtemp, readFile, readdir, rename, rm, rmdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { basename, delimiter, dirname, extname, isAbsolute, join } from "node:path";
 
 export const blendScales = {fbx: 1.45329, obj: 0.68810} as const;
@@ -32,13 +33,17 @@ export function outputStat(file: string) {
 
 export function materialPath(obj: string) { return obj.slice(0, -extname(obj).length) + ".mtl"; }
 
-function runBlender(blender: string, source: string, target: string, format: ExportFormat) {
+function runBlender(blender: string, source: string, target: string, format: ExportFormat | "preview", signal?: AbortSignal) {
+  signal?.throwIfAborted();
+  const operator = format === "obj" ? "wm.obj_export" : "export_scene.fbx";
+  const options = format === "preview" ? "global_scale=1.0, bake_anim=False, path_mode='COPY', embed_textures=True"
+    : `global_scale=${blendScales[format]}, path_mode='RELATIVE'`;
   // Blender's exit code alone does not distinguish a cancelled operator or a failed file load.
   const script = [
     "import bpy, os, sys",
     "source, target = sys.argv[sys.argv.index('--') + 1:]",
     "if not bpy.data.filepath or not os.path.samefile(bpy.data.filepath, source): raise RuntimeError('Could not open the selected .blend file')",
-    `result = bpy.ops.${format === "fbx" ? "export_scene.fbx" : "wm.obj_export"}(filepath=target, global_scale=${blendScales[format]}, check_existing=False, path_mode='RELATIVE')`,
+    `result = bpy.ops.${operator}(filepath=target, check_existing=False, ${options})`,
     "if 'FINISHED' not in result: raise RuntimeError('Blender cancelled the export')"
   ].join("\n");
   return new Promise<void>((resolve, reject) => {
@@ -48,9 +53,29 @@ function runBlender(blender: string, source: string, target: string, format: Exp
     const capture = (chunk: Buffer) => { log = (log + chunk.toString()).slice(-4096); };
     child.stdout.on("data", capture);
     child.stderr.on("data", capture);
-    child.on("error", reject);
-    child.on("close", code => code === 0 ? resolve() : reject(Error(log.trim() || "Blender exited before exporting the model.")));
+    const cancel = () => child.kill();
+    signal?.addEventListener("abort", cancel, {once:true});
+    child.once("error", reject);
+    child.once("close", code => {
+      signal?.removeEventListener("abort", cancel);
+      if (signal?.aborted) reject(signal.reason);
+      else if (code === 0) resolve();
+      else reject(Error(log.trim() || "Blender exited before exporting the model."));
+    });
   });
+}
+
+export async function readBlendPreview(source: string, configured: string | undefined, signal: AbortSignal) {
+  const blender = await findBlender(configured);
+  signal.throwIfAborted();
+  const folder = await mkdtemp(join(tmpdir(), "sp-ini-blend-preview-"));
+  try {
+    const target = join(folder, "scene.fbx");
+    await runBlender(blender, source, target, "preview", signal);
+    return await readFile(target, {signal});
+  } finally {
+    await rm(folder, {recursive:true, force:true, maxRetries:3});
+  }
 }
 
 const active = new Set<string>();

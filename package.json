@@ -2,7 +2,7 @@
   "name": "seapower-ini",
   "displayName": "Sea Power INI",
   "description": "Autocomplete, error checking and Go to Definition for Sea Power INI files.",
-  "version": "0.9.12",
+  "version": "0.9.13",
   "icon": "dist/icon.png",
   "publisher": "searats",
   "private": true,
@@ -79,6 +79,16 @@
         "priority": "default"
       },
       {
+        "viewType": "seapower-ini.blend",
+        "displayName": "Blender Scene Preview",
+        "selector": [
+          {
+            "filenamePattern": "*.[bB][lL][eE][nN][dD]"
+          }
+        ],
+        "priority": "default"
+      },
+      {
         "viewType": "seapower-ini.entity",
         "displayName": "Sea Power Entity Preview",
         "selector": [
@@ -100,6 +110,11 @@
       }
     ],
     "commands": [
+      {
+        "command": "seapower-ini.previewBlend",
+        "title": "Preview Blender Scene",
+        "category": "Sea Power INI"
+      },
       {
         "command": "seapower-ini.exportBlendFBX",
         "title": "Export Blender Scene as FBX…",
@@ -216,6 +231,11 @@
       ],
       "explorer/context": [
         {
+          "command": "seapower-ini.previewBlend",
+          "when": "!explorerResourceIsFolder && resourceScheme == file && resourceExtname =~ /[.]blend$/i",
+          "group": "seapower@0"
+        },
+        {
           "command": "seapower-ini.exportBlendFBX",
           "when": "!explorerResourceIsFolder && resourceScheme == file && resourceExtname =~ /[.]blend$/i",
           "group": "seapower@1"
@@ -247,6 +267,10 @@
         }
       ],
       "commandPalette": [
+        {
+          "command": "seapower-ini.previewBlend",
+          "when": "false"
+        },
         {
           "command": "seapower-ini.exportBlendFBX",
           "when": "false"

@@ -448,15 +448,16 @@ window.addEventListener("message", ({ data }) => {
     return;
   }
   if (data.type === "outline") {
-    showOutline(data.nodes || [], data.error || (data.nodes?.length ? "" : "No model nodes in this FBX."), fbxUri);
+    showOutline(data.nodes || [], data.error || (data.nodes?.length ? "" : "No model nodes in this scene."), fbxUri);
     return;
   }
   if (data.type !== "model" && data.type !== "fbx") return;
   fbxUri = data.type === "fbx" ? data.uri : undefined;
   let layout: ReturnType<typeof objLayout>;
-  if (fbxUri) {
-    document.body.dataset.vscodeContext = JSON.stringify({spIniFbxUri: fbxUri});
-    showOutline([], data.error || "Reading FBX hierarchy…");
+  if (data.type === "fbx") {
+    if (fbxUri) document.body.dataset.vscodeContext = JSON.stringify({spIniFbxUri: fbxUri});
+    else delete document.body.dataset.vscodeContext;
+    showOutline([], data.error || "Reading model hierarchy…");
   } else {
     delete document.body.dataset.vscodeContext;
     outline.querySelector("summary").textContent = "Objects and groups";

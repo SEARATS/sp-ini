@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import * as vscode from "vscode";
+import { readBlendPreview } from "./blend-export";
 import { needsFbxReader, readFbx } from "./fbx-reader";
 import { sceneHierarchy, hierarchy } from "./hierarchy";
 import { fbxOutline } from "./model-outline";
@@ -74,7 +75,7 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
     showViewer(panel);
     pair();
   }
-  function showViewer(panel) {
+  function showViewer(panel, loading = "Opening model…") {
     const nonce = randomBytes(18).toString("base64");
     const script = panel.webview.asWebviewUri(vscode.Uri.joinPath(dist, "obj-viewer.js"));
     panel.webview.html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
@@ -108,7 +109,7 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
       select { color:var(--vscode-dropdown-foreground); background:var(--vscode-dropdown-background); }
       button { color:var(--vscode-button-foreground); background:var(--vscode-button-background); border:0; padding:5px 10px; cursor:pointer; }
       </style></head><body>
-      <canvas aria-label="3D model"></canvas><aside><div id="arc-values" hidden></div><button hidden>Fit model</button> <span role="status">Opening model…</span></aside>
+      <canvas aria-label="3D model"></canvas><aside><div id="arc-values" hidden></div><button hidden>Fit model</button> <span role="status">${loading}</span></aside>
       <div id="part-tip" role="tooltip" hidden></div>
       <details id="outline" open><summary>Model hierarchy</summary>
       <div id="entity-pickers" hidden><label>Entity<select id="entity"></select></label><div hidden><label><span id="appearance-label">Appearance</span><select id="appearance"></select></label></div></div>
@@ -121,37 +122,55 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
       <p></p><details id="entity-warnings" hidden><summary></summary><div></div></details><ul></ul></details>
       <script nonce="${nonce}" src="${script}"></script></body></html>`;
   }
-  const fbx = vscode.window.registerCustomEditorProvider("seapower-ini.fbx", {
-    openCustomDocument(uri) { return { uri, dispose() {} }; },
-    resolveCustomEditor(document, panel) {
-      const folder = vscode.Uri.joinPath(document.uri, "..");
-      const workspace = vscode.workspace.getWorkspaceFolder(document.uri);
-      panel.webview.options = { enableScripts: true, localResourceRoots: [dist, workspace?.uri ?? folder] };
-      let revision = 0;
-      const send = async (fallback = false) => {
-        const current = ++revision;
-        const message = { type: "fbx", uri: document.uri.toString(), url: panel.webview.asWebviewUri(document.uri).toString() };
-        try {
-          const bytes = await vscode.workspace.fs.readFile(document.uri);
-          if (revision !== current) return;
-          const file = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-          const scene = fallback || needsFbxReader(file) ? readFbx(file) : undefined;
-          await panel.webview.postMessage({ ...message, revision: current, scene });
-          if (revision === current) await panel.webview.postMessage({ type: "outline", nodes: fbxOutline(scene ? sceneHierarchy(scene) : hierarchy(file)) });
-        } catch (error) {
-          if (revision === current) await panel.webview.postMessage({ ...message, error: String(error), revision: current });
-        }
-      };
-      const messages = panel.webview.onDidReceiveMessage(message => {
-        if (message.type === "ready") void send();
-        if (message.type === "fbxFallback" && message.revision === revision) void send(true);
-      });
-      const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(folder, "*"));
-      const changes = watcher.onDidChange(uri => { if (uri.toString() === document.uri.toString()) send(); });
-      panel.onDidDispose(() => { revision++; changes.dispose(); watcher.dispose(); messages.dispose(); });
-      showViewer(panel);
-    }
+  const blendType = "seapower-ini.blend";
+  const openBlend = vscode.commands.registerCommand("seapower-ini.previewBlend", (uri?: vscode.Uri) => {
+    if (uri?.scheme === "file" && /\.blend$/i.test(uri.path)) return vscode.commands.executeCommand("vscode.openWith", uri, blendType);
   });
+  function modelProvider(blend: boolean) {
+    return vscode.window.registerCustomEditorProvider(blend ? blendType : "seapower-ini.fbx", {
+      openCustomDocument(uri) { return { uri, dispose() {} }; },
+      resolveCustomEditor(document, panel) {
+        const folder = vscode.Uri.joinPath(document.uri, "..");
+        const workspace = vscode.workspace.getWorkspaceFolder(document.uri);
+        panel.webview.options = { enableScripts: true, localResourceRoots: [dist, workspace?.uri ?? folder] };
+        let revision = 0;
+        let conversion: AbortController | undefined, timer: ReturnType<typeof setTimeout>;
+        const send = async (fallback = false) => {
+          const current = ++revision;
+          conversion?.abort();
+          const message = { type: "fbx", uri: blend ? undefined : document.uri.toString(), url: panel.webview.asWebviewUri(document.uri).toString() };
+          try {
+            if (blend && document.uri.scheme !== "file") throw Error("Open a local .blend file to preview it with Blender.");
+            if (blend) conversion = new AbortController();
+            const bytes = blend
+              ? await readBlendPreview(document.uri.fsPath, vscode.workspace.getConfiguration("seapowerIni").get<string>("blenderPath"), conversion.signal)
+              : await vscode.workspace.fs.readFile(document.uri);
+            if (revision !== current) return;
+            const file = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+            const scene = blend || fallback || needsFbxReader(file) ? readFbx(file) : undefined;
+            await panel.webview.postMessage({ ...message, revision: current, scene });
+            if (revision === current) await panel.webview.postMessage({ type: "outline", nodes: fbxOutline(scene ? sceneHierarchy(scene) : hierarchy(file)) });
+          } catch (error) {
+            if (revision === current) await panel.webview.postMessage({ ...message, error: String(error), revision: current });
+          }
+        };
+        const messages = panel.webview.onDidReceiveMessage(message => {
+          if (message.type === "ready") void send();
+          if (!blend && message.type === "fbxFallback" && message.revision === revision) void send(true);
+        });
+        const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(folder, "*"));
+        const refresh = (uri: vscode.Uri) => {
+          if (uri.toString() !== document.uri.toString()) return;
+          clearTimeout(timer);
+          timer = setTimeout(() => void send(), 250);
+        };
+        watcher.onDidChange(refresh);
+        watcher.onDidCreate(refresh);
+        panel.onDidDispose(() => { revision++; conversion?.abort(); clearTimeout(timer); watcher.dispose(); messages.dispose(); });
+        showViewer(panel, blend ? "Opening scene in Blender…" : undefined);
+      }
+    }, {webviewOptions:{retainContextWhenHidden:blend}});
+  }
   const entityType = "seapower-ini.entity";
   const openEntity = vscode.commands.registerCommand("seapower-ini.previewEntity", resource => {
     const uri = resource || vscode.window.activeTextEditor?.document.uri;
@@ -229,7 +248,7 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
       showViewer(panel);
     }
   });
-  return vscode.Disposable.from(command, openSource, fbx, openEntity, entity, vscode.window.registerCustomEditorProvider(viewType, { resolveCustomTextEditor }));
+  return vscode.Disposable.from(command, openSource, openBlend, modelProvider(false), modelProvider(true), openEntity, entity, vscode.window.registerCustomEditorProvider(viewType, { resolveCustomTextEditor }));
 }
 
 export { registerObjPreview };
