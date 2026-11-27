@@ -1,3 +1,4 @@
+import { previewFbx } from "./fbx-scene";
 import { previewObj } from "./obj-geometry";
 import { objLayout, type OutlineNode, type PreviewPart } from "./model-outline";
 import { applyDisplay, previewLayer, type DisplaySettings } from "./preview-display";
@@ -345,11 +346,23 @@ async function load(data, layout?: ReturnType<typeof objLayout>) {
     if (data.type === "fbx") {
       const manager = new LoadingManager();
       manager.onLoad = () => { if (current === revision) draw(); };
-      const response = await fetch(data.url, { cache: "no-store" });
-      if (!response.ok) throw Error("Could not read FBX (" + response.status + ").");
-      const buffer = await response.arrayBuffer();
-      if (current !== revision) return;
-      next = new FBXLoader(manager).parse(buffer, new URL(".", data.url).href);
+      if (data.error) throw Error(data.error);
+      const base = new URL(".", data.url).href;
+      if (data.scene) next = previewFbx(data.scene, base, manager);
+      else {
+        const response = await fetch(data.url, { cache: "no-store" });
+        if (!response.ok) throw Error("Could not read FBX (" + response.status + ").");
+        const buffer = await response.arrayBuffer();
+        if (current !== revision) return;
+        try {
+          next = new FBXLoader(manager).parse(buffer, base);
+          if (new Box3().setFromObject(next).isEmpty()) throw Error("Empty FBX preview");
+        } catch {
+          if (next) dispose(next);
+          vscode.postMessage({type:"fbxFallback", revision:data.revision});
+          return;
+        }
+      }
     } else {
       next = previewObj(data.text, layout);
     }
@@ -443,7 +456,7 @@ window.addEventListener("message", ({ data }) => {
   let layout: ReturnType<typeof objLayout>;
   if (fbxUri) {
     document.body.dataset.vscodeContext = JSON.stringify({spIniFbxUri: fbxUri});
-    showOutline([], "Reading FBX hierarchy…");
+    showOutline([], data.error || "Reading FBX hierarchy…");
   } else {
     delete document.body.dataset.vscodeContext;
     outline.querySelector("summary").textContent = "Objects and groups";

@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import * as vscode from "vscode";
-import { hierarchy } from "./hierarchy";
+import { needsFbxReader, readFbx } from "./fbx-reader";
+import { sceneHierarchy, hierarchy } from "./hierarchy";
 import { fbxOutline } from "./model-outline";
 import type { IniSource } from "./ini";
 import type { EntityScene } from "./entity-model";
@@ -124,21 +125,27 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
     openCustomDocument(uri) { return { uri, dispose() {} }; },
     resolveCustomEditor(document, panel) {
       const folder = vscode.Uri.joinPath(document.uri, "..");
-      panel.webview.options = { enableScripts: true, localResourceRoots: [dist, folder] };
+      const workspace = vscode.workspace.getWorkspaceFolder(document.uri);
+      panel.webview.options = { enableScripts: true, localResourceRoots: [dist, workspace?.uri ?? folder] };
       let revision = 0;
-      const send = async () => {
+      const send = async (fallback = false) => {
         const current = ++revision;
         const message = { type: "fbx", uri: document.uri.toString(), url: panel.webview.asWebviewUri(document.uri).toString() };
-        await panel.webview.postMessage(message);
         try {
           const bytes = await vscode.workspace.fs.readFile(document.uri);
           if (revision !== current) return;
-          await panel.webview.postMessage({ type: "outline", nodes: fbxOutline(hierarchy(Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength))) });
+          const file = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+          const scene = fallback || needsFbxReader(file) ? readFbx(file) : undefined;
+          await panel.webview.postMessage({ ...message, revision: current, scene });
+          if (revision === current) await panel.webview.postMessage({ type: "outline", nodes: fbxOutline(scene ? sceneHierarchy(scene) : hierarchy(file)) });
         } catch (error) {
-          if (revision === current) await panel.webview.postMessage({ type: "outline", error: String(error) });
+          if (revision === current) await panel.webview.postMessage({ ...message, error: String(error), revision: current });
         }
       };
-      const messages = panel.webview.onDidReceiveMessage(message => { if (message.type === "ready") send(); });
+      const messages = panel.webview.onDidReceiveMessage(message => {
+        if (message.type === "ready") void send();
+        if (message.type === "fbxFallback" && message.revision === revision) void send(true);
+      });
       const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(folder, "*"));
       const changes = watcher.onDidChange(uri => { if (uri.toString() === document.uri.toString()) send(); });
       panel.onDidDispose(() => { revision++; changes.dispose(); watcher.dispose(); messages.dispose(); });

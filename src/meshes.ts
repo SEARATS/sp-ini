@@ -51,8 +51,11 @@ class MeshFiles {
     if (cached?.version === version && cached.doc === doc) return cached.model;
     let model;
     try {
-      model = doc ? parseObj(doc.getText()) : /\.fbx$/i.test(file.full) ? fbxGeometry(await fs.readFile(file.full)) :
-        parseObj(await fs.readFile(file.full, "utf8"));
+      const text = doc?.getText();
+      if (/\.fbx$/i.test(file.full)) {
+        const bytes = text !== undefined && !text.startsWith("Kaydara FBX Binary") ? Buffer.from(text) : await fs.readFile(file.full);
+        model = fbxGeometry(bytes);
+      } else model = parseObj(text ?? await fs.readFile(file.full, "utf8"));
     } catch { return; }
     if (this.cache.size >= 3) this.cache.delete(this.cache.keys().next().value);
     this.cache.set(file.uri, { version, doc, model });

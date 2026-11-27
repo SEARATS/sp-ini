@@ -1,6 +1,6 @@
-import type { FBXNode } from "fbx-parser";
-import { fbxTree } from "./fbx-geometry";
-import { Matrix4, Vector3, Quaternion, Euler, MathUtils } from "three";
+import { readFbx, type FbxScene } from "./fbx-reader";
+import { fbxBasis } from "./fbx-scene";
+import { Matrix4, Vector3 } from "three";
 import { createHash } from "node:crypto";
 import { createTwoFilesPatch } from "diff";
 import { parse } from "./ini";
@@ -10,43 +10,24 @@ export type Role = "Submodel" | "Collider" | "Skip";
 export interface ModelNode {
   id: string; name: string; mesh: string; path: string; position: number[]; transform?: Matrix4; children: ModelNode[];
 }
-const clean = (value: unknown) => String(value).split("\0")[0].replace(/^(?:Model|Geometry)::/, "");
-const children = (row: FBXNode, key: string) => row?.nodes?.filter(n => n.name === key) ?? [];
-
 export function hierarchy(bytes: Buffer): ModelNode[] {
-  const tree = fbxTree(bytes);
-  const axes = tree.find(n=>n.name==="GlobalSettings")?.nodes.find(n=>n.name==="Properties70")?.nodes;
-  const setting = (key:string,fallback:number) => Number(axes?.find(p=>p.props[0]===key)?.props[4] ?? fallback);
-  const basis = new Matrix4().set(0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,1);
-  for (const [row,[axis,sign]] of [[setting("CoordAxis",0),-setting("CoordAxisSign",1)],
-      [setting("UpAxis",1),setting("UpAxisSign",1)],[setting("FrontAxis",2),setting("FrontAxisSign",1)]].entries())
-    basis.elements[4*axis+row] = sign;
-  if (Math.abs(basis.determinant())!==1) throw Error("Invalid FBX coordinate axes");
-  const objects = tree.find(n=>n.name==="Objects");
-  const nodes = new Map<string,ModelNode>(), geometries = new Map<string,string>();
-  for (const item of objects?.nodes || []) {
-    const [id, label] = item.props, name = clean(label);
-    if (item.name === "Geometry" && item.props[2] === "Mesh") geometries.set(String(id),name);
-    if (item.name !== "Model") continue;
-    const properties = children(item,"Properties70")[0] || children(item,"Properties60")[0];
-    const vector = (key:string, fallback:number[]) => properties?.nodes.find(n=>n.props[0]===key)?.props.slice(-3).map(Number) || fallback;
-    const position = new Vector3().fromArray(vector("Lcl Translation",[0,0,0]));
-    const angles = vector("Lcl Rotation",[0,0,0]).map(MathUtils.degToRad);
-    const rotation = new Quaternion().setFromEuler(new Euler(angles[0],angles[1],angles[2],"ZYX"));
-    const transform = new Matrix4().compose(position,rotation,new Vector3().fromArray(vector("Lcl Scaling",[1,1,1])));
-    transform.premultiply(basis).multiply(basis.clone().invert());
-    nodes.set(String(id),{id:String(id),name,mesh:"",path:"",children:[],transform,position:new Vector3().setFromMatrixPosition(transform).toArray()});
+  return sceneHierarchy(readFbx(bytes, "hierarchy"));
+}
+
+export function sceneHierarchy(scene: FbxScene) {
+  const basis = new Matrix4().makeScale(-1,1,1).multiply(fbxBasis(scene.axes)), inverse = basis.clone().invert();
+  const nodes = new Map<number, ModelNode>();
+  for (const source of scene.nodes) {
+    const transform = new Matrix4().fromArray(source.local).premultiply(basis).multiply(inverse);
+    nodes.set(source.index, {id: source.id, name: source.name, mesh: source.mesh < 0 ? "" : scene.meshes[source.mesh].name || source.name,
+      path: "", children: [], transform, position: new Vector3().setFromMatrixPosition(transform).toArray()});
   }
-  const attached = new Set<string>();
-  for (const link of children(tree.find(n=>n.name==="Connections"),"C")) {
-    const [kind, from, to] = link.props.map(String);
-    const parent = nodes.get(to);
-    if (kind !== "OO" || !parent) continue;
-    if (geometries.has(from)) parent.mesh ||= geometries.get(from) || parent.name;
-    const child = nodes.get(from);
-    if (child && !attached.has(from)) { parent.children.push(child); attached.add(from); }
-  }
-  const roots = [...nodes.values()].filter(n=>!attached.has(n.id));
+  const roots: ModelNode[] = [];
+  for (const source of scene.nodes) (nodes.get(source.parent)?.children ?? roots).push(nodes.get(source.index));
+  return assignPaths(roots);
+}
+
+function assignPaths(roots: ModelNode[]) {
   function paths(siblings: ModelNode[], base: string) {
     const counts = new Map<string,number>();
     for (const n of siblings) {

@@ -2,6 +2,7 @@ import { build } from "esbuild";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { watch } from "node:fs";
+import { buildFbx } from "./build-fbx";
 import { generateIcon } from "./icon";
 const root = path.resolve(__dirname, "..");
 process.chdir(root);
@@ -9,6 +10,7 @@ process.chdir(root);
 async function compile() {
   await Promise.all([
     generateIcon(),
+    buildFbx(),
     build({ entryPoints: ["src/extension.ts", "src/server.ts", "src/pspad.ts", "src/generate.ts", "src/lint.ts"], outdir: "dist",
       bundle: true, platform: "node", target: "node18", external: ["vscode"] }),
     build({ entryPoints: ["test/preview-smoke.ts", "test/stock-smoke.ts", "test/vscode-smoke.ts", "scripts/gallery/capture.ts"],
@@ -16,8 +18,8 @@ async function compile() {
     build({ entryPoints: ["src/obj-viewer.ts","src/unit-card-viewer.ts"], outdir: "dist", bundle: true, minify: true, target: "chrome114" })
   ]);
   const licenses = [];
-  for (const name of ["fbx-parser","@picode/binary-reader","pako","diff","three"]) {
-    const root = name === "three" ? "node_modules/three" : path.dirname(require.resolve(name + "/package.json", { paths: [path.dirname(require.resolve("fbx-parser")), process.cwd()] }));
+  for (const name of ["diff","three"]) {
+    const root = path.join("node_modules", name);
     const file = (await fs.readdir(root)).find(f => /^licen[sc]e(?:$|[.-])/i.test(f));
     if (file) licenses.push(name+"\n"+await fs.readFile(path.join(root,file),"utf8"));
   }

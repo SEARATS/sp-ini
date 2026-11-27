@@ -107,6 +107,12 @@ The entity preview screenshots use the installed Spruance INI. The script captur
 
 Pass `-GameDirectory` for a different Steam library. The script opens an isolated VS Code window, exports selected stock Spruance VLS meshes and textures into a temporary workspace, and exercises the extension on a copy of the ship INI. It crops the rendered widgets and relevant source lines, then writes the PNGs, a Markdown gallery and `index.html` to the output folder.
 
+## FBX models
+
+Open an FBX in VS Code for the 3D preview. The extension includes its own reader for older FBX exports and big-endian files. You can inspect the mesh hierarchy and copy submodels or colliders directly from an FBX 2009 export.
+
+Run `pnpm run test:fbx` to check geometry, mesh lookup and hierarchy export against public Max and Maya files and other exporter samples. The first source build uses Python and pip to install Zig 0.13.0 in the build cache and compile the pinned ufbx reader. Installed editor packages include the compiled reader.
+
 ## Release
 
 Bump `version` in `package.json` and push to `main`. After tests pass, CI builds all three downloads, tags the commit and publishes them to GitHub Releases. Further pushes at the same version run the build checks. With the repository variable `PUBLISH_MARKETPLACE=true`, it also publishes the same VSIX under the SEARATS Marketplace publisher.
