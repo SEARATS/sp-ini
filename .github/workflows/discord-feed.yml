@@ -1,0 +1,36 @@
+# Posts new pull requests and new issues to the Drydock's #github-feed.
+# Only "opened": the plain GitHub webhook posted every edit, push and CI job.
+# pull_request_target so PRs from forks get the secret too; it checks out no code.
+name: Discord feed
+
+on:
+  pull_request_target:
+    types: [opened]
+  issues:
+    types: [opened]
+
+permissions: {}
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post to Discord
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_FEED_WEBHOOK }}
+          REPO: ${{ github.repository }}
+          KIND: ${{ github.event_name == 'issues' && 'Issue' || 'Pull request' }}
+          NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+          TITLE: ${{ github.event.pull_request.title || github.event.issue.title }}
+          LINK: ${{ github.event.pull_request.html_url || github.event.issue.html_url }}
+          AUTHOR: ${{ github.event.sender.login }}
+          AVATAR: ${{ github.event.sender.avatar_url }}
+          COLOR: ${{ github.event_name == 'issues' && '15426592' || '38912' }}
+        run: |
+          # jq builds the JSON so titles with quotes cannot break it
+          jq -n '{username: "GitHub", embeds: [{
+              title: ("[" + env.REPO + "] " + env.KIND + " opened: #" + env.NUMBER + " " + env.TITLE)[0:256],
+              url: env.LINK,
+              color: (env.COLOR | tonumber),
+              author: {name: env.AUTHOR, icon_url: env.AVATAR}}]}' \
+          | curl -sf -H "Content-Type: application/json" -d @- "$WEBHOOK"
