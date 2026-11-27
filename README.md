@@ -32,6 +32,14 @@ Mesh names containing `coll` or tagged `_col` are marked as likely colliders.
 
 ## Export from FBX
 
+Right-click an OBJ, FBX or Blend file and choose **Export INI Data…** to review object roles, the rig and the generated INI.
+
+[![Export INI window with mesh tags, rig preview and planned INI][export-ini]][export-ini]
+
+Add a **Box collider** or **Sphere collider** tag to fit a collider around a mesh. The mesh keeps its visual role.
+
+[![Spruance deck and port propeller with their generated box and sphere colliders off and on][wrapped-colliders]][wrapped-colliders]
+
 Right-click an FBX in the Explorer or its 3D preview and choose **Copy Hierarchy as INI** to copy submodels and colliders. 
 To set custom object roles, right-click a parent in the **FBX hierarchy** and choose **Generate Submodels and Colliders…**.
 
@@ -67,7 +75,7 @@ The examples use the stock Spruance VLS destroyer. Select a screenshot to view i
 | Value completion<br>[![Value completion][completion]][completion] | Duplicate warning and conflicting-value error<br>[![Duplicate warning and conflicting-value error][duplicate-diagnostics]][duplicate-diagnostics] |
 | Collapsed INI section<br>[![Collapsed INI section][ini-folding]][ini-folding] | Diagnostic quick fix<br>[![Diagnostic quick fix][quick-fix]][quick-fix] |
 | Commented INI section<br>[![Commented INI section][section-toggle]][section-toggle] | Same-line diagnostic suppression<br>[![Same-line diagnostic suppression][inline-suppression]][inline-suppression] |
-| Units beside values in the stock Victor K2 INI<br>[![Inline units on the Victor K2][unit-hints]][unit-hints] | |
+| Units beside values in the stock Victor K2 INI<br>[![Inline units on the Victor K2][unit-hints]][unit-hints] | **Analyze INI Files… → Entire workspace** lists issues across files in Problems<br>[![Conflicting values in three stock aircraft INIs][workspace-analysis]][workspace-analysis] |
 
 | Go to Definition | Reference files |
 | --- | --- |
@@ -77,7 +85,7 @@ The examples use the stock Spruance VLS destroyer. Select a screenshot to view i
 | Geometry | Materials and models |
 | --- | --- |
 | Mesh collider geometry<br>[![Mesh collider geometry][mesh-collider]][mesh-collider] | Lit material and texture maps<br>[![Lit material and texture maps][material-hover]][material-hover] |
-| Mesh wireframe and textured hover<br>[![Mesh wireframe and textured preview][mesh-hover]][mesh-hover] | |
+| Mesh wireframe and textured hover<br>[![Mesh wireframe and textured preview][mesh-hover]][mesh-hover] | Open a Unity `.mat` to preview its lit surface and texture maps<br>[![Spruance VLS deck material with normal, diffuse and specular maps][unity-material]][unity-material] |
 | Box collider shape and dimensions<br>[![Box collider shape and dimensions][box-collider]][box-collider] | Spruance VLS in the 3D preview<br>[![Spruance VLS in the 3D preview][obj-preview]][obj-preview] |
 | Collapsed OBJ objects<br>[![Collapsed OBJ objects][obj-folding]][obj-folding] | Spruance VLS in the FBX viewer<br>[![Spruance VLS in the FBX viewer][fbx-preview]][fbx-preview] |
 
@@ -108,3 +116,7 @@ The examples use the stock Spruance VLS destroyer. Select a screenshot to view i
 [unit-hints]: https://raw.githubusercontent.com/SEARATS/binaries/9ba4ee59a3e5e838c6eccb9c7b9363c87011f765/sp-ini/28-unit-hints.png
 [sensor-card]: https://raw.githubusercontent.com/SEARATS/binaries/d3c7f1d94c0459cdf9137c0940ae3e925cf5837e/sp-ini/27-sensor-card.png
 [entity-overview]: https://raw.githubusercontent.com/SEARATS/binaries/8e825c667761c3d323d7b1facdc1870f76e1d300/sp-ini/26-entity-preview.png
+[workspace-analysis]: https://raw.githubusercontent.com/SEARATS/binaries/e48f085259a2f17d6eeb9b465746c18ab0ef3c5e/sp-ini/31-workspace-analysis.png
+[unity-material]: https://raw.githubusercontent.com/SEARATS/binaries/e48f085259a2f17d6eeb9b465746c18ab0ef3c5e/sp-ini/32-unity-material.png
+[export-ini]: https://raw.githubusercontent.com/SEARATS/binaries/e48f085259a2f17d6eeb9b465746c18ab0ef3c5e/sp-ini/29-export-ini.png
+[wrapped-colliders]: https://raw.githubusercontent.com/SEARATS/binaries/e48f085259a2f17d6eeb9b465746c18ab0ef3c5e/sp-ini/30-wrapped-colliders.png
