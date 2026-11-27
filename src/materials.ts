@@ -1,14 +1,16 @@
 import * as fs from "node:fs/promises";
 import { posix as path } from "node:path";
+import { TGALoader } from "three/examples/jsm/loaders/TGALoader.js";
 import { PNG } from "pngjs";
 import * as jpeg from "jpeg-js";
 import { parse } from "./ini";
 import { normalize } from "./catalog";
 import { reference, referenceContext } from "./references";
+import { unityMaterial } from "./unity-material";
 import { materialSwatch } from "./material-swatch";
 
 const escape = text => text.replace(/[^\p{L}\p{N} _-]/gu, ch => "\\" + ch);
-function imageMarkdown(name, image, budget = 42000) {
+function imageUri(image, budget = 42000) {
   let png = PNG.sync.write(image);
   if (png.length * 4 / 3 > budget) {
     const pixels = Buffer.from(image.data);
@@ -21,7 +23,7 @@ function imageMarkdown(name, image, budget = 42000) {
     }
     for (const quality of [85, 65, 45]) {
       const encoded = jpeg.encode({ width: image.width, height: image.height, data: pixels }, quality).data;
-      if (encoded.length * 4 / 3 <= budget) return "![" + name + "](data:image/jpeg;base64," + encoded.toString("base64") + ")";
+      if (encoded.length * 4 / 3 <= budget) return "data:image/jpeg;base64," + encoded.toString("base64");
     }
   }
   // VS Code truncates long Markdown blocks, including data URLs inside them.
@@ -29,7 +31,10 @@ function imageMarkdown(name, image, budget = 42000) {
     image = resize(image, Math.max(1, Math.floor(Math.max(image.width, image.height) * 0.8)));
     png = PNG.sync.write(image);
   }
-  return "![" + name + "](data:image/png;base64," + png.toString("base64") + ")";
+  return "data:image/png;base64," + png.toString("base64");
+}
+function imageMarkdown(name, image, budget = 42000) {
+  return "![" + name + "](" + imageUri(image,budget) + ")";
 }
 
 function resize(source, limit) {
@@ -67,7 +72,7 @@ class Materials {
   }
 
   async texture(file, maxSize=384) {
-    if (!file || !/\.(png|jpe?g)$/i.test(file.rel)) return;
+    if (!file || !/\.(png|jpe?g|tga)$/i.test(file.rel)) return;
     const stat = await fs.stat(file.full).catch(() => null);
     if (!stat || stat.size > 96 * 1024 * 1024) return;
     const key = file.uri+"#"+maxSize, old = this.cache.get(key);
@@ -77,8 +82,14 @@ class Materials {
       const bytes = await fs.readFile(file.full);
       const png = /\.png$/i.test(file.rel);
       if (png && bytes.readUInt32BE(16) * bytes.readUInt32BE(20) > 32 * 1024 * 1024) return;
-      const source = png ? PNG.sync.read(bytes) : jpeg.decode(bytes, { maxResolutionInMP: 32, maxMemoryUsageInMB: 256 });
-      image = resize(source, maxSize);
+      if (/\.tga$/i.test(file.rel)) {
+        if (bytes.length < 18 || bytes.readUInt16LE(12)*bytes.readUInt16LE(14) > 32*1024*1024 || ![8,16,24,32].includes(bytes[16])) return;
+        const decoded = new TGALoader().parse(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer) as unknown as {width:number; height:number; data:Uint8Array};
+        image = resize({...decoded, data:Buffer.from(decoded.data)},maxSize);
+      } else {
+        const source = png ? PNG.sync.read(bytes) : jpeg.decode(bytes, {maxResolutionInMP:32, maxMemoryUsageInMB:256});
+        image = resize(source,maxSize);
+      }
     } catch { return; }
     if (this.cache.size >= 24) this.cache.delete(this.cache.keys().next().value);
     this.cache.set(key, { stamp: stat.mtimeMs, size: stat.size, image });
@@ -90,7 +101,7 @@ class Materials {
     const ctx = referenceContext(doc, uri, catalog);
     ctx.resources = entry.section.keys.find(k => /^resourcesmaterialfolder$/i.test(k.name))?.value || ctx.resources;
     if (/\.(ini|mat)$/i.test(entry.value)) return reference(entry,entry.value,ctx).refs[0]?.file;
-    const refs = [...reference(entry,entry.value+".ini",ctx).refs, ...reference(entry,entry.value,ctx).refs];
+    const refs = [...reference(entry,entry.value+".ini",ctx).refs, ...reference(entry,entry.value+".mat",ctx).refs, ...reference(entry,entry.value,ctx).refs];
     return catalog.ordered(refs.filter(r=>/\.(ini|mat)$/i.test(r.file.rel)))[0]?.file;
   }
 
@@ -107,53 +118,64 @@ class Materials {
       const doc = await this.readIni(file);
       return {doc,maps:this.maps(file,catalog,doc)};
     }
-    const yaml = await fs.readFile(file.full,"utf8");
-    const props = yaml.split(/\bm_Floats:/)[1]?.split(/\bm_Colors:/)[0] || "";
-    const doc = parse("[Properties]\n"+[...props.matchAll(/^\s*(_\w+):\s*([\d.e+-]+)\s*$/gmi)].map(m=>m[1]+"="+m[2]).join("\n"));
-    const maps = [...yaml.matchAll(/^\s*(_\w+):\s*\r?\n\s*m_Texture:.*?guid: ([0-9a-f]+)/gmi)].map(m=>{
-      const file = catalog.mirrorTextures.get(m[2]);
-      return {key:{name:m[1],value:file?.rel || m[2]},file};
+    const asset = unityMaterial(await fs.readFile(file.full,"utf8").catch(() => ""));
+    const maps = (asset?.maps ?? []).map(({name,guid}) => {
+      const texture = catalog.textureByGuid(guid,file.full);
+      return {key:{name,value:texture?.rel ?? guid},file:texture};
     });
-    return {doc,maps};
+    return {doc:asset?.doc,maps};
+  }
+
+  async preview(file, catalog, images = true) {
+    const {doc,maps} = await this.materialData(file,catalog);
+    const textures = new Map();
+    if (images) for (const map of maps) textures.set(map.key.name.toLowerCase(), await this.texture(map.file));
+    const preview = this.tiles(file.rel,doc,maps,textures,images);
+    if (!doc && /\.mat$/i.test(file.rel)) preview.note = "Preview requires a text-serialized Unity material (.mat).";
+    return preview;
+  }
+
+  tiles(name, doc, maps, textures, images = true) {
+    const props = doc?.sections.find(s => /^properties$/i.test(s.name))?.keys || [];
+    const swatch = images && materialSwatch(textures, new Map(props.map(k => [k.name.toLowerCase(), k.value])));
+    const budget = Math.floor(84000 / (maps.length + 1));
+    return {name, lit:swatch ? imageUri(swatch,budget) : undefined, note:"",
+      maps:maps.map(({key,file}) => {
+        const raw = textures.get(key.name.toLowerCase());
+        const image = /^_(maintex|basemap|basecolormap)$/i.test(key.name) ? diffusePreview(raw,doc) : raw;
+        return {slot:key.name, path:key.value, image:image ? imageUri(resize(image,144),budget) : undefined,
+          status:file || raw ? "Preview unavailable" : "File missing"};
+      })};
   }
 
   async hover(file, catalog, images = true) {
-
-    const {doc,maps} = await this.materialData(file,catalog);
-    if (!images) return { contents: { kind: "plaintext" as const, value: [file.rel, ...maps.map(m => m.key.name + "=" + m.key.value)].join("\n") } };
-    const textures = new Map();
-    for (const map of maps) textures.set(map.key.name.toLowerCase(), await this.texture(map.file));
-    return this.render(file.rel, doc, maps, textures);
+    const preview = await this.preview(file,catalog,images);
+    if (!images || preview.note) return {contents:{kind:"plaintext" as const,
+      value:[preview.name,preview.note,...preview.maps.map(m => m.slot+"="+m.path)].filter(Boolean).join("\n")}};
+    return this.markdown(preview);
   }
 
   render(name, doc, maps, textures) {
-    const parts = ["**" + escape(path.basename(name)) + "**"];
-    const props = doc?.sections.find(s => /^properties$/i.test(s.name))?.keys || [];
-    const swatch = materialSwatch(textures, new Map(props.map(k => [k.name.toLowerCase(), k.value])));
-    const budget = Math.floor(84000 / (maps.length + 1));
-    for (let i = 0; i < maps.length; i += 3) {
-      const group = maps.slice(i, i + 3);
-      const labels = group.map(m => escape(m.key.name));
-      const previews = [];
-      if (!i && swatch) {
-        labels.unshift("Lit material");
-        previews.push(imageMarkdown("Lit material", swatch, budget));
-      }
-      for (const map of group) {
-        const raw = textures.get(map.key.name.toLowerCase());
-        const image = /^_maintex$/i.test(map.key.name) ? diffusePreview(raw, doc) : raw;
-        previews.push(image ? imageMarkdown("Texture", resize(image, 144), budget) : map.file ? "Preview unavailable" : "File missing");
-      }
-      parts.push([labels, labels.map(() => "---"), previews]
-        .map(row => "| " + row.join(" | ") + " |").join("\n"));
+    return this.markdown(this.tiles(name,doc,maps,textures));
+  }
+
+  private markdown(preview: ReturnType<Materials["tiles"]>) {
+    const parts = ["**" + escape(path.basename(preview.name)) + "**"];
+    if (!preview.maps.length && preview.lit) parts.push("![Lit material]("+preview.lit+")");
+    for (let i = 0; i < preview.maps.length; i += 3) {
+      const group = preview.maps.slice(i,i+3);
+      const labels = group.map(m => escape(m.slot));
+      const previews = group.map(m => m.image ? "![Texture]("+m.image+")" : m.status);
+      if (!i && preview.lit) { labels.unshift("Lit material"); previews.unshift("![Lit material]("+preview.lit+")"); }
+      parts.push([labels, labels.map(() => "---"), previews].map(row => "| " + row.join(" | ") + " |").join("\n"));
     }
-    if (maps.length) parts.push(maps.map(m => escape(m.key.name) + " � " + escape(path.basename(m.key.value))).join("  \n"));
-    return { contents: { kind: "markdown" as const, value: parts.join("\n\n") } };
+    if (preview.maps.length) parts.push(preview.maps.map(m => escape(m.slot) + " · " + escape(path.basename(m.path))).join("  \n"));
+    return {contents:{kind:"markdown" as const,value:parts.join("\n\n")}};
   }
 
   async diffuse(file, catalog) {
     const {doc,maps} = await this.materialData(file,catalog);
-    const main = maps.find(m => /^_maintex$/i.test(m.key.name));
+    const main = ["_basemap","_basecolormap","_maintex"].map(name => maps.find(m => m.key.name.toLowerCase() === name && m.file)).find(Boolean);
     return diffusePreview(await this.texture(main?.file), doc);
   }
 

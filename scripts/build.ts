@@ -18,7 +18,7 @@ async function compile() {
     build({ entryPoints: ["src/obj-viewer.ts","src/unit-card-viewer.ts"], outdir: "dist", bundle: true, minify: true, target: "chrome114" })
   ]);
   const licenses = [];
-  for (const name of ["diff","three"]) {
+  for (const name of ["diff","three","yaml"]) {
     const root = path.join("node_modules", name);
     const file = (await fs.readdir(root)).find(f => /^licen[sc]e(?:$|[.-])/i.test(f));
     if (file) licenses.push(name+"\n"+await fs.readFile(path.join(root,file),"utf8"));

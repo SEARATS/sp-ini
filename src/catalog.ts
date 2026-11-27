@@ -68,7 +68,17 @@ class Catalog {
   }
   mirrorModels = new Map();
   mirrorMeshes = new Map();
-  mirrorTextures = new Map();
+  private readonly unityTextures = new Map<string, {full:string; rel:string; uri:string; source:string}[]>();
+  addTextureGuid(guid: string, file) {
+    const files = getOrCreate(this.unityTextures, guid.toLowerCase(), () => []);
+    if (!files.some(f => f.uri === file.uri)) files.push(file);
+  }
+  textureByGuid(guid: string, materialPath?: string) {
+    const files = this.unityTextures.get(guid.toLowerCase()) ?? [];
+    const project = materialPath && /^(.*[\/\\]Assets)[\/\\]/i.exec(materialPath)?.[1];
+    const local = project ? files.filter(f => within(project, f.full)) : [];
+    return (local.length ? local : files).reduce((best,f) => !best || this.rank(f.source) < this.rank(best.source) ? f : best, undefined);
+  }
   modelParts = new Map();
   objOwners = new Map();
   sections = new Map();
@@ -169,7 +179,7 @@ async function buildCatalog(roots: ContentRoot[]) {
   const originRanks = new Map([...new Set(roots.map(r=>r.origin || r.source))].map((origin,i)=>[origin,i]));
   const resourceRoots = roots.filter(r=>r.source === "Resources");
   const useResources = (await Promise.all(resourceRoots.map(r=>fs.stat(r.dir).then(s=>s.isDirectory(),()=>false)))).some(Boolean);
-  const files = [], textureMeta = [];
+  const files = [], textureMeta = new Map();
   const manifestGuids = new Map<string,string>();
   const manifests = new Map();
   for (const {dir,source} of roots) {
@@ -186,7 +196,7 @@ async function buildCatalog(roots: ContentRoot[]) {
   async function walk(dir, base, source, omit: string[] = []) {
     if (omit.some(root => within(root,dir))) return;
     const childrenHere = await children(dir);
-    const meta = source === "Resources" ? new Set(childrenHere.map(e=>e.name)) : undefined;
+    const meta = new Set(childrenHere.filter(e=>e.name.endsWith(".meta")).map(e=>e.name));
     if ((source === "Workspace" || source === "Data") && childrenHere.some(e => e.name.toLowerCase() === "_info.ini")) base = dir;
     if (dir !== base && (!useResources || source === "Resources"))
       catalog.materialFolders.add(path.relative(base,dir),source,catalog.rank(source));
@@ -200,10 +210,9 @@ async function buildCatalog(roots: ContentRoot[]) {
         else {
           catalog.filesByUri.set(uriKey(file.uri), file);
           getOrCreate(catalog.assets, normalize(file.rel), () => []).push({ file, name: file.rel, line: 0, start: 0 });
-          if (source === "Resources" && /\.(png|jpe?g)$/i.test(entry.name)) {
+          if (/\.(png|jpe?g|tga|dds)$/i.test(entry.name)) {
             const guid = manifestGuids.get(full);
-            if (guid && !catalog.mirrorTextures.has(guid)) catalog.mirrorTextures.set(guid,file);
-            else if (meta.has(entry.name+".meta")) textureMeta.push(file);
+            if (meta.has(entry.name+".meta") || guid) textureMeta.set(full,file);
           }
         }
       }
@@ -251,20 +260,21 @@ async function buildCatalog(roots: ContentRoot[]) {
       const refs = catalog.assets.get(normalize(rel))?.filter(r=>r.file.full===path.join(dir,rel));
       if (refs && typeof mesh?.name==="string") getOrCreate(catalog.mirrorMeshes,normalize(mesh.name),()=>[]).push(...refs);
     }
-    for (const [guid,rel] of Object.entries(manifest.textures || {})) {
+    for (const rel of Object.values(manifest.textures || {})) {
       if (typeof rel === "string" && rel.startsWith("Assets/") && !rel.split(/[\\/]/).includes("..")) {
         const full = path.resolve(dir,rel);
         const file = catalog.filesByUri.get(uriKey(pathToFileURL(full).href));
-        if (file && !catalog.mirrorTextures.has(guid)) catalog.mirrorTextures.set(guid,file);
+        if (file) textureMeta.set(full,file);
       }
     }
   }
-  for (let pos = 0; pos < textureMeta.length; pos += 32) {
-    const batch = textureMeta.slice(pos,pos+32);
+  const textures = [...textureMeta.values()];
+  for (let pos = 0; pos < textures.length; pos += 32) {
+    const batch = textures.slice(pos,pos+32);
     const metas = await Promise.all(batch.map(file=>fs.readFile(file.full+".meta","utf8").catch(()=>"")));
     metas.forEach((text,i)=>{
-      const guid = /^guid:\s*([\da-f]+)\s*$/im.exec(text)?.[1];
-      if (guid && !catalog.mirrorTextures.has(guid)) catalog.mirrorTextures.set(guid,batch[i]);
+      const guid = /^guid:\s*([\da-f]+)\s*$/im.exec(text)?.[1] ?? manifestGuids.get(batch[i].full);
+      if (guid) catalog.addTextureGuid(guid,batch[i]);
     });
   }
   for (let pos = 0; pos < files.length; pos += 24) {

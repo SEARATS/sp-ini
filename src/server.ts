@@ -100,6 +100,12 @@ connection.onCodeAction(({ textDocument, context }) => {
   return context.diagnostics.map(diagnostic => moveMisplacedKey(document, doc, diagnostic, versionedEdits)).filter(Boolean);
 });
 connection.onInitialized(() => refresh().catch(error => connection.console.error(String(error))));
+connection.onRequest("seapower/materialPreview", async ({uri}: {uri:string}) => {
+  await building;
+  const full = fileURLToPath(uri);
+  const file = catalog.filesByUri.get(uriKey(uri)) ?? {uri,full,rel:path.basename(full)};
+  return materials.preview(file,catalog);
+});
 connection.onRequest("seapower/entityPreview", async (request: PreviewRequest, token) => {
   await building;
   if (request.card) return unitCard(request,catalog,materials,stock);

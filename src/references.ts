@@ -15,7 +15,7 @@ function tokens(value, offset) {
 
 function referenceContext(doc, uri, catalog) {
   const current = catalog.filesByUri.get(uriKey(uri));
-  const folder = path.dirname(current?.rel || ".");
+  const folder = normalize(path.dirname(current?.rel || "."));
   const resources = doc.sections.find(s => /^models$/i.test(s.name))?.keys.find(k => /^resourcesfolder$/i.test(k.name))?.value;
   const meshColliders = meshColliderSections(doc);
   const locals = new Map();

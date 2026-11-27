@@ -2,7 +2,7 @@
   "name": "seapower-ini",
   "displayName": "Sea Power INI",
   "description": "Autocomplete, error checking and Go to Definition for Sea Power INI files.",
-  "version": "0.9.14",
+  "version": "0.9.15",
   "icon": "dist/icon.png",
   "publisher": "searats",
   "private": true,
@@ -102,6 +102,19 @@
         "viewType": "seapower-ini.card",
         "displayName": "Sea Power Unit Card",
         "selector": [
+          {
+            "filenamePattern": "*.[iI][nN][iI]"
+          }
+        ],
+        "priority": "option"
+      },
+      {
+        "viewType": "seapower-ini.material",
+        "displayName": "Sea Power Material Preview",
+        "selector": [
+          {
+            "filenamePattern": "*.[mM][aA][tT]"
+          },
           {
             "filenamePattern": "*.[iI][nN][iI]"
           }
@@ -545,6 +558,7 @@
     "typescript": "5.9.3",
     "vscode-languageclient": "9.0.1",
     "vscode-languageserver": "9.0.1",
-    "vscode-languageserver-textdocument": "1.0.12"
+    "vscode-languageserver-textdocument": "1.0.12",
+    "yaml": "^2.9.1"
   }
 }

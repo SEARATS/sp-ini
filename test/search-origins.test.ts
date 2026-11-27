@@ -43,7 +43,7 @@ test("Data and Resources use independent paths and switches, including in multi-
   assert.equal(catalog.units.get("second")[0].file.source,"Data");
   assert.equal(catalog.units.get("work")[0].file.source,"Workspace");
   assert.equal(material(catalog).rel,"ships/materials/grey.mat");
-  assert.equal(catalog.mirrorTextures.get("aabbcc").rel,"ships/paint.png");
+  assert.equal(catalog.textureByGuid("aabbcc").rel,"ships/paint.png");
   assert.equal((await new MeshFiles().resolve(doc,uri,doc.entries[2],catalog))[0].file.source,"Resources");
   assert.equal(reference(doc.entries[1],"test",referenceContext(doc,uri,catalog)).refs[0].file.rel,"ships/test/test.obj");
   const noData = await index({search:{data:false}});

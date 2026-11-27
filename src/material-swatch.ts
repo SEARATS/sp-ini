@@ -20,23 +20,24 @@ function sample(map, u, v) {
 
 // Preview the common material slots in tangent space on a front-facing plane covering the entire UV map.
 function materialSwatch(textures, props = new Map()) {
-  const albedo = textures.get("_maintex"), normal = textures.get("_bumpmap");
+  const albedo = textures.get("_basemap") || textures.get("_basecolormap") || textures.get("_maintex"), normal = textures.get("_bumpmap") || textures.get("_normalmap");
   const spec = textures.get("_spectex") || textures.get("_specglossmap");
   const metal = textures.get("_metallicglossmap"), ao = textures.get("_occlusionmap");
   const glow = textures.get("_emissionmap") || textures.get("_emissiontex");
-  if (![albedo, normal, spec, metal, ao, glow].some(Boolean)) return;
-  const tint = color(props, "_color", [1, 1, 1]), specColor = color(props, "_speccolor", [1, 1, 1]);
+  const reference = albedo || normal || spec || metal || ao || glow;
+  if (!reference && !props.has("_color") && !props.has("_basecolor")) return;
+  const tint = color(props, "_basecolor", color(props, "_color", [1, 1, 1])), specColor = color(props, "_speccolor", [1, 1, 1]);
   const emission = color(props, "_emissioncolor", [1, 1, 1]);
   const intensity = Math.max(0, setting(props, "_specint", 0.4));
-  const gloss = Math.min(1, Math.max(0, setting(props, "_shininess", 0.35)));
+  const gloss = Math.min(1, Math.max(0, setting(props, "_smoothness", setting(props, "_glossiness", setting(props, "_shininess", 0.35)))));
   const packedNormal = normal && normal.data.every((value, i) => i % 4 !== 0 || value === 255) &&
     normal.data.some((value, i) => i % 4 === 3 && value !== 255);
-  const reference = albedo || normal || spec || metal || ao || glow;
-  const scale = Math.min(300 / reference.width, 178 / reference.height);
-  const image = new PNG({ width: Math.max(1, Math.round(reference.width * scale)), height: Math.max(1, Math.round(reference.height * scale)) });
+  const {width,height} = reference ?? {width:300,height:178};
+  const scale = Math.min(300 / width, 178 / height);
+  const image = new PNG({ width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) });
   for (let y = 0; y < image.height; y++) for (let x = 0; x < image.width; x++) {
     const u = (x + 0.5) / image.width, v = (y + 0.5) / image.height;
-    const base = sample(albedo, u, v) || [190, 190, 190, 255];
+    const base = sample(albedo, u, v) || [255, 255, 255, 255];
     let dx = 0, dy = 0, dz = 1;
     const bump = sample(normal, u, v);
     if (bump) {

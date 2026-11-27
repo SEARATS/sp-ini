@@ -1,3 +1,4 @@
+import { registerMaterialPreview } from "./material-editor";
 import { registerBlendExport } from "./blend-export-ui";
 import { registerHierarchy } from "./hierarchy-ui";
 import { watchFile, unwatchFile, type Stats } from "node:fs";
@@ -103,6 +104,7 @@ async function activate(context) {
         }
       } });
   await client.start();
+  context.subscriptions.push(registerMaterialPreview(uri => client.sendRequest("seapower/materialPreview",{uri}),indexed.event));
   context.subscriptions.push(registerObjFolding());
   const rebuild = async () => {
     const result = await client.sendRequest("seapower/rebuild", { options: options(),
@@ -111,8 +113,9 @@ async function activate(context) {
     return result;
   };
   const update = () => rebuild().catch(error => client.error("Rebuilding content index", error));
-  const watcher = vscode.workspace.createFileSystemWatcher("**/*.[iI][nN][iI]");
-  const models = vscode.workspace.createFileSystemWatcher("**/*.{[oO][bB][jJ],[fF][bB][xX]}", false, true, false);
+  const textures = ["[pP][nN][gG]","[jJ][pP][gG]","[jJ][pP][eE][gG]","[tT][gG][aA]","[dD][dD][sS]"];
+  const watcher = vscode.workspace.createFileSystemWatcher("**/*.{[iI][nN][iI]," + textures.map(ext=>ext+".meta").join(",") + "}");
+  const assets = vscode.workspace.createFileSystemWatcher("**/*.{[oO][bB][jJ],[fF][bB][xX],[mM][aA][tT]," + textures.join(",") + "}", false, true, false);
   let timer;
   const schedule = () => {
     clearTimeout(timer);
@@ -135,7 +138,7 @@ async function activate(context) {
       });
     }),
     watcher, watcher.onDidCreate(schedule), watcher.onDidChange(schedule), watcher.onDidDelete(schedule),
-    models, models.onDidCreate(schedule), models.onDidDelete(schedule),
+    assets, assets.onDidCreate(schedule), assets.onDidDelete(schedule),
     { dispose: () => clearTimeout(timer) },
     vscode.commands.registerCommand("seapower-ini.referencePreviews", async () => {
       if (!vscode.workspace.workspaceFolders?.length) {
