@@ -4,16 +4,7 @@ import { objLayout } from "./model-outline";
 
 export function previewObj(source: string, layout = objLayout(source)) {
   const model = new OBJLoader().parse(layout.text);
-  const assigned = new Map<MeshPhongMaterial,MeshPhongMaterial>();
-  const used = new Set<MeshPhongMaterial>();
-  const tint = (material: MeshPhongMaterial) => {
-    if (!assigned.has(material)) {
-      const copy = material.clone();
-      copy.color.setHex(0xff833d);
-      assigned.set(material,copy);
-    }
-    return assigned.get(material);
-  };
+  const originals = new Set<MeshPhongMaterial>();
   model.traverse(node => {
     const block = node.name && layout.parts[Number(node.name)];
     if (block) {
@@ -21,9 +12,16 @@ export function previewObj(source: string, layout = objLayout(source)) {
       node.userData.partId = block.part.id;
     }
     if (!(node instanceof Mesh)) return;
-    if (block?.part.collider) node.material = Array.isArray(node.material) ? node.material.map(tint) : tint(node.material);
-    else [node.material].flat().forEach(m=>used.add(m));
+    // OBJLoader shares materials across objects. Each part can change type while open.
+    const copyMaterial = (source: MeshPhongMaterial) => {
+      originals.add(source);
+      const copy = source.clone();
+      copy.userData.objBaseColor = source.color.getHex();
+      if (block?.part.collider) copy.color.setHex(0xff833d);
+      return copy;
+    };
+    node.material = Array.isArray(node.material) ? node.material.map(copyMaterial) : copyMaterial(node.material);
   });
-  for (const original of assigned.keys()) if (!used.has(original)) original.dispose();
+  for (const original of originals) original.dispose();
   return model;
 }

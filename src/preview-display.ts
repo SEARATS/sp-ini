@@ -1,4 +1,4 @@
-import { Mesh, type Material, type Object3D } from "three";
+import { Mesh, type Color, type Material, type Object3D } from "three";
 import { isColliderName } from "./mesh-names";
 
 export const previewLayer = { mesh:0, collider:1, widget:2, highlight:3, arc:4 } as const;
@@ -15,8 +15,11 @@ export interface DisplaySettings {
 export function applyDisplay(model: Object3D, categories: Map<string, boolean>, hidden: Set<string>, settings: DisplaySettings) {
   const used = new Set<Material>();
   const alternate = new Map<Material, Material>();
-  function styled(material: Material, wireframe: boolean) {
+  function styled(material: Material, wireframe: boolean, collider: boolean) {
     if (!("wireframe" in material)) return material;
+    if (material.userData.objBaseColor !== undefined && "color" in material) {
+      (material.color as Color).setHex(collider ? 0xff833d : material.userData.objBaseColor);
+    }
     // An FBX may assign the same material to a visible surface and its collider.
     if (used.has(material) && material.wireframe !== wireframe) {
       if (!alternate.has(material)) alternate.set(material, Object.assign(material.clone(), {wireframe}));
@@ -38,7 +41,7 @@ export function applyDisplay(model: Object3D, categories: Map<string, boolean>, 
     else node.layers.disableAll();
     if (!widget && node instanceof Mesh) {
       const wireframe = collider ? settings.colliderWireframe : settings.meshWireframe;
-      node.material = Array.isArray(node.material) ? node.material.map(m => styled(m, wireframe)) : styled(node.material, wireframe);
+      node.material = Array.isArray(node.material) ? node.material.map(m => styled(m, wireframe, collider)) : styled(node.material, wireframe, collider);
     }
   });
 }

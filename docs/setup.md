@@ -135,6 +135,20 @@ Search Settings for `seapowerIni.meshFlags` and choose **Edit in settings.json**
 
 For example, add `{ "label": "Flight deck", "icon": "tag", "substrings": ["flight_deck"], "patterns": ["_helipad[0-9]*$"] }` to the list. Set `"enabled": false` on any flag to hide it.
 
+Hover a mesh in an OBJ, FBX or Blender preview and choose its pencil button to edit tags. Uncheck an inferred tag to disable it for that mesh, or select **Add custom tag…** to create one. Changing **Collider** also changes its preview category and its default role in FBX hierarchy export.
+
+The first edit creates a sidecar beside the model. For example, `ship.obj`, `ship.fbx` and `ship.blend` in one folder share `ship.meshes.yaml`. Names are exact and case-sensitive. FBX and Blender use the geometry name first and the object name as a fallback. OBJ face groups can override the enclosing object. You can also edit the YAML directly. Remove an override to restore automatic detection.
+
+```yaml
+meshes:
+  Hull:
+    type: mesh
+    add: [Painted]
+    disable: [Damaged]
+  BowVolume:
+    type: collider
+```
+
 ## Release
 
 Bump `version` in `package.json` and push to `main`. CI builds and tests each push immediately. The `release-quiet-period` GitHub environment has a 60-minute wait timer. Every push to `main` restarts it. After an hour without another push and a successful build, CI publishes the latest unreleased version to GitHub Releases and, when `PUBLISH_MARKETPLACE=true`, the VS Code Marketplace.

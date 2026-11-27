@@ -5,15 +5,24 @@ import { readFile } from "node:fs/promises";
 import { ModelNode, Role, changes, colliderSnippet, defaultRole, flatten, generate, hierarchy, snippet } from "./hierarchy";
 import { parse } from "./ini";
 import { meshFlagMatcher, meshFlagSetting } from "./mesh-flags";
+import { watchMeshTags } from "./mesh-tags-ui";
+import { readMeshTags } from "./mesh-sidecar";
 
 export function registerHierarchy(context: vscode.ExtensionContext) {
   const changed = new vscode.EventEmitter<void>();
   let file: vscode.Uri, loading: Promise<ModelNode[]> = Promise.resolve([]);
-  const readFlags = () => meshFlagMatcher(vscode.workspace.getConfiguration(undefined, file).get(meshFlagSetting));
+  let watcher: vscode.Disposable;
+  const readFlags = () => {
+    const rules = vscode.workspace.getConfiguration(undefined, file).get(meshFlagSetting);
+    try { return meshFlagMatcher(rules, file && readMeshTags(file.fsPath)); }
+    catch { return meshFlagMatcher(rules); } // The model preview displays the sidecar error.
+  };
   let matchFlags = readFlags();
   const select = (uri: vscode.Uri) => {
     if (!uri || !/\.fbx$/i.test(uri.path) || file?.toString()===uri.toString()) return;
     file = uri;
+    watcher?.dispose();
+    watcher = watchMeshTags(uri, () => { matchFlags = readFlags(); changed.fire(); });
     matchFlags = readFlags();
     loading = readFile(uri.fsPath).then(hierarchy);
     loading.catch(() => {});
@@ -29,7 +38,7 @@ export function registerHierarchy(context: vscode.ExtensionContext) {
     getTreeItem: (node: ModelNode) => {
       const item = new vscode.TreeItem(node.name, node.children.length ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None);
       item.id = node.path;
-      const flags = node.mesh ? matchFlags(node.name, node.mesh) : [];
+      const flags = node.mesh ? matchFlags(node.mesh, node.name) : [];
       if (flags.length) {
         item.iconPath = new vscode.ThemeIcon(flags[0].icon);
         item.description = flags.map(flag => flag.label).join(", ");
@@ -66,7 +75,7 @@ export function registerHierarchy(context: vscode.ExtensionContext) {
     const model = resource || (node ? file : existing ? await referenced(existing,editor.selection.active.line) : undefined)
       || await pickFile("Choose model","fbx");
     if (!model) return;
-    const roots = hierarchy(await readFile(model.fsPath));
+    const roots = hierarchy(await readFile(model.fsPath), readMeshTags(model.fsPath));
     const nodes = flatten(roots);
     if (node || previewNodeId !== undefined) {
       node = nodes.find(n => previewNodeId !== undefined ? n.id === previewNodeId : n.path === node.path);
@@ -157,6 +166,7 @@ export function registerHierarchy(context: vscode.ExtensionContext) {
       return run(from,undefined,uri,"spIniModelId" in target ? target.spIniModelId : undefined).catch(e=>vscode.window.showErrorMessage(String(e)));
   });
   context.subscriptions.push(copy("copyHierarchy","copy"),copy("copyColliders","colliders"),changed,tree,preview,command("generate","palette"),command("generateFromModel","model"),
+    {dispose:() => watcher?.dispose()},
     vscode.workspace.onDidChangeConfiguration(event => {
       if (event.affectsConfiguration(meshFlagSetting, file)) { matchFlags = readFlags(); changed.fire(); }
     }),

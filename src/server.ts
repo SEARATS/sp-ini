@@ -11,7 +11,8 @@ import { Catalog, buildCatalog, uriKey } from "./catalog";
 import { MeshFiles, objectHeader } from "./meshes";
 import { isMesh, meshColliderSections, referenceContext } from "./references";
 import { meshHover } from "./mesh-hover";
-import { isColliderName } from "./mesh-names";
+import { colliderType, type MeshTags } from "./mesh-names";
+import { readMeshTags } from "./mesh-sidecar";
 import { Materials, imageMarkdown, resize } from "./materials";
 import { colliderSection, primitiveHover } from "./colliders";
 import { parse } from "./ini";
@@ -194,7 +195,14 @@ connection.onCompletion(async p => {
   if (entry && isMesh(entry, meshColliderSections(doc)) && p.position.character >= entry.valueStart &&
       p.position.character <= entry.valueStart + entry.value.length) {
     const refs = await meshes.resolve(doc, uri, entry, catalog, undefined, undefined, true);
-    const items = refs.map(r => ({ ...r, sortText: (isColliderName(r.name) ? "0" : "1") + r.name.toLowerCase() }))
+    const byModel = new Map<string, MeshTags>();
+    const items = refs.map(r => {
+      if (!byModel.has(r.file.full)) {
+        try { byModel.set(r.file.full, readMeshTags(r.file.full)); }
+        catch { byModel.set(r.file.full, new Map()); }
+      }
+      return {...r, sortText:(colliderType(byModel.get(r.file.full), r.object.meshName, r.name) ? "0" : "1") + r.name.toLowerCase()};
+    })
       .sort((a,b) => a.sortText.localeCompare(b.sortText));
     return completions({ raw: doc.lines[entry.line], start: entry.valueStart, end: entry.valueStart + entry.value.length,
       kind: 18, suffix: "", items }, p.position);

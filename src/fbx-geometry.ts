@@ -13,7 +13,7 @@ export function fbxGeometry(bytes: Buffer) {
       const corners = Array.from({length:count}, (_,i)=>begin+i);
       faces.push({indices: corners.map(v=>firstVertex+mesh.vertexIndices[v]), texcoords: mesh.uvs.length ? corners.map(v=>firstUV+v) : [], material: ""});
     }
-    for (const name of aliases[index]) objects.push({name, line:0, start:0, firstVertex, vertexCount:mesh.positions.length/3, faces});
+    for (const name of aliases[index]) objects.push({name, meshName:mesh.name, line:0, start:0, firstVertex, vertexCount:mesh.positions.length/3, faces});
   }
   return {vertices, uvs, objects, libraries:[]};
 }

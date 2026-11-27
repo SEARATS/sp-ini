@@ -21,7 +21,8 @@ test("INI and model context commands share the CLI preview and respect the clipb
     const noop = ()=>{};
     class Input { constructor(public uri) {} }
     const vscode = {
-      Uri:{parse: () => model, from: value=>({...value,toString:()=>value.path+"?"+value.query})},
+      Uri:{file: value=>({toString:()=>value}),parse: () => model, from: value=>({...value,toString:()=>value.path+"?"+value.query})},
+      RelativePattern:class {},
       TabInputCustom:Input,TabInputText:class {},Position:class {},Range:class {},
       EventEmitter:class {fire() {}}, WorkspaceEdit:class {text: string; replace(uri,range,text){this.text=text;}},
       commands:{registerCommand:(id,fn)=>commands.set(id,fn),executeCommand:()=>[{uri:model}]},
@@ -32,6 +33,7 @@ test("INI and model context commands share the CLI preview and respect the clipb
         showQuickPick:(items,options)=>options.canPickMany ? items.filter(i=>i.picked && picks[0]!=="cancel") : chooser(items,picks.shift()),showTextDocument:d=>{visible=d;},
         showInformationMessage:noop,showErrorMessage:message=>assert.fail(message)},
       workspace:{getConfiguration:()=>({get:()=>[]}),onDidChangeConfiguration:noop,
+        createFileSystemWatcher:()=>({onDidChange:noop,onDidCreate:noop,onDidDelete:noop,dispose:noop}),
         registerTextDocumentContentProvider:(scheme,p)=>{provider=p;},onDidCloseTextDocument:noop,
         openTextDocument:uri=>uri===ini ? doc : provider.provideTextDocumentContent(uri),
         applyEdit:e=>{applied=e.text;return true;}}
@@ -78,5 +80,13 @@ test("INI and model context commands share the CLI preview and respect the clipb
     picks=["INI file","Preview Changes","Apply"];
     await commands.get("seapower-ini.generateFromModel")(root);
     assert.equal(applied,after);
+    await writeFile(path.join(dir,"ship.meshes.yaml"),"meshes:\n  collision:\n    type: mesh\n");
+    await commands.get("seapower-ini.copyHierarchy")(model);
+    assert.match(copied,/Mesh=collision/);
+    assert.doesNotMatch(copied,/\[Colliders\]/);
+    copied = "no colliders";
+    picks = [];
+    await commands.get("seapower-ini.copyColliders")(model);
+    assert.equal(copied, "no colliders");
   } finally {await rm(dir,{recursive:true,force:true});}
 });

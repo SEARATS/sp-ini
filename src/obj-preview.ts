@@ -8,6 +8,8 @@ import type { IniSource } from "./ini";
 import type { EntityScene } from "./entity-model";
 import { previewColors } from "./preview-colors";
 import { meshFlagSetting } from "./mesh-flags";
+import { readMeshTags } from "./mesh-sidecar";
+import { editMeshTags, watchMeshTags } from "./mesh-tags-ui";
 const viewType = "seapower-ini.obj";
 
 function openSourceBeside(document, column) {
@@ -77,10 +79,24 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
     pair();
   }
   function showViewer(panel: vscode.WebviewPanel, uri: vscode.Uri, loading = "Opening model…") {
-    const sendFlags = () => panel.webview.postMessage({ type:"meshFlags", rules:vscode.workspace.getConfiguration(undefined, uri).get(meshFlagSetting) });
-    const ready = panel.webview.onDidReceiveMessage(message => { if (message.type === "ready") void sendFlags(); });
+    const editable = uri.scheme === "file" && /\.(obj|fbx|blend)$/i.test(uri.path);
+    const sendFlags = () => {
+      let entries = [], error = "";
+      try { if (editable) entries = [...readMeshTags(uri.fsPath)].map(([name, flags]) => [name, [...flags]]); }
+      catch (e) { error = e.message; }
+      return panel.webview.postMessage({ type:"meshFlags", editable, entries, error, rules:vscode.workspace.getConfiguration(undefined, uri).get(meshFlagSetting) });
+    };
+    const watcher = editable && watchMeshTags(uri, sendFlags);
+    const ready = panel.webview.onDidReceiveMessage(async message => {
+      if (message.type === "ready") void sendFlags();
+      if (editable && message.type === "editMeshTags" && Array.isArray(message.names) && message.names.length &&
+          message.names.every(name => typeof name === "string" && name.length)) {
+        try { await editMeshTags(uri, message.names); await sendFlags(); }
+        catch (error) { void vscode.window.showErrorMessage(error.message); }
+      }
+    });
     const changes = vscode.workspace.onDidChangeConfiguration(event => { if (event.affectsConfiguration(meshFlagSetting, uri)) void sendFlags(); });
-    panel.onDidDispose(() => { ready.dispose(); changes.dispose(); });
+    panel.onDidDispose(() => { ready.dispose(); changes.dispose(); if (watcher) watcher.dispose(); });
     const nonce = randomBytes(18).toString("base64");
     const script = panel.webview.asWebviewUri(vscode.Uri.joinPath(dist, "obj-viewer.js"));
     const icons = panel.webview.asWebviewUri(vscode.Uri.joinPath(dist, "codicon.css"));
@@ -107,6 +123,9 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
       #outline li > span { padding-left:1em; }
       .selected-object { background:var(--vscode-list-activeSelectionBackground); color:var(--vscode-list-activeSelectionForeground); }
       #outline p { margin:4px 0; color:var(--vscode-descriptionForeground); }
+      .row .edit-tags { padding:0 3px; background:transparent; color:inherit; opacity:0; }
+      .row:hover .edit-tags, .row:focus-within .edit-tags { opacity:1; }
+      .edit-tags[hidden] { display:none; }
       #entity-pickers label { display:grid; gap:2px; margin:4px 0; }
       #entity-warnings { max-width:28rem; white-space:normal; }
       #filters { display:grid; grid-template-columns:auto auto; align-items:center; gap:4px 8px; margin:6px 0; }
@@ -126,7 +145,7 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
       <select id="colliderWireframe" aria-label="Collider render mode"><option value="shaded">Shaded</option><option value="wireframe" selected>Wireframe</option></select>
       <div id="object-filter" hidden><label><input id="objects" type="checkbox" checked>Object markers</label></div>
       <div id="arc-filter" hidden><label><input id="arcs" type="checkbox" checked>System arcs</label></div></div>
-      <p></p><details id="entity-warnings" hidden><summary></summary><div></div></details><ul></ul></details>
+      <p></p><p id="sidecar-error" role="status" hidden></p><details id="entity-warnings" hidden><summary></summary><div></div></details><ul></ul></details>
       <script nonce="${nonce}" src="${script}"></script></body></html>`;
   }
   const blendType = "seapower-ini.blend";

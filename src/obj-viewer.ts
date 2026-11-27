@@ -3,6 +3,7 @@ import { previewFbx } from "./fbx-scene";
 import { previewObj } from "./obj-geometry";
 import { objLayout, type OutlineNode, type PreviewPart } from "./model-outline";
 import { meshFlagMatcher } from "./mesh-flags";
+import { colliderType, type MeshTags } from "./mesh-names";
 import { applyDisplay, previewLayer, type DisplaySettings } from "./preview-display";
 import { assembledEntity, patchEntity } from "./entity-viewer";
 import type { EntityScene } from "./entity-model";
@@ -115,6 +116,8 @@ const hidden = new Set<string>(saved?.hidden);
 const categories = new Map<string, boolean>();
 let updateRows: (() => void)[] = [];
 let matchFlags = meshFlagMatcher([]);
+let meshTags: MeshTags = new Map();
+let canEditTags = false;
 let updateFlagRows: (() => void)[] = [];
 const inCategory = (part: PreviewPart) => part.widget ? settings.objects || (settings.arcs && arcGuides.has(part.id)) : part.collider ? settings.colliders : settings.meshes;
 function updateDisplay() {
@@ -195,7 +198,14 @@ function showOutline(nodes: OutlineNode[], note: string, uri?: string, preserve=
     const children = node.children.map(child => row(child, fullPath, depth + 1));
     const subtree: PreviewPart[] = [...node.parts, ...children.flatMap(child => child.subtree)];
     const targets = node.parts.length ? node.parts : subtree;
-    node.parts.forEach(part => categories.set(part.id, part.collider));
+    const classify = () => {
+      for (const part of node.parts) {
+        if (part.names) part.collider = colliderType(meshTags, ...part.names);
+        categories.set(part.id, part.collider);
+      }
+      if (!node.colliderStyle) content.classList.toggle("collider", !!node.parts.length && node.parts.every(part => part.collider));
+    };
+    classify();
     const check = document.createElement("input");
     check.type = "checkbox";
     check.setAttribute("aria-label", "Visibility of " + fullPath);
@@ -210,15 +220,26 @@ function showOutline(nodes: OutlineNode[], note: string, uri?: string, preserve=
     };
     if (targets.length && !node.tree) content.append(check);
     if (node.colliderStyle) content.classList.add(node.colliderStyle);
-    else if (node.parts.length && node.parts.every(part => part.collider)) content.classList.add("collider");
     content.append(node.name || "(unnamed)");
     if (node.meshName || (!entityTrees && node.parts.length)) {
       const badges = document.createElement("span");
       badges.className = "mesh-flags";
       content.append(badges);
+      const edit = document.createElement("button");
+      if (node.tagNames) {
+        edit.className = "codicon codicon-edit edit-tags";
+        edit.title = "Edit mesh tags";
+        edit.setAttribute("aria-label", "Edit tags for " + node.name);
+        edit.onclick = event => {
+          event.preventDefault(); event.stopPropagation();
+          vscode.postMessage({type:"editMeshTags", names:node.tagNames});
+        };
+        content.append(edit);
+      }
       const title = label.title;
       const update = () => {
-        const flags = matchFlags(node.name, node.meshName);
+        edit.hidden = !canEditTags;
+        const flags = matchFlags(...(node.tagNames ?? [node.name, node.meshName]));
         badges.hidden = !flags.length;
         badges.replaceChildren(...flags.map(flag => {
           const icon = document.createElement("span");
@@ -230,7 +251,7 @@ function showOutline(nodes: OutlineNode[], note: string, uri?: string, preserve=
         }));
         label.title = [title, flags.map(flag => flag.label).join(", ")].filter(Boolean).join("\n");
       };
-      updateFlagRows.push(update);
+      updateFlagRows.push(() => { classify(); update(); });
       update();
     }
     updateRows.push(() => {
@@ -470,8 +491,14 @@ try {
 let fbxUri: string;
 window.addEventListener("message", ({ data }) => {
   if (data.type === "meshFlags") {
-    matchFlags = meshFlagMatcher(data.rules);
+    meshTags = new Map(data.entries.map(([name, flags]) => [name, new Map(flags)]));
+    matchFlags = meshFlagMatcher(data.rules, meshTags);
+    canEditTags = data.editable;
+    const error = document.getElementById("sidecar-error");
+    error.textContent = data.error;
+    error.hidden = !data.error;
     updateFlagRows.forEach(update => update());
+    updateDisplay();
     return;
   }
   if (data.type === "entityLoading" || data.type === "entityError") {

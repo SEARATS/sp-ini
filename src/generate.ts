@@ -4,12 +4,13 @@ import { basename } from "node:path";
 import { spawnSync } from "node:child_process";
 import { parseArgs } from "node:util";
 import { changes, generate, hierarchy, selectParent, snippet } from "./hierarchy";
+import { readMeshTags } from "./mesh-sidecar";
 try {
   const { values } = parseArgs({ options: { model:{type:"string"}, parent:{type:"string"}, ini:{type:"string"},
     clipboard:{type:"boolean"}, stdout:{type:"boolean"}, roles:{type:"string"}, "dry-run":{type:"boolean"} } });
   if (!values.model || !values.parent || [values.ini,values.clipboard,values.stdout].filter(Boolean).length!==1) throw Error("Usage: node generate.js --model file.fbx --parent name-or-path (--ini target.ini | --clipboard | --stdout) [--roles roles.json] [--dry-run]");
 
-  const root = selectParent(hierarchy(readFileSync(values.model)),values.parent);
+  const root = selectParent(hierarchy(readFileSync(values.model), readMeshTags(values.model)),values.parent);
   const roles = values.roles ? JSON.parse(readFileSync(values.roles,"utf8")) : {};
   if (values.clipboard || values.stdout) {
     const text = snippet(basename(values.model),root,roles);

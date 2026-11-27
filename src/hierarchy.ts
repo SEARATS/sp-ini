@@ -4,14 +4,19 @@ import { Matrix4, Vector3 } from "three";
 import { createHash } from "node:crypto";
 import { createTwoFilesPatch } from "diff";
 import { parse } from "./ini";
-import { isColliderName } from "./mesh-names";
+import { isColliderName, tagOverride, type MeshTags } from "./mesh-names";
 
 export type Role = "Submodel" | "Collider" | "Skip";
 export interface ModelNode {
   id: string; name: string; mesh: string; path: string; position: number[]; transform?: Matrix4; children: ModelNode[];
+  colliderOverride?: boolean;
 }
-export function hierarchy(bytes: Buffer): ModelNode[] {
-  return sceneHierarchy(readFbx(bytes, "hierarchy"));
+export function hierarchy(bytes: Buffer, tags?: MeshTags): ModelNode[] {
+  const roots = sceneHierarchy(readFbx(bytes, "hierarchy"));
+  if (tags?.size) for (const node of flatten(roots)) {
+    if (node.mesh) node.colliderOverride = tagOverride(tags, "Collider", [node.mesh, node.name]);
+  }
+  return roots;
 }
 
 export function sceneHierarchy(scene: FbxScene) {
@@ -46,7 +51,7 @@ export function selectParent(roots: ModelNode[], parent: string) {
   if (matches.length!==1) throw Error("Choose a unique parent path for " + parent);
   return matches[0];
 }
-export function defaultRole(n: ModelNode): Role { return isColliderName(n.name) || isColliderName(n.mesh) ? "Collider" : "Submodel"; }
+export function defaultRole(n: ModelNode): Role { return (n.colliderOverride ?? (isColliderName(n.name) || isColliderName(n.mesh))) ? "Collider" : "Submodel"; }
 
 type ExportRole = Role | "Existing parent";
 

@@ -2,10 +2,11 @@ import type { ModelNode } from "./hierarchy";
 import { isColliderName } from "./mesh-names";
 import type { PreviewColor } from "./preview-colors";
 
-export interface PreviewPart { id: string; collider: boolean; widget?: boolean }
+export interface PreviewPart { id: string; collider: boolean; widget?: boolean; names?: string[] }
 export interface OutlineNode {
   name: string;
   meshName?: string;
+  tagNames?: string[];
   children: OutlineNode[];
   parts: PreviewPart[];
   modelId?: string;
@@ -17,7 +18,8 @@ export interface OutlineNode {
 export function fbxOutline(nodes: ModelNode[]): OutlineNode[] {
   return nodes.map(node => ({
     name: node.name, meshName: node.mesh, modelId: node.id, children: fbxOutline(node.children),
-    parts: node.mesh ? [{id: node.id, collider: isColliderName(node.name) || isColliderName(node.mesh)}] : []
+    tagNames: node.mesh ? [node.mesh, node.name] : undefined,
+    parts: node.mesh ? [{id: node.id, names:[node.mesh, node.name], collider: isColliderName(node.name) || isColliderName(node.mesh)}] : []
   }));
 }
 
@@ -28,7 +30,7 @@ export function objLayout(source: string) {
   const groupRows = new Map<string, OutlineNode>();
   let owner: OutlineNode, occurrence = 0, groups: string[] = [], block = -1;
   function startObject(name: string) {
-    owner = {name, children: [], parts: []};
+    owner = {name, tagNames:[name], children: [], parts: []};
     occurrence = (names.get(name) ?? 0) + 1;
     names.set(name, occurrence);
     nodes.push(owner);
@@ -36,7 +38,7 @@ export function objLayout(source: string) {
   }
   function groupRow(name: string) {
     if (!groupRows.has(name)) {
-      const row = {name, children: [], parts: []};
+      const row = {name, tagNames:[name, owner.name], children: [], parts: []};
       owner.children.push(row);
       groupRows.set(name, row);
     }
@@ -66,7 +68,7 @@ export function objLayout(source: string) {
         block = parts.length;
         lines[i] = "o " + block + "\n" + lines[i];
       }
-      const part = {id: JSON.stringify([owner.name, occurrence, ...groups]), collider: isColliderName(owner.name) || groups.some(isColliderName)};
+      const part = {id: JSON.stringify([owner.name, occurrence, ...groups]), names:[...groups, owner.name], collider: isColliderName(owner.name) || groups.some(isColliderName)};
       parts[block] = {name: groups.join(" ") || owner.name, part};
       if (seenParts.has(part.id)) continue;
       seenParts.add(part.id);
