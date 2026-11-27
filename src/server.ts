@@ -1,6 +1,9 @@
 import { createConnection, TextDocuments, TextDocumentSyncKind } from "vscode-languageserver/node";
 import { TextDocument } from "vscode-languageserver-textdocument";
 import * as path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import type { PublishDiagnosticsParams } from "vscode-languageserver";
+import { analyze } from "./analysis";
 import { StockAssets, resolvedDiffuse, stockHover } from "./stock-assets";
 import { roots } from "./roots";
 import { Catalog, buildCatalog, uriKey } from "./catalog";
@@ -22,6 +25,8 @@ import { completions, diagnostics, documentLinks, exact, inspect, location, sour
 const connection = createConnection();
 const documents = new TextDocuments(TextDocument);
 const parsed = new Map();
+let scanned = new Map<string, PublishDiagnosticsParams>();
+let scanRevision = 0;
 const openModels = new Map();
 const stock = new StockAssets();
 connection.onShutdown(() => stock.close());
@@ -107,6 +112,23 @@ connection.onRequest("seapower/rebuild", params => {
   if (params) { options = params.options; folders = params.folders; }
   return refresh();
 });
+connection.onRequest("seapower/analyze", async ({vanilla}: {vanilla: boolean}, token) => {
+  const revision = ++scanRevision;
+  const cancelled = () => token.isCancellationRequested || revision !== scanRevision;
+  const targets = vanilla ? ["--vanilla"] : folders.filter(f=>f.uri.startsWith("file:")).map(f=>fileURLToPath(f.uri));
+  const next = new Map<string, PublishDiagnosticsParams>();
+  const {summary} = await analyze(targets, options, (file, diagnostics) => {
+    const uri=pathToFileURL(file).href;
+    next.set(uriKey(uri),{uri,diagnostics});
+  }, cancelled);
+  if (cancelled()) return;
+  const opened = new Set([...parsed.keys()].map(uriKey));
+  for (const [key,{uri}] of scanned) if (!next.has(key) && !opened.has(key)) connection.sendDiagnostics({uri,diagnostics:[]});
+  for (const [key,result] of next) if (!opened.has(key)) connection.sendDiagnostics(result);
+  scanned = next;
+  return summary;
+});
+documents.onDidSave(({document}) => scanned.delete(uriKey(document.uri)));
 documents.onDidChangeContent(({ document }) => {
   if (document.languageId === "wavefront-obj") {
     openModels.set(uriKey(document.uri), document);
@@ -122,7 +144,7 @@ documents.onDidClose(({ document }) => {
     return;
   }
   parsed.delete(document.uri);
-  connection.sendDiagnostics({ uri: document.uri, diagnostics: [] });
+  connection.sendDiagnostics({ uri: document.uri, diagnostics: scanned.get(uriKey(document.uri))?.diagnostics || [] });
 });
 
 async function context(params) {

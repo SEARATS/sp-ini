@@ -288,4 +288,4 @@ function submodelNames(doc: ReturnType<typeof parse>) {
   return new Set((entries || []).map(k => k.value.toLowerCase()));
 }
 
-export { Catalog, buildCatalog, family, normalize, submodelNames, uriKey };
+export { Catalog, buildCatalog, excluded, family, normalize, submodelNames, uriKey };

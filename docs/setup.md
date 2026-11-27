@@ -8,6 +8,12 @@ Install the VSIX using **Extensions: Install from VSIX...**. To select the langu
 
 The extension finds the game through Steam. For a custom installation, set `seapowerIni.gameDirectory` to the folder containing `Sea Power_Data`. Add other mod folders to `seapowerIni.localModDirectories` and other Workshop `content/1286220` folders to `seapowerIni.workshopDirectories`. After updating external content, run **Sea Power INI: Rebuild Content Index**.
 
+## Analyze saved INIs
+
+Run **Sea Power INI: Analyze INI Files…** from the Command Palette. Choose **Vanilla game** to check the installed `original` directory in isolation, or **Entire workspace** to check your project's saved INIs using your configured reference sources. Select a finding in **Problems** to jump to its line. Each scan replaces the previous scan's results. Open editors continue to check unsaved text.
+
+From a checkout of sp-ini, run `pnpm run analyze --vanilla` or `pnpm run analyze "path/to/mod"`. Redirect output to save a report. Exit codes are 0 for a completed scan without errors, 1 for lint errors, and 2 for file or setup failures.
+
 In VS Code Settings, filter by `@ext:searats.seapower-ini search`. Each source starts enabled. Changes rebuild the index and refresh open entity previews.
 
 Edit **Search: Order** to put preferred sources first. For example, `["workshop", "game"]` searches Workshop ahead of vanilla and then checks the remaining sources in their default order. The **Project Root** checkbox controls loose files under the workspace independently of the two subdirectories. Go to Definition opens the highest-priority match. It can list multiple definitions at the same priority.

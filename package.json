@@ -2,7 +2,7 @@
   "name": "seapower-ini",
   "displayName": "Sea Power INI",
   "description": "Autocomplete, error checking and Go to Definition for Sea Power INI files.",
-  "version": "0.9.9",
+  "version": "0.9.10",
   "icon": "dist/icon.png",
   "publisher": "searats",
   "private": true,
@@ -156,6 +156,11 @@
         "title": "Preview Entity",
         "category": "Sea Power INI",
         "icon": "$(preview)"
+      },
+      {
+        "command": "seapower-ini.analyze",
+        "title": "Analyze INI Files…",
+        "category": "Sea Power INI"
       },
       {
         "command": "seapower-ini.previewUnitCard",
@@ -457,6 +462,7 @@
     }
   },
   "scripts": {
+    "analyze": "tsx src/lint.ts",
     "icon": "tsx scripts/icon.ts",
     "scan:units": "tsx scripts/scan-unit-hints.ts",
     "build": "tsx scripts/build.ts",

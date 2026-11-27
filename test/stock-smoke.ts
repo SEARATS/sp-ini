@@ -457,6 +457,17 @@ export const run = async () => {
     await vscode.commands.executeCommand("workbench.action.openSettings","@id:seapowerIni.search.projectRoot");
     await renderedModel(port,()=>document.querySelector('.settings-editor .settings-tree-container [role="checkbox"]') ? "verified controls" : "waiting for project root checkbox");
     outcomes.push("Search order list and project root checkbox displayed in VS Code Settings");
+    const analysis = vscode.commands.executeCommand("seapower-ini.analyze");
+    await renderedModel(port,()=>document.querySelector<HTMLElement>(".quick-input-widget")?.innerText.includes("Vanilla game") ? "verified controls" : "waiting for analysis scopes");
+    await vscode.commands.executeCommand("workbench.action.quickOpenSelectNext");
+    await vscode.commands.executeCommand("workbench.action.acceptSelectedQuickOpenItem");
+    await analysis;
+    const hasStockProblem=()=>vscode.languages.getDiagnostics().some(([uri,issues])=>
+      /Sea Power_Data\/StreamingAssets\/original\/aircraft\/usn_sh-2f\.ini$/i.test(uri.path) &&
+      issues.some(d=>d.range.start.line===598 && d.message.includes("RotorsIdleLoopAudioFadeInTime")));
+    for (let i=0;i<240 && !hasStockProblem();i++) await new Promise(resolve=>setTimeout(resolve,250));
+    assert.ok(hasStockProblem(),"The vanilla scan should publish unopened SH-2F diagnostics to Problems");
+    outcomes.push("Ran vanilla analysis and found the unopened SH-2F duplicate in Problems");
   }
   fs.writeFileSync(process.env.SP_INI_TEST_RESULT,outcomes.join("\n"));
 };

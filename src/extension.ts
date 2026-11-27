@@ -117,6 +117,21 @@ async function activate(context) {
     timer = setTimeout(update, 500);
   };
   context.subscriptions.push(
+    vscode.commands.registerCommand("seapower-ini.analyze", async () => {
+      const workspace = (vscode.workspace.workspaceFolders || []).filter(f => f.uri.scheme === "file");
+      const scopes = [{label:"Vanilla game", description:"Check the installed original INIs", vanilla:true}];
+      if (workspace.length) scopes.unshift({label:"Entire workspace", description:"Check saved INIs in all workspace folders", vanilla:false});
+      const scope = await vscode.window.showQuickPick(scopes, {title:"Analyze Sea Power INI files"});
+      if (!scope) return;
+      await vscode.window.withProgress({location:vscode.ProgressLocation.Notification,title:"Analyzing " + scope.label,cancellable:true},async (_,token)=>{
+        try {
+          const summary = await client.sendRequest("seapower/analyze",{vanilla:scope.vanilla},token);
+          if (!summary || token.isCancellationRequested) return;
+          await vscode.commands.executeCommand("workbench.actions.view.problems");
+          void vscode.window.showInformationMessage(summary);
+        } catch (error) { if (!token.isCancellationRequested) void vscode.window.showErrorMessage(error.message); }
+      });
+    }),
     watcher, watcher.onDidCreate(schedule), watcher.onDidChange(schedule), watcher.onDidDelete(schedule),
     models, models.onDidCreate(schedule), models.onDidDelete(schedule),
     { dispose: () => clearTimeout(timer) },

@@ -9,7 +9,7 @@ process.chdir(root);
 async function compile() {
   await Promise.all([
     generateIcon(),
-    build({ entryPoints: ["src/extension.ts", "src/server.ts", "src/pspad.ts", "src/generate.ts"], outdir: "dist",
+    build({ entryPoints: ["src/extension.ts", "src/server.ts", "src/pspad.ts", "src/generate.ts", "src/lint.ts"], outdir: "dist",
       bundle: true, platform: "node", target: "node18", external: ["vscode"] }),
     build({ entryPoints: ["test/preview-smoke.ts", "test/stock-smoke.ts", "test/vscode-smoke.ts", "scripts/gallery/capture.ts"],
       outdir: "dist/dev", entryNames: "[name]", bundle: true, platform: "node", target: "node18", external: ["vscode"] }),
