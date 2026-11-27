@@ -131,6 +131,8 @@ Run `pnpm run test:fbx` to check geometry, mesh lookup and hierarchy export agai
 
 ## Release
 
-Bump `version` in `package.json` and push to `main`. After tests pass, CI builds all three downloads, tags the commit and publishes them to GitHub Releases. Further pushes at the same version run the build checks. With the repository variable `PUBLISH_MARKETPLACE=true`, it also publishes the same VSIX under the SEARATS Marketplace publisher.
+Bump `version` in `package.json` and push to `main`. CI builds and tests each push immediately. The `release-quiet-period` GitHub environment has a 60-minute wait timer. Every push to `main` restarts it. After an hour without another push and a successful build, CI publishes the latest unreleased version to GitHub Releases and, when `PUBLISH_MARKETPLACE=true`, the VS Code Marketplace.
+
+Pushing an explicit `v*` tag matching the package version starts a release as soon as its build passes.
 
 Run **Publish editor releases** manually on `main` to check Marketplace authentication without releasing a version. The Trusted Publishing policy names `SEARATS/sp-ini` and `marketplace.yml`. [Microsoft's publishing guide](https://code.visualstudio.com/api/working-with-extensions/publishing-extension#publish-with-github-actions-and-trusted-publishing)
