@@ -161,11 +161,6 @@ function render(rows: ExportRow[], categories: ExportCategory[]) {
   updateTags(rows);
 }
 
-button("only-colliders").onclick = () => {
-  enabled.clear(); enabled.add("Collider");
-  for (const input of document.querySelectorAll<HTMLInputElement>("header label input[type=checkbox]")) input.checked = input.value === "Collider";
-  changed();
-};
 for (const type of ["copy","new","save","target","apply","clearTarget"]) {
   button(type).onclick = () => vscode.postMessage({type, generation});
 }

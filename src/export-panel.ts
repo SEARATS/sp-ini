@@ -186,7 +186,7 @@ export async function openExportPanel(context: vscode.ExtensionContext, uri: vsc
   #rig canvas{display:block;width:100%;height:100%;touch-action:none} #rig-tools{position:absolute;bottom:5px;left:5px;display:flex;gap:8px;align-items:center;background:var(--vscode-editor-background)}
   #rig-note{position:absolute;top:4px;left:6px;max-width:95%;max-height:45%;overflow:auto;white-space:pre-line;background:var(--vscode-editor-background)}
   @media(max-width:620px){main{grid-template-columns:1fr;grid-template-rows:minmax(75px,1fr) minmax(180px,2fr)} #rig-view{height:clamp(85px,21vh,180px)}}
-  </style></head><body><header><strong>Export categories</strong><div class="categories"></div><button id="only-colliders">Colliders only</button><div id="lod-settings" class="categories"></div></header>
+  </style></head><body><header><strong>Export categories</strong><div class="categories"></div><div id="lod-settings" class="categories"></div></header>
   <main><section><h2>Objects</h2><div id="objects"></div></section><section>
   <details id="rig"><summary>Rig preview</summary><div id="rig-view"><canvas aria-label="Exported submodel rig"></canvas>
   <span id="rig-note" role="status"></span><div id="rig-tools"><button id="fit-rig">Fit rig</button><label><input id="parent-links" type="checkbox" checked>Parent links</label></div></div></details>
