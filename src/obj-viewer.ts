@@ -167,11 +167,13 @@ for (const key of ["meshWireframe","colliderWireframe"] as const) {
   mode.onchange = () => { settings[key] = mode.value === "wireframe"; changed(); };
 }
 
-function showOutline(nodes: OutlineNode[], note: string, uri?: string, preserve=false) {
+function showOutline(nodes: OutlineNode[], note = "", uri?: string, preserve=false) {
   const expanded=new Map(Array.from(outline.querySelectorAll<HTMLDetailsElement>("details[data-branch]"),el=>[el.dataset.branch,el.open]));
   const scroll=outline.scrollTop;
   const entityTrees = nodes.some(node=>node.tree);
-  outline.querySelector("p").textContent = note;
+  const message = outline.querySelector("p");
+  message.textContent = note;
+  message.hidden = !note;
   updateRows = [];
   updateFlagRows = [];
   categories.clear();
@@ -548,7 +550,7 @@ window.addEventListener("message", ({ data }) => {
     delete document.body.dataset.vscodeContext;
     outline.querySelector("summary").textContent = "Objects and groups";
     layout = objLayout(data.text);
-    showOutline(layout.nodes, "OBJ records group membership only.");
+    showOutline(layout.nodes);
   }
   if (controls) void load(data, layout);
 });
