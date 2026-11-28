@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { watchFile, unwatchFile, type Stats } from "node:fs";
 import * as vscode from "vscode";
 import { readBlendPreview } from "./blend-export";
 import { needsFbxReader, readFbx } from "./fbx-reader";
@@ -270,6 +271,21 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
       let pending: vscode.CancellationTokenSource, timer, entity: string, appearance: string;
       let modelSources:Record<string,string> = {};
       let serial=0, sources = new Map<string,IniSource>();
+      let knownAssets:string[] = [];
+      const watched=new Map<string,()=>void>();
+      function schedule() { cancel(); timer=setTimeout(update,180); }
+      function syncWatches(uris:string[]) {
+        const keep=new Set(uris);
+        for (const [uri,stop] of watched) if (!keep.has(uri)) { stop(); watched.delete(uri); }
+        for (const uri of keep) watchDependency(uri);
+      }
+      function watchDependency(uri:string) {
+        if (watched.has(uri) || uri===document.uri.toString() || !uri.startsWith("file:")) return;
+        const file=vscode.Uri.parse(uri).fsPath;
+        const change=(a:Stats,b:Stats)=>{if (a.mtimeMs!==b.mtimeMs || a.ctimeMs!==b.ctimeMs || a.size!==b.size) schedule();};
+        watchFile(file,{persistent:false,interval:750},change);
+        watched.set(uri,()=>unwatchFile(file,change));
+      }
       const stagedSources=new Map<number,Map<string,IniSource>>();
       function cancel() { pending?.cancel(); pending?.dispose(); pending = undefined; clearTimeout(timer); }
       async function reveal(id: string) {
@@ -294,26 +310,39 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
         cancel();
         const source = pending = new vscode.CancellationTokenSource();
         const token = source.token;
+        const version=++serial;
+        knownAssets=[];
         const request = {uri:document.uri.toString(),text:document.getText(),entity,appearance,modelSources};
         try {
-          await panel.webview.postMessage({type:"entityLoading"});
+          await panel.webview.postMessage({type:"entityLoading",version});
           const choices = await entityRequest(request,token);
           if (token.isCancellationRequested) return;
           entity = choices.entity; appearance = choices.appearance;
           modelSources = Object.fromEntries((choices.modelSources ?? []).filter(c=>c.selected).map(c=>[c.key,c.selected]));
           await panel.webview.postMessage({type:"entityChoices",...choices});
-          const scene: EntityScene = await entityRequest({...request,entity,appearance,modelSources,render:true},token);
+          let posted = Promise.resolve();
+          const scene: EntityScene = await entityRequest({...request,entity,appearance,modelSources,render:true,knownAssets},token,chunk=>{
+            if (chunk.kind==="watch") { if (!token.isCancellationRequested) watchDependency(chunk.uri); return; }
+            posted = posted.then(async()=>{
+              if (!token.isCancellationRequested) await panel.webview.postMessage({type:"entityChunk",version,entity,chunk});
+            });
+          });
+          await posted;
           if (token.isCancellationRequested) return;
-          const version=++serial;
           const next=new Map<string,IniSource>();
+          syncWatches(scene.dependencies ?? []);
           for (const part of [...scene.parts,...(scene.objects || [])]) if (part.source) next.set(part.id,part.source);
           stagedSources.set(version,next);
           if (!await panel.webview.postMessage({type:"entityScene",scene,entity,version,documentUri:request.uri})) stagedSources.delete(version);
         } catch (error) {
-          if (!token.isCancellationRequested) await panel.webview.postMessage({type:"entityError",message:error.message});
+          if (!token.isCancellationRequested) await panel.webview.postMessage({type:"entityError",version,message:error.message});
         }
       }
       const messages = panel.webview.onDidReceiveMessage(message => {
+        if (message.type==="entityCachedAssets") {
+          if (message.version===serial) knownAssets=message.digests;
+          return;
+        }
         if (message.type === "entityRendered") {
           const next=stagedSources.get(message.version);
           if (message.applied && next) sources=next;
@@ -333,7 +362,7 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
         cancel(); timer = setTimeout(update,350);
       });
       const indexed = onIndexChanged(()=>void update());
-      panel.onDidDispose(()=>{cancel();messages.dispose();edits.dispose();indexed.dispose();});
+      panel.onDidDispose(()=>{cancel();watched.forEach(stop=>stop());messages.dispose();edits.dispose();indexed.dispose();});
       showViewer(panel, document.uri);
     }
   });

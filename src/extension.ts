@@ -3,7 +3,9 @@ import { registerBlendExport } from "./blend-export-ui";
 import { registerHierarchy } from "./hierarchy-ui";
 import { watchFile, unwatchFile, type Stats } from "node:fs";
 import * as vscode from "vscode";
-import { LanguageClient, TransportKind } from "vscode-languageclient/node";
+import { LanguageClient, ProgressType, TransportKind } from "vscode-languageclient/node";
+import { randomUUID } from "node:crypto";
+import type { EntityProgress } from "./entity-model";
 import { referencePatterns } from "./previews";
 import { registerIniActions } from "./ini-actions";
 import { registerObjPreview } from "./obj-preview";
@@ -76,12 +78,18 @@ async function activate(context) {
   registerBlendExport(context);
   const indexed = new vscode.EventEmitter<void>();
   context.subscriptions.push(registerUnitCard(context,(params,token)=>client.sendRequest("seapower/entityPreview",params,token),indexed.event));
-  context.subscriptions.push(indexed, registerModIniLanguage(), registerObjPreview(context,(params,token)=>client.sendRequest("seapower/entityPreview",params,token),indexed.event), registerIniActions());
+  const requestEntity = async (params,token,onChunk?:(chunk:EntityProgress)=>void) => {
+    const progressToken = onChunk && randomUUID();
+    const listener = onChunk && client.onProgress(new ProgressType<EntityProgress>(),progressToken,onChunk);
+    try { return await client.sendRequest("seapower/entityPreview",{...params,progressToken},token); }
+    finally { listener?.dispose(); }
+  };
+  context.subscriptions.push(indexed, registerModIniLanguage(), registerObjPreview(context,requestEntity,indexed.event), registerIniActions());
   client = new LanguageClient("seapower-ini", "Sea Power INI",
     { module: context.asAbsolutePath("dist/server.js"), transport: TransportKind.ipc },
     { documentSelector: [{ language: "seapower-ini", scheme: "file" }, { language: "seapower-ini", scheme: "untitled" },
         { language: "wavefront-obj", scheme: "file" }, {scheme:"file",pattern:"**/*.[mM][aA][tT]"}],
-      initializationOptions: options(), middleware: {
+      initializationOptions: {...options(),previewCacheDirectory:vscode.Uri.joinPath(context.globalStorageUri,"entity-assets-v1").fsPath}, middleware: {
         async provideDocumentLinks(doc, token, next) {
           const links = await next(doc, token);
           for (const link of links || []) {

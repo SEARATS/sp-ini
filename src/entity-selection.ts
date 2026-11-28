@@ -6,7 +6,7 @@ import { field, expandEntityIni } from "./entity-model";
 
 export interface Choice { id: string; label: string }
 export interface Appearance { general?: IniSection; defaults?: IniSection; selected?: IniSection }
-export interface PreviewRequest {uri: string; text: string; entity?: string; appearance?: string; render?: boolean; modelSources?: Record<string,string>; card?: boolean; locale?: string}
+export interface PreviewRequest {uri: string; text: string; entity?: string; appearance?: string; render?: boolean; progressToken?:string; knownAssets?:string[]; modelSources?: Record<string,string>; card?: boolean; locale?: string}
 
 export async function readEntityDefinition(file:{uri:string}, catalog:Catalog, materials:Materials) {
   const doc = await materials.readIni(file);

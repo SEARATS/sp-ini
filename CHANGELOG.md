@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- The INI preview draws meshes while textures load in the background. It caches unchanged assets across reloads and watches the model, material and texture files used by each open preview.
+- Taxi, holding and approach paths use a darker blue than deck points.
+
 - Recovery taxi paths continue down the elevator to `DespawnPosition`, or `SpawnPosition` when omitted. The descent follows the platform’s configured lowering animation.
 
 - Toggle individual taxi, holding and approach paths in the hierarchy. Routes are visible from either side of the hull. Hover highlights flight points and paths ahead of the deck underneath. Clicking selects the first item in the tooltip.

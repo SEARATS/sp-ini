@@ -34,7 +34,13 @@ export interface EntityScene {
   geometry: {positions: string; uvs: string; normals?:string}[];
   textures: {png:string; alpha:"opaque"|"cutout"|"blend"}[];
   warnings: string[];
+  dependencies?:string[];
 }
+export type EntityChunk =
+  | {kind:"parts"; parts:EntityPart[]}
+  | {kind:"geometry"; part:string; index:number; digest?:string; data?:EntityScene["geometry"][number]}
+  | {kind:"texture"; part:string; index:number; digest?:string; data?:EntityScene["textures"][number]};
+export type EntityProgress = EntityChunk | {kind:"watch";uri:string};
 export const field = (section: IniSection | undefined, name: string) => section?.keys.find(k => k.name.toLowerCase() === name);
 export const deckPointSection = /^(elevator|launchpoint|recoverypoint|taxipoint)\d+$/i;
 

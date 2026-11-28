@@ -1,0 +1,63 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { pathToFileURL } from "node:url";
+import { PNG } from "pngjs";
+import { buildCatalog } from "../src/catalog";
+import { entityAssets, reusePreviewAsset } from "../src/entity-assets";
+import { entityResourceSources } from "../src/entity-resources";
+import type { EntityChunk } from "../src/entity-model";
+import { parse } from "../src/ini";
+import { Materials } from "../src/materials";
+import { MeshFiles } from "../src/meshes";
+import { PreviewCache } from "../src/preview-cache";
+
+test("a slow texture lets later meshes through; reloads reuse unchanged assets", {timeout:8000}, async t=>{
+  const root=await mkdtemp(join(tmpdir(),"sp-preview-"));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  const uri=pathToFileURL(join(root,"unit.ini")).href;
+  const doc=parse("[Models]\nResourcesRoot=ship.obj\nResourcesMesh=Hull\nResourcesMaterial=hull.ini\n[Submodels]\nSubModel1=Mount\n[Mount]\nMesh=Mount");
+  const model="o Hull\nv 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\no Mount\nf 3 2 1";
+  const obj=join(root,"ship.obj"), png=join(root,"hull.png");
+  await writeFile(obj,model);
+  await writeFile(join(root,"hull.ini"),"[Textures]\n_MainTex=hull.png");
+  const bitmap=new PNG({width:1,height:1});
+  const color=async(r:number)=>{bitmap.data.set([r,25,0,255]);await writeFile(png,PNG.sync.write(bitmap));};
+  await color(100);
+  const catalog=await buildCatalog([{dir:root,source:"Workspace"}]);
+  const sources=await entityResourceSources(doc,uri,catalog);
+  let release:()=>void;
+  const gate=new Promise<void>(resolve=>{release=resolve;});
+  const watched=new Set<string>(), known=new Set<string>();
+  async function render(wait=false) {
+    const meshes=new MeshFiles(), cache=meshes.previewCache=new PreviewCache(join(root,"cache"));
+    const material=new Materials(()=>undefined).forPreview(uri=>watched.add(uri),cache);
+    const texture=material.texture.bind(material), model=meshes.model.bind(meshes);
+    let parses=0;
+    material.texture=async(file,max)=>{if (wait) await gate;return texture(file,max);};
+    meshes.model=async(file,blend)=>{parses++;return model(file,blend);};
+    const chunks:EntityChunk[]=[];
+    const scene=await entityAssets(doc,uri,catalog,meshes,material,undefined,{},sources,new AbortController().signal,async chunk=>{
+      chunks.push(reusePreviewAsset(chunk,known));
+      if (chunk.kind==="geometry" && chunk.part==="mount") release();
+    },uri=>watched.add(uri));
+    return {parses,chunks,scene};
+  }
+  const first=await render(true);
+  assert.equal(first.parses,1);
+  assert.deepEqual(first.chunks.map(c=>c.kind),["parts","geometry","geometry","texture"]);
+  for (const c of first.chunks) if (c.kind!=="parts") known.add(c.digest);
+  assert.deepEqual([...watched].map(u=>u.split("/").pop()).sort(),["hull.ini","hull.png","ship.obj"]);
+  const warm=await render();
+  assert.equal(warm.parses,0);
+  assert.deepEqual(warm.scene,first.scene);
+  assert.ok(warm.chunks.every(c=>c.kind==="parts" || !c.data));
+  await color(200);
+  const changed=await render();
+  assert.equal(changed.parses,0);
+  assert.deepEqual(changed.chunks.filter(c=>c.kind!=="parts" && c.data).map(c=>c.kind),["texture"]);
+  await writeFile(obj,model.replace("v 1","v 2"));
+  assert.equal((await render()).parses,1);
+});

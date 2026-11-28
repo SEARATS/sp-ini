@@ -1,4 +1,6 @@
-import { createConnection, TextDocuments, TextDocumentSyncKind } from "vscode-languageserver/node";
+import { createConnection, ProgressType, TextDocuments, TextDocumentSyncKind } from "vscode-languageserver/node";
+import type { EntityChunk, EntityProgress } from "./entity-model";
+import { PreviewCache } from "./preview-cache";
 import { TextDocument } from "vscode-languageserver-textdocument";
 import * as path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -19,7 +21,7 @@ import { parse } from "./ini";
 import { unitHints } from "./unit-hints";
 import { moveMisplacedKey } from "./section-placement";
 import { entityResourceSources } from "./entity-resources";
-import { entityAssets } from "./entity-assets";
+import { entityAssets, reusePreviewAsset } from "./entity-assets";
 import { entityDocument, selectEntity, type PreviewRequest } from "./entity-selection";
 import {unitCard} from "./unit-card";
 import { iniFolds, objFolds } from "./folding";
@@ -75,6 +77,7 @@ connection.onInitialize(params => {
   canRefreshHints = !!params.capabilities.workspace?.inlayHint?.refreshSupport;
   versionedEdits = !!params.capabilities.workspace?.workspaceEdit?.documentChanges;
   options = params.initializationOptions || {};
+  meshes.previewCache = new PreviewCache(options.previewCacheDirectory);
   folders = params.workspaceFolders || (params.rootUri ? [{ uri: params.rootUri }] : []);
   return { capabilities: { textDocumentSync: TextDocumentSyncKind.Incremental,
     completionProvider: { triggerCharacters: ["[", "=", "/", "!"] }, hoverProvider: true,
@@ -112,18 +115,35 @@ connection.onRequest("seapower/materialPreview", async ({uri}: {uri:string}) => 
 connection.onRequest("seapower/entityPreview", async (request: PreviewRequest, token) => {
   await building;
   if (request.card) return unitCard(request,catalog,materials,stock);
-  const {sourceText,sourceUri,paint,...choices} = await selectEntity(request,catalog,materials);
+  const dependencies=new Set<string>();
+  const progress=new ProgressType<EntityProgress>();
+  const watch=(uri:string)=>{
+    if (dependencies.has(uri)) return;
+    dependencies.add(uri);
+    if (request.progressToken && !token.isCancellationRequested)
+      void connection.sendProgress(progress,request.progressToken,{kind:"watch",uri}).catch(error=>connection.console.warn(String(error)));
+  };
+  const reader=request.render ? materials.forPreview(watch,meshes.previewCache) : materials;
+  const {sourceText,sourceUri,paint,...choices} = await selectEntity(request,catalog,reader);
   if (!sourceText) {
     if (!request.render) return {...choices,modelSources:[]};
     throw Error("Missing model definition for "+choices.entities.find(e=>e.id === choices.entity)?.label);
   }
-  const doc = await entityDocument(sourceText,sourceUri,catalog,materials);
+  const doc = await entityDocument(sourceText,sourceUri,catalog,reader);
   const sources = await entityResourceSources(doc,sourceUri,catalog,request.modelSources,options.blenderPath);
   if (!request.render) return {...choices,modelSources:sources.choices};
   const abort = new AbortController();
   const listener = token.onCancellationRequested(()=>abort.abort());
   if (token.isCancellationRequested) abort.abort();
-  try { return await entityAssets(doc,sourceUri,catalog,meshes,materials,stock,paint,sources,abort.signal); }
+  try {
+    const known = new Set(request.knownAssets);
+    const send = request.progressToken && (async (chunk:EntityChunk)=>{
+      abort.signal.throwIfAborted();
+      await connection.sendProgress(progress,request.progressToken,reusePreviewAsset(chunk,known));
+    });
+    const scene = await entityAssets(doc,sourceUri,catalog,meshes,reader,stock,paint,sources,abort.signal,send || undefined,watch);
+    return send ? {...scene,geometry:[],textures:[],dependencies:[...dependencies]} : scene;
+  }
   finally { listener.dispose(); }
 });
 connection.onRequest("seapower/rebuild", params => {
