@@ -8,6 +8,7 @@ import { modelTags } from "./model-tags";
 import { fbxOutline } from "./model-outline";
 import type { IniSource } from "./ini";
 import type { EntityScene } from "./entity-model";
+import { entityModes } from "./entity-mode";
 import { previewColors } from "./preview-colors";
 import { meshFlagMatcher, meshFlagSetting } from "./mesh-flags";
 import { isMissingTextureColor, type MissingTextureColor } from "./missing-textures";
@@ -181,7 +182,8 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
       <canvas aria-label="3D model"></canvas><aside><div id="arc-values" hidden></div><button hidden>Fit model</button> <span role="status">${loading}</span></aside>
       <div id="part-tip" role="tooltip" hidden></div>
       <details id="outline" open><summary>Model hierarchy</summary>
-      <div id="entity-pickers" hidden><label>Entity<select id="entity"></select></label><div hidden><label><span id="appearance-label">Appearance</span><select id="appearance"></select></label></div><div id="model-sources"></div></div>
+      <div id="entity-pickers" hidden><label>Entity<select id="entity"></select></label><div hidden><label><span id="appearance-label">Appearance</span><select id="appearance"></select></label></div><div id="model-sources"></div>
+      <label>View mode<select id="entity-mode">${entityModes.map(mode => `<option>${mode}</option>`).join("")}</select></label></div>
       <div id="filters"><label><input id="meshes" type="checkbox" checked>Meshes</label>
       <select id="meshWireframe" aria-label="Mesh render mode"><option value="shaded">Shaded</option><option value="wireframe">Wireframe</option></select>
       <label><input id="colliders" type="checkbox" checked>Colliders</label>

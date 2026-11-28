@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The INI preview can filter system markers, colliders and arcs by weapons, flight, sensors or propulsion.
+
 - The INI preview matches Sea Power's X orientation for loose OBJ mounts, including models that use `CORRECT_OBJ_ORIENTATION`.
 - Model previews use daylight and authored OBJ normals. Assembled units cast shadows and respect `CastShadows=False`.
 - Releases are deliberate: merges collect here, only a pushed `v*` tag publishes ([release-process.md](docs/release-process.md))

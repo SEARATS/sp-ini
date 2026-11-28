@@ -14,6 +14,30 @@ import {unitCard} from "../src/unit-card";
 import {CardReferences} from "../src/card-references";
 import {StockAssets} from "../src/stock-assets";
 import {placeSystemArcs,systemArcs} from "../src/system-arcs";
+import { entityModes, excludedOverlays } from "../src/entity-mode";
+
+test("preview modes keep the model and match shared colliders to each owning system", () => {
+  const doc = expandEntityIni(["[Models]", "Mesh=hull", "[Colliders]", "Collider1=Shared", "Collider2=Deck",
+    "Collider3=Unassigned", "[Shared]", "Collider=Box", "[Deck]", "Collider=Box", "[Unassigned]", "Collider=Box",
+    "[WeaponSystem1]", "Collider=Shared", "AssociatedMagazine=Locker", "[Locker]", "[SensorSystem1]", "Collider=SHARED",
+    "[FlightDeck]", "Collider=Deck", "[TaxiPoint1]", "Position=1,2,3", "[Elevator2]", "[PropulsionSystem1]",
+    "[RudderSystem2]", "[MainPowerSystem]", "[ControlSystem]"].join("\n"));
+  const parts = entityParts(doc,new Set()).map(row=>row.part);
+  const objects = entityObjects(doc,parts);
+  const scene = {parts,objects,geometry:[],textures:[],warnings:[]};
+  const visible = entityModes.map(mode => {
+    const excluded = excludedOverlays(scene,mode);
+    assert.ok(!excluded.has("models"));
+    return [...parts,...objects].map(item=>item.id).filter(id=>id!=="models" && !excluded.has(id));
+  });
+  assert.equal(visible[0].length,parts.length+objects.length-1);
+  assert.deepEqual(visible.slice(1),[
+    ["shared","object:weaponsystem1","object:locker"],
+    ["deck","object:flightdeck","object:taxipoint1","object:elevator2"],
+    ["shared","object:sensorsystem1"],
+    ["object:propulsionsystem1","object:ruddersystem2","object:mainpowersystem"]
+  ]);
+});
 
 test("system arc guides preserve separate firing sectors, wrap past 180 and show elevation",()=>{
   const doc=expandEntityIni("[Models]\nMesh=hull\n[WeaponSystem1]\nMountPosition=0,0,0\nFiringArcs=150,-150|-30,30\nElevationArc=-15,85");

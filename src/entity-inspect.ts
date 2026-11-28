@@ -37,7 +37,7 @@ export function hoverStack(hits: readonly {object:Object3D}[], parts: ReadonlyMa
 }
 
 export function inspectEntity(canvas: HTMLCanvasElement, camera: PerspectiveCamera, model: () => Object3D, open: (ids: string[]) => void,
-  select: (id: string) => void, highlight: (ids:string[])=>void) {
+  select: (id: string) => void, highlight: (ids:string[])=>void, inMode: (id:string)=>boolean) {
   const tip = document.querySelector<HTMLElement>("#part-tip");
   const parts = new Map<string,Inspectable>();
   const ray = new Raycaster(), pointer = new Vector2();
@@ -50,7 +50,7 @@ export function inspectEntity(canvas: HTMLCanvasElement, camera: PerspectiveCame
 
   function owners(part:Inspectable) {
     return ("referencedBy" in part ? part.referencedBy || [] : []).map(name=>parts.get("object:"+name.toLowerCase()))
-      .filter((owner):owner is EntityObject=>!!owner && "group" in owner);
+      .filter((owner):owner is EntityObject=>!!owner && "group" in owner && inMode(owner.id));
   }
   function targets(hits:Inspectable[],shift:boolean) {
     if (shift) return hits.filter(part=>"collider" in part && part.collider).slice(0,1).map(part=>part.id);
@@ -74,7 +74,8 @@ export function inspectEntity(canvas: HTMLCanvasElement, camera: PerspectiveCame
     const {source} = part;
     const detail = "group" in part ? [part.system,part.placement,...arcText(part)].filter(Boolean).join("\n") :
       geometryLabel(part);
-    const usedBy = "referencedBy" in part && part.referencedBy?.length ? ["Used by "+part.referencedBy.map(name=>{
+    const references = "referencedBy" in part ? part.referencedBy?.filter(name=>inMode("object:"+name.toLowerCase())) : [];
+    const usedBy = references?.length ? ["Used by "+references.map(name=>{
       const owner = parts.get("object:"+name.toLowerCase());
       return owner && "group" in owner ? [owner.system ? name+" ("+owner.system+")" : name,...arcText(owner)].join("\n") : name;
     }).join(", ")] : [];
