@@ -43,6 +43,7 @@ const activity=document.getElementById("flight-activity");
 scene.add(trafficGroup);
 trafficGroup.matrixAutoUpdate=false;
 let network:FlightNetwork, traffic:DeckPlayback, layoutKey:string;
+let connectedObjects:ReadonlySet<string>;
 function trafficVisible() {
   return aircraftToggle.checked && (mode==="Everything" || mode==="Flight") && (!pickedObject || !hidden.has(pickedObject));
 }
@@ -83,10 +84,11 @@ function drawTraffic(dt:number) {
 function focusTraffic() {
   if (!network || (pickedObject && !network.links.has(pickedObject) && !network.deck.spots.some(s=>"object:"+s.name===pickedObject))) traffic=undefined;
   else if (traffic?.focus!==pickedObject || traffic?.network!==network) traffic=new DeckPlayback(network,pickedObject);
-  const connected=network?.related(pickedObject);
+  connectedObjects=network?.related(pickedObject);
   for (const label of elevatorPanel.querySelectorAll<HTMLElement>("[data-elevator]"))
-    label.classList.toggle("connected-object",!!connected?.has(label.dataset.elevator));
-  for (const [id,label] of objectLabels) label.classList.toggle("connected-object",!!connected?.has(id));
+    label.classList.toggle("connected-object",!!connectedObjects?.has(label.dataset.elevator));
+  for (const [id,label] of objectLabels) label.classList.toggle("connected-object",!!connectedObjects?.has(id));
+  active?.view.widgets.forEach(styleWidget);
   drawTraffic(0);
   syncPlayback();
 }
@@ -133,13 +135,16 @@ function showArcValues() {
   }
 }
 const white=new Color(0xffffff);
+const connectedBlue=new Color(0x85c4ff);
 function styleWidget(node) {
   const {partId,deckPoint,pathWidth,color}=node.userData;
-  const selected=partId===pickedObject, hovered=partId===hoveredWidget;
+  const selected=partId===pickedObject, hovered=partId===hoveredWidget, connected=connectedObjects?.has(partId);
   node.material.color.set(selected ? 0xffff77 : color);
-  if (!selected && network?.related(pickedObject)?.has(partId)) node.material.color.lerp(white,0.23);
   if (hovered) node.material.color.lerp(white,0.55);
-  node.renderOrder=(deckPoint ? 14 : pathWidth ? 9 : 10)+(selected || hovered ? 1 : 0);
+  else if (!selected && connected) node.material.color.lerp(connectedBlue,0.48);
+  // Shared routes often overlap exactly. Paint the active states over their idle siblings.
+  const emphasis=hovered ? 0.75 : selected ? 0.5 : connected ? 0.25 : 0;
+  node.renderOrder=(deckPoint ? 14 : pathWidth ? 9 : 10)+emphasis;
 }
 function highlight(ids:string[]) {
   const next=ids.filter(id=>active?.view.surfaces.get(id)?.layers.isEnabled(previewLayer.collider));
@@ -174,7 +179,6 @@ function selectObject(id: string | undefined, reveal: boolean) {
     for (let el: HTMLElement = selected; el; el=el.parentElement) if (el instanceof HTMLDetailsElement) el.open=true;
     selected.scrollIntoView({block:"nearest"});
   }
-  active?.view.widgets.forEach(styleWidget);
   if (renderer) draw();
 }
 const saved = vscode.getState();
