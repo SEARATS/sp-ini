@@ -1,5 +1,5 @@
 import {Catalog} from "./catalog";
-import {entityDocument} from "./entity-selection";
+import {readEntityDefinition} from "./entity-selection";
 import {field} from "./entity-model";
 import type {IniSection,IniSource,parse} from "./ini";
 import type {Materials} from "./materials";
@@ -25,18 +25,13 @@ export class CardReferences {
 
   async resolve() {
     const docs=new Map<string,Promise<ReturnType<typeof parse>>>();
-    const read=async (file:{uri:string})=>{
-      const doc=await this.materials.readIni(file);
-      if (!doc?.modifiers.some(m=>/^(copy|alias|extend|prepend)$/.test(m.name))) return doc;
-      return entityDocument(doc.lines.join("\n"),file.uri,this.catalog,this.materials).catch(()=>doc);
-    };
     await Promise.all(Object.entries(this.topics).map(async ([key,topic])=>{
       const {domain,id}=topic;
       const refs=domain==="aircraft" ? this.catalog.units.get(id.toLowerCase())?.filter(r=>r.kinds.some(k=>/^(aircraft|helicopter|vtol)$/i.test(k))) :
         this.catalog.references.get(domain)?.get(id.toLowerCase());
       const ref=this.catalog.ordered(refs || [])[0];
       if (!ref) return;
-      if (!docs.has(ref.file.uri)) docs.set(ref.file.uri,read(ref.file));
+      if (!docs.has(ref.file.uri)) docs.set(ref.file.uri,readEntityDefinition(ref.file,this.catalog,this.materials));
       const doc=await docs.get(ref.file.uri);
       if (!doc) return;
       const find=(name:string)=>doc.sections.find(s=>s.name.toLowerCase()===name.toLowerCase());

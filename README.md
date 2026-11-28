@@ -64,7 +64,7 @@ The examples use the stock Spruance VLS destroyer. Select a screenshot to view i
 | --- | --- |
 | Hover over an assembled mesh<br>[![Mesh tooltip on the Spruance][entity-mesh]][entity-mesh] | Ctrl+click a hierarchy row to open its repeat template<br>[![Repeated mesh and its INI template][hierarchy-definition]][hierarchy-definition] |
 | Sphere colliders at different in-game sizes<br>[![Sphere wireframes and collider tooltip][sphere-colliders]][sphere-colliders] | Shift+click a collider to open its definition<br>[![Selected collider section beside the preview][preview-definition]][preview-definition] |
-| | Follow a unit card link to its sensor and source INI<br>[![SPS-40 sensor reference][sensor-card]][sensor-card] |
+| Search radars in motion<br>[![Spruance VLS radar animation in the INI hierarchy preview][radar-animation]][radar-animation] | Follow a unit card link to its sensor and source INI<br>[![SPS-40 sensor reference][sensor-card]][sensor-card] |
 
 | System markers | Collider highlights |
 | --- | --- |
@@ -89,6 +89,7 @@ The examples use the stock Spruance VLS destroyer. Select a screenshot to view i
 | Box collider shape and dimensions<br>[![Box collider shape and dimensions][box-collider]][box-collider] | Spruance VLS in the 3D preview<br>[![Spruance VLS in the 3D preview][obj-preview]][obj-preview] |
 | Collapsed OBJ objects<br>[![Collapsed OBJ objects][obj-folding]][obj-folding] | Spruance VLS in the FBX viewer<br>[![Spruance VLS in the FBX viewer][fbx-preview]][fbx-preview] |
 
+[radar-animation]: https://raw.githubusercontent.com/SEARATS/binaries/d8a8609151211bd93fe7750bcc68adbda2f5b8fb/sp-ini/33-radar-animation.gif
 [mesh-links]: https://raw.githubusercontent.com/SEARATS/binaries/e91f936c5d8f2e3addd7dbca97da93c60213503a/sp-ini/01-mesh-links.png
 [mesh-hover]: https://raw.githubusercontent.com/SEARATS/binaries/e91f936c5d8f2e3addd7dbca97da93c60213503a/sp-ini/02-mesh-hover.png
 [material-hover]: https://raw.githubusercontent.com/SEARATS/binaries/e91f936c5d8f2e3addd7dbca97da93c60213503a/sp-ini/03-material-hover.png

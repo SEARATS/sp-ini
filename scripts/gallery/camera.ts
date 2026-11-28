@@ -1,5 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import {tmpdir} from "node:os";
+import {execFileSync} from "node:child_process";
 import { PNG } from "pngjs";
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -123,17 +125,35 @@ async function camera() {
       const bytes = Buffer.from(data, "base64");
       await fs.writeFile(path.join(process.env.SP_GALLERY_OUTPUT, file + ".png"), region.canvas ? cropModel(bytes) : bytes);
       if (region.canvas) await resize(1120, 800);
-      images.push({ file, title });
+      images.push({ file:file+".png", title });
+    },
+    async radarGif() {
+      const file = "33-radar-animation.gif";
+      const clip = await evaluate("(" + measure.toString() + ")({preview:true})");
+      const dir = await fs.mkdtemp(path.join(tmpdir(),"sp-ini-gif-"));
+      try {
+        const start = performance.now();
+        const fps = 12;
+        for (let i=0;i<4*fps;i++) {
+          await delay(Math.max(0,start + i*1000/fps - performance.now()));
+          const {data} = await call<{data:string}>("Page.captureScreenshot",{format:"png",fromSurface:true,clip});
+          await fs.writeFile(path.join(dir,String(i).padStart(3,"0")+".png"),Buffer.from(data,"base64"));
+        }
+        execFileSync("ffmpeg",["-v","error","-y","-framerate",String(fps),"-i",path.join(dir,"%03d.png"),
+          "-filter_complex","split[a][b];[a]palettegen[p];[b][p]paletteuse=dither=bayer","-loop","0",
+          path.join(process.env.SP_GALLERY_OUTPUT,file)],{windowsHide:true});
+        images.push({file,title:"Rotating search radars on the stock Spruance VLS"});
+      } finally { await fs.rm(dir,{recursive:true,force:true}); }
     },
     async finish() {
-      const figures = images.map(({ file, title }) => '<figure><figcaption>' + title + '</figcaption><a href="' + file + '.png"><img src="' +
-        file + '.png" alt="' + title + '"></a></figure>').join("\n");
+      const figures = images.map(({ file, title }) => '<figure><figcaption>' + title + '</figcaption><a href="' + file + '"><img src="' +
+        file + '" alt="' + title + '"></a></figure>').join("\n");
       const html = '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">' +
         '<title>Sea Power INI features</title><style>body{font:16px system-ui;color:#e6edf3;background:#17191d;margin:2rem auto;padding:0 1rem;max-width:920px}' +
         'figure{margin:2rem 0}figcaption{margin-bottom:.5rem;font-weight:600}img{display:block;max-width:100%;height:auto}</style>' +
         '<h1>Sea Power INI features</h1><p>Captured in VS Code using stock Spruance VLS geometry and textures exported locally, and a working copy of its INI.</p>' + figures + '</html>';
       const markdown = ["# Sea Power INI screenshots", "Captured in VS Code with the stock Spruance VLS destroyer.",
-        ...images.map(({ file, title }) => "## " + title + "\n\n![" + title + "](" + file + ".png)")].join("\n\n");
+        ...images.map(({ file, title }) => "## " + title + "\n\n![" + title + "](" + file + ")")].join("\n\n");
       await fs.writeFile(path.join(process.env.SP_GALLERY_OUTPUT, "README.md"), markdown + "\n");
       await fs.writeFile(path.join(process.env.SP_GALLERY_OUTPUT, "index.html"), html);
     }

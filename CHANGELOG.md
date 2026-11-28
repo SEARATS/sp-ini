@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Search radars and helicopter rotors turn in the INI hierarchy preview. Use **Animations** to pause them.
 - The INI preview can filter system markers, colliders and arcs by weapons, flight, sensors or propulsion.
 
 - The INI preview matches Sea Power's X orientation for loose OBJ mounts, including models that use `CORRECT_OBJ_ORIENTATION`.

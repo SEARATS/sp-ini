@@ -197,7 +197,8 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
       <select id="colliderWireframe" aria-label="Collider render mode"><option value="shaded">Shaded</option><option value="wireframe" selected>Wireframe</option></select>
       <label for="missing-texture">Missing texture</label><select id="missing-texture"><option value="black">Black</option><option value="magenta">Magenta</option><option value="grey" selected>Grey</option></select>
       <div id="object-filter" hidden><label><input id="objects" type="checkbox" checked>Object markers</label></div>
-      <div id="arc-filter" hidden><label><input id="arcs" type="checkbox" checked>System arcs</label></div></div>
+      <div id="arc-filter" hidden><label><input id="arcs" type="checkbox" checked>System arcs</label></div>
+      <div id="animation-filter" hidden><label><input id="animations" type="checkbox">Animations</label></div></div>
       <p></p><p id="sidecar-error" role="status" hidden></p><details id="entity-warnings" hidden><summary></summary><div></div></details><ul></ul></details>
       <script nonce="${nonce}" src="${script}"></script></body></html>`;
     return (next: ModelNode[]) => { roots = next; return sendFlags(); };

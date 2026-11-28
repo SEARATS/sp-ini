@@ -1,6 +1,7 @@
 import { parse, type IniSection, type IniSource } from "./ini";
 
 export type Vector = [number, number, number];
+export interface EntitySpin { part: string; axis: "x" | "y" | "z"; rpm: number }
 export type ObjectGroup = "Sensors" | "Weapons" | "Decoys" | "Combat systems" | "Ship systems" | "Flight deck" | "Magazines";
 export interface EntityObject {
   id: string; name: string; group: ObjectGroup; system?: string; source?: IniSource;
@@ -19,6 +20,7 @@ export interface EntityPart {
 }
 export interface EntityScene {
   parts: EntityPart[];
+  spins?: EntitySpin[];
   objects?: EntityObject[];
   geometry: {positions: string; uvs: string; normals?:string}[];
   textures: {png:string; alpha:"opaque"|"cutout"|"blend"}[];

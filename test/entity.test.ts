@@ -5,7 +5,8 @@ import { parse } from "../src/ini";
 import { Materials } from "../src/materials";
 import { entityObjects, entityParts, expandEntityIni } from "../src/entity-model";
 import { selectEntity, paintTexture, entityDocument } from "../src/entity-selection";
-import { assembledEntity, patchEntity } from "../src/entity-viewer";
+import { assembledEntity, bindEntitySpins, patchEntity } from "../src/entity-viewer";
+import { entitySpins } from "../src/entity-spins";
 import { Box3, Group, LoadingManager, Mesh, MeshBasicMaterial, Vector3 } from "three";
 import type { EntityPart, Vector } from "../src/entity-model";
 import { applyDisplay, previewLayer } from "../src/preview-display";
@@ -15,6 +16,38 @@ import {CardReferences} from "../src/card-references";
 import {StockAssets} from "../src/stock-assets";
 import {placeSystemArcs,systemArcs} from "../src/system-arcs";
 import { entityModes, excludedOverlays } from "../src/entity-mode";
+
+test("active spins resolve sensor overrides, skip stationary mounts and turn rotor children around the local axis",async()=>{
+  const catalog = new Catalog(), docs = new Map<string,ReturnType<typeof parse>>();
+  catalog.sourceRanks = new Map([["Workspace",0],["Vanilla",1]]);
+  function sensors(source:string, text:string) {
+    const rel = "systems/sensors.ini", uri = "file:///"+source+"/"+rel, doc = parse(text);
+    catalog.add({source,rel,uri},doc);
+    docs.set(uri,doc);
+  }
+  sensors("Vanilla","[Nav]\nType=Search\nRPM=12\n[Array]\nType=Search\nRPM=0\n[Director]\nType=Targeting\nRPM=60\n[Fallback]\nType=Search");
+  sensors("Workspace","#!extend systems/sensors.ini\n[Nav]\nRotationDirection=-1\nRPM=30");
+  const doc = parse(["[Models]","Mesh=Hull","[Submodels]","SubModel1=Mast","SubModel2=Hub","SubModel3=Blade",
+    "SubModel4=Array","SubModel5=Director","SubModel6=Second","[Mast]","[Hub]","Rotation=90,0,0","[Blade]","Parent=Hub",
+    "Position=1,0,0","[Array]","[Director]","[Second]","[FlightControls]","NumberOfRotors=1","Rotor1_Model=Hub",
+    "Rotor1_Direction=-1","Rotor1_RPM=15","Rotor1_RotationAxis=Z","Rotor2_Model=Blade",
+    ...[["Nav","Mast"],["Nav","MAST"],["Array","Array"],["Director","Director"],["Nav","Dummy"],["Fallback","Second"]]
+      .flatMap(([name,mount],i)=>["[SensorSystem"+(i+1)+"]","Type=Radar","SystemName="+name,"Mount="+mount])].join("\n"));
+  const parts = entityParts(doc,new Set()).map(row=>row.part);
+  const spins = await entitySpins(doc,parts,catalog,new Materials(uri=>docs.get(uri)));
+  assert.deepEqual(spins,[{part:"hub",axis:"z",rpm:-15},{part:"mast",axis:"y",rpm:-30},{part:"second",axis:"y",rpm:15}]);
+  const view = assembledEntity({parts,geometry:[],textures:[],warnings:[]},new LoadingManager());
+  const sample = bindEntitySpins(view.nodes,spins);
+  const blade = view.nodes.get("blade"), mast = view.nodes.get("mast");
+  sample(1);
+  assert.ok(blade.getWorldPosition(new Vector3()).distanceTo(new Vector3(0,0,-1))<1e-6);
+  sample(0.5);
+  sample(0.5);
+  assert.ok(new Vector3(0,0,1).applyQuaternion(mast.quaternion).distanceTo(new Vector3(1,0,0))<1e-6);
+  sample(0);
+  assert.ok(blade.getWorldPosition(new Vector3()).distanceTo(new Vector3(-1,0,0))<1e-6);
+  assert.equal(bindEntitySpins(view.nodes,[]),undefined);
+});
 
 test("preview modes keep the model and match shared colliders to each owning system", () => {
   const doc = expandEntityIni(["[Models]", "Mesh=hull", "[Colliders]", "Collider1=Shared", "Collider2=Deck",

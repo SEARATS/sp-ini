@@ -1,5 +1,5 @@
-import { Box3, BoxGeometry, BufferAttribute, BufferGeometry, ConeGeometry, Group, MathUtils, Mesh, MeshBasicMaterial, MeshPhongMaterial, OctahedronGeometry, RepeatWrapping, SRGBColorSpace, TextureLoader, Vector3, type LoadingManager } from "three";
-import type { EntityPart, EntityScene, Vector } from "./entity-model";
+import { Box3, BoxGeometry, BufferAttribute, BufferGeometry, ConeGeometry, Group, MathUtils, Mesh, MeshBasicMaterial, MeshPhongMaterial, OctahedronGeometry, Quaternion, RepeatWrapping, SRGBColorSpace, TextureLoader, Vector3, type LoadingManager } from "three";
+import type { EntityPart, EntityScene, EntitySpin, Vector } from "./entity-model";
 import type { OutlineNode } from "./model-outline";
 import { objectColor, previewColors, type PreviewColor } from "./preview-colors";
 
@@ -20,6 +20,22 @@ export function entityGeometry(data: EntityScene["geometry"][number]) {
   if (data.normals) geometry.setAttribute("normal",new BufferAttribute(floats(data.normals),3));
   else geometry.computeVertexNormals();
   return geometry;
+}
+
+/** Bind after applying the INI pose. Reflecting Unity's X flips rotation about Y and Z. */
+export function bindEntitySpins(nodes:Map<string,Group>, spins:EntitySpin[] = []) {
+  const axes = {x:new Vector3(1,0,0),y:new Vector3(0,-1,0),z:new Vector3(0,0,-1)};
+  const tracks = spins.flatMap(({part,axis,rpm})=>{
+    const node = nodes.get(part);
+    return node ? [{node,rest:node.quaternion.clone(),axis:axes[axis],rpm}] : [];
+  });
+  const turn = new Quaternion();
+  if (tracks.length) return (seconds:number)=>{
+    for (const {node,rest,axis,rpm} of tracks) {
+      turn.setFromAxisAngle(axis,((seconds * rpm / 60) % 1) * 2 * Math.PI);
+      node.quaternion.copy(rest).multiply(turn);
+    }
+  };
 }
 
 export function assembledEntity(scene: EntityScene, manager: LoadingManager, meshes = scene.geometry.map(entityGeometry)) {

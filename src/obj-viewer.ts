@@ -8,7 +8,7 @@ import { orderedSiblings } from "./mesh-order";
 import { meshMoveButtons } from "./mesh-move-buttons";
 import { colliderType, type MeshTags } from "./mesh-names";
 import { applyDisplay, previewLayer, type DisplaySettings } from "./preview-display";
-import { assembledEntity, patchEntity } from "./entity-viewer";
+import { assembledEntity, bindEntitySpins, patchEntity } from "./entity-viewer";
 import type { EntityScene } from "./entity-model";
 import { entityModes, excludedOverlays, type EntityMode } from "./entity-mode";
 import { previewColors } from "./preview-colors";
@@ -19,7 +19,7 @@ import { previewDaylight, fitEntityShadows, renderDaylight } from "./preview-lig
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
-type SavedDisplay = Partial<DisplaySettings> & {mode?: EntityMode; hidden?: string[]; wireframe?: boolean; entity?: string; appearance?: string; modelSources?:Record<string,string>};
+type SavedDisplay = Partial<DisplaySettings> & {mode?: EntityMode; animations?:boolean; hidden?: string[]; wireframe?: boolean; entity?: string; appearance?: string; modelSources?:Record<string,string>};
 declare function acquireVsCodeApi(): { postMessage(message: unknown): void; getState(): SavedDisplay | undefined; setState(value: SavedDisplay): void };
 const vscode = acquireVsCodeApi();
 const status = document.querySelector("[role=status]");
@@ -112,6 +112,30 @@ function selectObject(id: string | undefined, reveal: boolean) {
   if (renderer) draw();
 }
 const saved = vscode.getState();
+const animationToggle = document.querySelector<HTMLInputElement>("#animations");
+animationToggle.checked = saved?.animations ?? !matchMedia("(prefers-reduced-motion: reduce)").matches;
+let sampleSpins:ReturnType<typeof bindEntitySpins>, animationFrame:number, previousFrame:number;
+let animationSeconds = 0;
+function animate(now:number) {
+  animationSeconds += (now - previousFrame) / 1000;
+  previousFrame = now;
+  sampleSpins(animationSeconds);
+  if (settings.arcs) for (const [id,{guides}] of arcGuides)
+    placeSystemArcs(guides,active.view.model,active.view.widgets.get(id),bounds.radius*0.17);
+  if (sun.castShadow) renderer.shadowMap.needsUpdate = true;
+  render();
+  animationFrame = requestAnimationFrame(animate);
+}
+function syncPlayback() {
+  cancelAnimationFrame(animationFrame);
+  document.getElementById("animation-filter").hidden = !sampleSpins;
+  if (sampleSpins && animationToggle.checked && !document.hidden) {
+    previousFrame = performance.now();
+    animationFrame = requestAnimationFrame(animate);
+  }
+}
+animationToggle.onchange = () => { syncPlayback(); changed(); };
+document.addEventListener("visibilitychange",syncPlayback);
 let mode: EntityMode = entityModes.includes(saved?.mode) ? saved.mode : "Everything";
 let excluded = new Set<string>();
 const modeSelect = document.querySelector<HTMLSelectElement>("#entity-mode");
@@ -158,7 +182,7 @@ function updateDisplay() {
 }
 function changed() {
   updateDisplay();
-  vscode.setState({...settings, mode, hidden: [...hidden], entity:selectedEntity, appearance:selectedAppearance, modelSources:selectedSources});
+  vscode.setState({...settings, mode, animations:animationToggle.checked, hidden: [...hidden], entity:selectedEntity, appearance:selectedAppearance, modelSources:selectedSources});
 }
 entitySelect.onchange = () => vscode.postMessage({type:"selectEntity",entity:entitySelect.value});
 appearanceSelect.onchange = () => vscode.postMessage({type:"selectEntity",entity:entitySelect.value,appearance:appearanceSelect.value,modelSources:selectedSources});
@@ -439,6 +463,10 @@ async function loadEntity(id:string, next:EntityScene, documentUri:string) {
     fitEntityShadows(sun,model);
     initializedEntity=id;
     active={id,scene:next,view};
+    if (!same) animationSeconds = 0;
+    sampleSpins = bindEntitySpins(view.nodes,next.spins);
+    sampleSpins?.(animationSeconds);
+    syncPlayback();
     excluded=excludedOverlays(next,mode);
     if (excluded.has(pickedObject)) pickedObject=undefined;
     syncArcs();
@@ -465,6 +493,8 @@ async function loadEntity(id:string, next:EntityScene, documentUri:string) {
 
 async function load(data, layout?: ReturnType<typeof objLayout>) {
   const current = ++revision;
+  sampleSpins = undefined;
+  syncPlayback();
   if (model) { scene.remove(model); dispose(model); model = undefined; }
   try {
     let next;
