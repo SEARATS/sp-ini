@@ -164,15 +164,15 @@ entitySelect.onchange = () => vscode.postMessage({type:"selectEntity",entity:ent
 appearanceSelect.onchange = () => vscode.postMessage({type:"selectEntity",entity:entitySelect.value,appearance:appearanceSelect.value,modelSources:selectedSources});
 function showModelSources(choices: ModelSourceChoice[]) {
   selectedSources = Object.fromEntries(choices.filter(c=>c.selected).map(c=>[c.key,c.selected]));
-  document.getElementById("model-sources").replaceChildren(...choices.map(choice=>{
-    const label = document.createElement("label");
-    label.append(choices.length === 1 ? "Model source" : "Model source · " + choice.key);
-    label.title = choice.key;
+  const sources = document.querySelector<HTMLDetailsElement>("#model-sources");
+  sources.hidden = !choices.length;
+  sources.querySelector("ul").replaceChildren(...choices.map(choice=>{
+    const item = document.createElement("li");
     if (choice.files.length === 1) {
-      const value = document.createElement("span");
-      value.textContent = choice.files[0].label;
-      label.append(value);
+      item.textContent = choice.key + " · " + choice.files[0].label;
     } else {
+      const label = document.createElement("label");
+      label.append(choice.key);
       const select = document.createElement("select");
       select.add(new Option("Auto (" + choice.files[0].label + " first)", ""));
       for (const file of choice.files) select.add(new Option(file.label,file.id));
@@ -184,8 +184,9 @@ function showModelSources(choices: ModelSourceChoice[]) {
         vscode.postMessage({type:"selectEntity",entity:selectedEntity,appearance:selectedAppearance,modelSources:selectedSources});
       };
       label.append(select);
+      item.append(label);
     }
-    return label;
+    return item;
   }));
 }
 for (const category of ["meshes","colliders","objects","arcs"] as const) {
@@ -322,7 +323,7 @@ function showOutline(nodes: OutlineNode[], note = "", uri?: string, preserve=fal
     }
     return {item, subtree};
   }
-  outline.querySelector("ul").replaceChildren(...rows(nodes,"",0).map(row => row.item));
+  outline.querySelector(":scope > ul").replaceChildren(...rows(nodes,"",0).map(row => row.item));
   if (preserve) outline.scrollTop=scroll;
   updateDisplay();
 }
@@ -582,8 +583,9 @@ window.addEventListener("message", ({ data }) => {
     showModelSources(data.modelSources ?? []);
     picker.hidden = false;
     entitySelect.disabled = data.entities.length === 1;
-    picker.querySelector("#appearance-label").textContent = data.appearances.some(c=>/^squadron/i.test(c.id)) ? "Squadron" : "Variant";
-    appearanceSelect.parentElement.parentElement.hidden = !data.appearances.length;
+    const appearanceLabel = picker.querySelector<HTMLLabelElement>("#appearance-label");
+    appearanceLabel.textContent = data.appearances.some(c=>/^squadron/i.test(c.id)) ? "Squadron" : "Variant";
+    appearanceLabel.hidden = appearanceSelect.hidden = !data.appearances.length;
     return;
   }
   if (data.type === "entityScene") {
