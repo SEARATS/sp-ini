@@ -5,8 +5,9 @@ import { parse } from "../src/ini";
 import { Materials } from "../src/materials";
 import { entityObjects, entityParts, expandEntityIni } from "../src/entity-model";
 import { selectEntity, paintTexture, entityDocument } from "../src/entity-selection";
-import { assembledEntity, bindEntitySpins, patchEntity } from "../src/entity-viewer";
+import { assembledEntity, bindEntitySpins, entityBounds, patchEntity } from "../src/entity-viewer";
 import { entitySpins } from "../src/entity-spins";
+import { elevatorTravel } from "../src/elevator-travel";
 import { Box3, Group, LoadingManager, Mesh, MeshBasicMaterial, Vector3 } from "three";
 import type { EntityPart, Vector } from "../src/entity-model";
 import { applyDisplay, previewLayer } from "../src/preview-display";
@@ -84,8 +85,8 @@ test("deck squares and taxi ribbons use authored positions and update when a way
   }
   const before = scene(ini), view=assembledEntity(before,new LoadingManager());
   const route = before.objects.find(o=>o.name==="TaxiPath1"), id=route.id;
-  assert.deepEqual(route.taxiPath,[[0,2,1],[1,2,1],[1,2,2],[1,2,3]]);
-  assert.deepEqual(before.objects.find(o=>o.name==="TaxiPath2").taxiPath,[[1,2,3],[0,2,2]]);
+  assert.deepEqual(route.route.points,[[0,2,1],[1,2,1],[1,2,2],[1,2,3]]);
+  assert.deepEqual(before.objects.find(o=>o.name==="TaxiPath2").route.points,[[1,2,3],[0,2,2]]);
   const lift = view.widgets.get("object:elevator1");
   assert.ok(lift.position.equals(new Vector3(0,1,0)));
   lift.geometry.computeBoundingBox();
@@ -97,6 +98,40 @@ test("deck squares and taxi ribbons use authored positions and update when a way
   assert.notEqual(path.geometry,previous);
   assert.equal(view.widgets.get(id),path);
   assert.ok(!excludedOverlays(before,"Flight").has(id) && excludedOverlays(before,"Sensors").has(id));
+});
+
+test("flight paths use raised elevators, deck-relative air coordinates and independent visibility",async()=>{
+  const doc = parse(["[Models]","Mesh=hull","[FlightDeck]","NumberOfRecoveryPoints=1","NumberOfTaxiPaths=2",
+    "HoldWaypoints=1,100,0|0,100,1","[RecoveryPoint1]","Position=1,2,3","Rotation=90","AllowedType=Plane,Helicopter",
+    "CircuitWaypoints=1,100,0","[Elevator1]","SpawnPosition=0,0,0","RidePosition=0,0,1","MoveUpAnimation=Lift",
+    "[TaxiPath1]","From=Elevator1","To=RecoveryPoint1","[TaxiPath2]","From=RecoveryPoint1","To=Elevator1",
+    "[Animations]","AnimationFile_1=DeckLift"].join("\n"));
+  const library = parse("[Lift]\nSequence1=Up\nSequence1_Model=Elevator_1\n[Up]\nNumberOfSteps=2\nPositionY1=-1.75\nPositionY2=0");
+  const catalog = new Catalog(), uri="file:///animations/DeckLift.ini";
+  catalog.add({rel:"animations/DeckLift.ini",source:"Workspace",uri},library);
+  const travel = await elevatorTravel(doc,catalog,new Materials(()=>library));
+  const parts = entityParts(doc,new Set()).map(r=>r.part), objects=entityObjects(doc,parts,travel);
+  const get=(name:string)=>objects.find(o=>o.name===name);
+  assert.deepEqual(get("Elevator1").position,[0,0,0]);
+  assert.deepEqual(get("TaxiPath1").position,[0,1.75,1]);
+  assert.deepEqual(get("TaxiPath2").route.points.at(-1),[0,2,1]);
+  const hold=get("FlightDeck · HoldWaypoints"), approach=get("RecoveryPoint1 · Fixed-wing approach");
+  assert.deepEqual(hold.route.points,[[27.559496,100*0.00453571,0],[0,100*0.00453571,27.559496],hold.position]);
+  assert.equal(approach.route.points.length,6);
+  assert.ok(Math.abs(approach.route.points[0][1]-100*27.559496*0.000189394)<1e-8);
+  assert.ok(Math.abs(approach.route.points[1][0]-(1-2*27.559496))<1e-8);
+  assert.deepEqual(approach.route.points.at(-1),[1,2,3]);
+  assert.equal(get("RecoveryPoint1 · Helicopter approach").route.points.length,3);
+  const view=assembledEntity({parts,objects,geometry:[],textures:[],warnings:[]},new LoadingManager());
+  const hits = [hold,get("TaxiPath1"),get("RecoveryPoint1")].map(obj=>({object:view.widgets.get(obj.id)}));
+  assert.equal(hoverStack(hits,new Map(objects.map(obj=>[obj.id,obj])))[0].id,get("RecoveryPoint1").id);
+  const settings={meshes:true,colliders:true,objects:false,meshWireframe:false,colliderWireframe:true};
+  for (const airPaths of [false,true]) for (const taxiPaths of [false,true]) {
+    applyDisplay(view.model,new Map(),new Set(),{...settings,airPaths,taxiPaths});
+    assert.equal(view.widgets.get(hold.id).layers.isEnabled(previewLayer.route),airPaths);
+    assert.equal(view.widgets.get(get("TaxiPath1").id).layers.isEnabled(previewLayer.route),taxiPaths);
+    assert.equal(entityBounds(view.model,true).radius>entityBounds(view.model).radius,airPaths);
+  }
 });
 
 test("system arc guides preserve separate firing sectors, wrap past 180 and show elevation",()=>{

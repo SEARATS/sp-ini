@@ -8,7 +8,7 @@ import { orderedSiblings } from "./mesh-order";
 import { meshMoveButtons } from "./mesh-move-buttons";
 import { colliderType, type MeshTags } from "./mesh-names";
 import { applyDisplay, previewLayer, type DisplaySettings } from "./preview-display";
-import { assembledEntity, bindEntitySpins, patchEntity } from "./entity-viewer";
+import { assembledEntity, bindEntitySpins, entityBounds, patchEntity } from "./entity-viewer";
 import type { EntityScene } from "./entity-model";
 import { entityModes, excludedOverlays, type EntityMode } from "./entity-mode";
 import { previewColors, weaponArcColors } from "./preview-colors";
@@ -107,7 +107,7 @@ function selectObject(id: string | undefined, reveal: boolean) {
     if (!node.userData.widget) return;
     const active = node.userData.partId === id;
     node.material.color.set(active ? 0xffff77 : node.userData.color);
-    node.renderOrder = active ? 11 : node.userData.pathWidth ? 9 : 10;
+    node.renderOrder = node.userData.deckPoint ? (active ? 15 : 14) : active ? 11 : node.userData.pathWidth ? 9 : 10;
   });
   if (renderer) draw();
 }
@@ -157,6 +157,7 @@ const entitySelect = picker.querySelector<HTMLSelectElement>("#entity"), appeara
 const warnings = document.querySelector<HTMLDetailsElement>("#entity-warnings");
 const settings: DisplaySettings = {
   meshes: saved?.meshes ?? true, colliders: saved?.colliders ?? true, objects:saved?.objects ?? true, arcs:saved?.arcs ?? true,
+  taxiPaths:saved?.taxiPaths ?? true, airPaths:saved?.airPaths ?? false,
   meshWireframe: saved?.meshWireframe ?? saved?.wireframe ?? false, colliderWireframe: saved?.colliderWireframe ?? true
 };
 const hidden = new Set<string>(saved?.hidden);
@@ -169,6 +170,7 @@ let meshOrder:string[] = [], redrawOrder:() => void;
 let updateFlagRows: (() => void)[] = [];
 function inCategory(part: PreviewPart) {
   if (excluded.has(part.id)) return false;
+  if (part.routeKind) return settings[part.routeKind];
   if (part.widget) return settings.objects || (settings.arcs && arcGuides.has(part.id));
   return part.collider ? settings.colliders : settings.meshes;
 }
@@ -213,7 +215,7 @@ function showModelSources(choices: ModelSourceChoice[]) {
     return item;
   }));
 }
-for (const category of ["meshes","colliders","objects","arcs"] as const) {
+for (const category of ["meshes","colliders","objects","arcs","taxiPaths","airPaths"] as const) {
   const input = document.querySelector<HTMLInputElement>("#"+category);
   input.checked = settings[category];
   input.onchange = () => { settings[category] = input.checked; changed(); };
@@ -361,6 +363,10 @@ function render() {
   renderer.clear();
   camera.layers.set(previewLayer.mesh);
   renderDaylight(renderer,scene,camera);
+  if (active && (settings.taxiPaths || settings.airPaths)) {
+    camera.layers.set(previewLayer.route);
+    renderer.render(scene,camera);
+  }
   if (settings.colliders) {
     renderer.clearDepth();
     camera.layers.set(previewLayer.collider);
@@ -395,11 +401,12 @@ function render() {
   camera.layers.set(previewLayer.mesh);
 }
 
-function frame() {
+function frame(fitVisibleRoutes=false) {
+  const extent = fitVisibleRoutes && active && settings.airPaths ? entityBounds(active.view.model,true) : bounds;
   const halfAngle = Math.atan(Math.tan(camera.fov * Math.PI / 360) * Math.min(1, camera.aspect));
-  const distance = bounds.radius * 1.1 / Math.sin(halfAngle);
-  controls.target.copy(bounds.center);
-  camera.position.set(1, 0.65, 1).normalize().multiplyScalar(distance).add(bounds.center);
+  const distance = Math.max(extent.radius,0.001) * 1.1 / Math.sin(halfAngle);
+  controls.target.copy(extent.center);
+  camera.position.set(1, 0.65, 1).normalize().multiplyScalar(distance).add(extent.center);
   camera.near = bounds.radius / 1000;
   camera.far = Math.max(bounds.radius * 1000, distance * 2);
   controls.maxDistance = camera.far / 2;
@@ -441,7 +448,7 @@ async function loadEntity(id:string, next:EntityScene, documentUri:string) {
       markMissingMaps(staged.model);
     }
     const view=staged || active.view;
-    const extent=new Box3().setFromObject(view.model).getBoundingSphere(new Sphere());
+    const extent=entityBounds(view.model);
     if (!Number.isFinite(extent.radius) || extent.isEmpty()) throw Error("No drawable geometry in this model.");
     inspector.hide();
     if (staged) {
@@ -463,6 +470,8 @@ async function loadEntity(id:string, next:EntityScene, documentUri:string) {
     fitEntityShadows(sun,model);
     initializedEntity=id;
     active={id,scene:next,view};
+    for (const kind of ["taxiPaths","airPaths"] as const)
+      document.getElementById(kind+"-filter").hidden = !next.objects?.some(obj=>obj.route?.kind===kind);
     if (!same) animationSeconds = 0;
     sampleSpins = bindEntitySpins(view.nodes,next.spins);
     sampleSpins?.(animationSeconds);
@@ -568,7 +577,7 @@ try {
   renderer.shadowMap.autoUpdate = false;
   resize();
   window.addEventListener("resize", resize);
-  fit.addEventListener("click", frame);
+  fit.addEventListener("click",()=>frame(true));
 } catch {
   status.textContent = "The model preview needs WebGL 2. Check graphics acceleration in VS Code.";
 }

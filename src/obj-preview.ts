@@ -198,6 +198,8 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
       <label for="missing-texture">Missing texture</label><select id="missing-texture"><option value="black">Black</option><option value="magenta">Magenta</option><option value="grey" selected>Grey</option></select>
       <div id="object-filter" hidden><label><input id="objects" type="checkbox" checked>Object markers</label></div>
       <div id="arc-filter" hidden><label><input id="arcs" type="checkbox" checked>System arcs</label></div>
+      <div id="taxiPaths-filter" hidden><label><input id="taxiPaths" type="checkbox" checked>Deck taxi paths</label></div>
+      <div id="airPaths-filter" hidden><label><input id="airPaths" type="checkbox">Airborne paths</label></div>
       <div id="animation-filter" hidden><label><input id="animations" type="checkbox">Animations</label></div></div>
       <p></p><p id="sidecar-error" role="status" hidden></p><details id="entity-warnings" hidden><summary></summary><div></div></details><ul></ul></details>
       <script nonce="${nonce}" src="${script}"></script></body></html>`;
@@ -271,7 +273,7 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
       function cancel() { pending?.cancel(); pending?.dispose(); pending = undefined; clearTimeout(timer); }
       async function reveal(ids: string[]) {
         const choices=ids.map(id=>sources.get(id)).filter(Boolean).map(source=>({label:"["+source.header+"]",source}));
-        const source=(choices.length>1 ? await vscode.window.showQuickPick(choices,{placeHolder:"Open system definition"}) : choices[0])?.source;
+        const source=(choices.length>1 ? await vscode.window.showQuickPick(choices,{placeHolder:"Open INI definition"}) : choices[0])?.source;
         if (!source) return;
         const uri=vscode.Uri.parse(source.uri);
         const doc=await vscode.workspace.openTextDocument(uri);

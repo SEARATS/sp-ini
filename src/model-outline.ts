@@ -2,7 +2,7 @@ import type { ModelNode } from "./hierarchy";
 import { isColliderName } from "./mesh-names";
 import type { PreviewColor } from "./preview-colors";
 
-export interface PreviewPart { id: string; collider: boolean; widget?: boolean; names?: string[] }
+export interface PreviewPart { id: string; collider: boolean; widget?: boolean; routeKind?:"taxiPaths"|"airPaths"; names?: string[] }
 export interface OutlineNode {
   name: string;
   meshName?: string;

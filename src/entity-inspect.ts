@@ -1,6 +1,6 @@
 import { Raycaster, Vector2, type Object3D, type PerspectiveCamera } from "three";
 import { previewLayer } from "./preview-display";
-import type { EntityPart, EntityObject } from "./entity-model";
+import { deckPointSection, type EntityPart, type EntityObject } from "./entity-model";
 import type { PreviewColor } from "./preview-colors";
 import type { IniSource } from "./ini";
 
@@ -19,7 +19,7 @@ function geometryLabel(part: EntityPart) {
   return part.meshName ? "Mesh · "+part.meshName : "Mesh";
 }
 
-const hoverPriority: Record<PreviewColor,number> = { weapon:0, sensor:1, flight:1, magazine:1, object:1, hull:2, unassigned:3, collider:3 };
+const hoverPriority: Record<PreviewColor,number> = { weapon:0, sensor:2, flight:2, magazine:2, object:2, hull:3, unassigned:4, collider:4 };
 
 // Three returns triangles nearest first. A stable sort keeps that order within a priority.
 export function hoverStack(hits: readonly {object:Object3D}[], parts: ReadonlyMap<string,Inspectable>): Inspectable[] {
@@ -29,7 +29,7 @@ export function hoverStack(hits: readonly {object:Object3D}[], parts: ReadonlyMa
     const part = parts.get(object.userData.partId);
     if (!part || ranked.has(part)) continue;
     const role: PreviewColor = object.userData.previewRole;
-    if (role) ranked.set(part,hoverPriority[role]);
+    if (role) ranked.set(part,object.userData.deckPoint ? 1 : hoverPriority[role]);
     else mesh ??= part;
   }
   if (!ranked.size) return mesh ? [mesh] : [];
@@ -43,6 +43,7 @@ export function inspectEntity(canvas: HTMLCanvasElement, camera: PerspectiveCame
   const ray = new Raycaster(), pointer = new Vector2();
   ray.layers.enable(previewLayer.collider);
   ray.layers.enable(previewLayer.widget);
+  ray.layers.enable(previewLayer.route);
   const modifier = /Mac/i.test(navigator.platform) ? "⌘" : "Ctrl";
   const openHint = modifier+"+click to open INI";
   let scheduled = 0, press: PointerEvent;
@@ -54,6 +55,8 @@ export function inspectEntity(canvas: HTMLCanvasElement, camera: PerspectiveCame
   }
   function targets(hits:Inspectable[],shift:boolean) {
     if (shift) return hits.filter(part=>"collider" in part && part.collider).slice(0,1).map(part=>part.id);
+    const isDeckPoint = (p:Inspectable)=>p && "group" in p && deckPointSection.test(p.name);
+    if (isDeckPoint(hits[0])) return hits.filter(isDeckPoint).map(p=>p.id);
     for (const part of hits) {
       if (!("collider" in part) || !part.collider) return [part.id];
       const ids=owners(part).map(owner=>owner.id);
@@ -64,7 +67,8 @@ export function inspectEntity(canvas: HTMLCanvasElement, camera: PerspectiveCame
   function hint(hits:Inspectable[]) {
     if (!hits.some(part=>"collider" in part && part.collider)) return openHint;
     const ids=targets(hits,false);
-    return [ids.length && modifier+(ids.length===1 ? "+click: system" : "+click: choose system"),"Shift+click: collider"].filter(Boolean).join(" · ");
+    const label = "group" in hits[0] && deckPointSection.test(hits[0].name) ? "point" : "system";
+    return [ids.length && modifier+"+click: "+(ids.length===1 ? "" : "choose ")+label,"Shift+click: collider"].filter(Boolean).join(" · ");
   }
   function arcText(obj:EntityObject) {
     return [obj.firingArcs && "FiringArcs="+obj.firingArcs,obj.elevationArc && "ElevationArc="+obj.elevationArc].filter(Boolean);
@@ -87,6 +91,7 @@ export function inspectEntity(canvas: HTMLCanvasElement, camera: PerspectiveCame
     const rect = canvas.getBoundingClientRect();
     pointer.set((event.clientX-rect.left)/rect.width*2-1, 1-(event.clientY-rect.top)/rect.height*2);
     ray.setFromCamera(pointer,camera);
+    ray.params.Line.threshold = Math.max(camera.near, camera.position.length()*0.002);
     return hoverStack(ray.intersectObject(model(),true),parts);
   }
   function hide() {

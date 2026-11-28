@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Deck taxi paths and airborne holding and approach paths have separate visibility controls. Paths are dark blue. Taxi routes meet raised elevators, and deck points take priority when picking overlapping objects.
 - The INI preview draws deck points as dark blue squares and connects taxi paths through their waypoints. Flight systems are blue, sensors yellow, and weapon arcs orange.
 - Search radars and helicopter rotors turn in the INI hierarchy preview. Use **Animations** to pause them.
 - The INI preview can filter system markers, colliders and arcs by weapons, flight, sensors or propulsion.
