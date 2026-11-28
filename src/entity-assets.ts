@@ -11,6 +11,7 @@ import { entityResourceSources, modelResource } from "./entity-resources";
 import { type parse } from "./ini";
 import { paintTexture, type Appearance } from "./entity-selection";
 import { entitySpins } from "./entity-spins";
+import { elevatorTravel } from "./elevator-travel";
 
 function previewTexture(image: PNG, opaque: boolean): EntityScene["textures"][number] {
   let alpha: "opaque" | "cutout" | "blend" = "opaque";
@@ -98,8 +99,9 @@ export async function entityAssets(doc: ReturnType<typeof parse>, uri: string, c
     part.texture = textures.get(textureKey);
     if (missingDiffuse.has(textureKey)) part.missingDiffuse = true;
   }
+  scene.elevators = await elevatorTravel(doc,scene.parts,catalog,materials,warnings);
+  scene.objects = entityObjects(doc,scene.parts,scene.elevators);
   scene.warnings = [...warnings];
-  scene.objects = entityObjects(doc,scene.parts);
   scene.spins = await entitySpins(doc,scene.parts,catalog,materials);
   return scene;
 }

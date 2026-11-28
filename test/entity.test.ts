@@ -5,12 +5,13 @@ import { parse } from "../src/ini";
 import { Materials } from "../src/materials";
 import { entityObjects, entityParts, expandEntityIni } from "../src/entity-model";
 import { selectEntity, paintTexture, entityDocument } from "../src/entity-selection";
-import { assembledEntity, bindEntitySpins, patchEntity } from "../src/entity-viewer";
+import { assembledEntity, bindEntitySpins, entityBounds, patchEntity, poseElevator } from "../src/entity-viewer";
 import { entitySpins } from "../src/entity-spins";
-import { Box3, Group, LoadingManager, Mesh, MeshBasicMaterial, Vector3 } from "three";
+import { elevatorTravel } from "../src/elevator-travel";
+import { Box3, BoxGeometry, Group, LoadingManager, Mesh, MeshBasicMaterial, PerspectiveCamera, Vector2, Vector3 } from "three";
 import type { EntityPart, Vector } from "../src/entity-model";
 import { applyDisplay, previewLayer } from "../src/preview-display";
-import { hoverStack, sourceLocation } from "../src/entity-inspect";
+import { hoverStack, nearbyFlightWidgets, sourceLocation } from "../src/entity-inspect";
 import {unitCard} from "../src/unit-card";
 import {CardReferences} from "../src/card-references";
 import {StockAssets} from "../src/stock-assets";
@@ -84,8 +85,8 @@ test("deck squares and taxi ribbons use authored positions and update when a way
   }
   const before = scene(ini), view=assembledEntity(before,new LoadingManager());
   const route = before.objects.find(o=>o.name==="TaxiPath1"), id=route.id;
-  assert.deepEqual(route.taxiPath,[[0,2,1],[1,2,1],[1,2,2],[1,2,3]]);
-  assert.deepEqual(before.objects.find(o=>o.name==="TaxiPath2").taxiPath,[[1,2,3],[0,2,2]]);
+  assert.deepEqual(route.route.points,[[0,2,1],[1,2,1],[1,2,2],[1,2,3]]);
+  assert.deepEqual(before.objects.find(o=>o.name==="TaxiPath2").route.points,[[1,2,3],[0,2,2]]);
   const lift = view.widgets.get("object:elevator1");
   assert.ok(lift.position.equals(new Vector3(0,1,0)));
   lift.geometry.computeBoundingBox();
@@ -97,6 +98,176 @@ test("deck squares and taxi ribbons use authored positions and update when a way
   assert.notEqual(path.geometry,previous);
   assert.equal(view.widgets.get(id),path);
   assert.ok(!excludedOverlays(before,"Flight").has(id) && excludedOverlays(before,"Sensors").has(id));
+});
+
+test("flight paths use raised elevators, deck-relative air coordinates and independent visibility",async()=>{
+  const doc = parse(["[Models]","Mesh=hull","[Submodels]","SubModel1=Elevator_1","[Elevator_1]","Mesh=lift",
+    "[FlightDeck]","NumberOfElevators=1","NumberOfRecoveryPoints=1","NumberOfTaxiPaths=2",
+    "HoldWaypoints=1,100,0|0,100,1","[RecoveryPoint1]","Position=1,2,3","Rotation=90","AllowedType=Plane,Helicopter","AssociatedElevators=1",
+    "CircuitWaypoints=1,100,0","[Elevator1]","SpawnPosition=0,0,0","RidePosition=0,0,1","MoveUpAnimation=Lift",
+    "[TaxiPath1]","From=Elevator1","Waypoints=0,999,0","To=RecoveryPoint1","[TaxiPath2]","From=RecoveryPoint1","Waypoints=0,-999,0","To=Elevator1",
+    "[Animations]","AnimationFile_1=DeckLift"].join("\n"));
+  const library = parse("[Animations]\nAnimation1=Lift\n[Lift]\nSequence1=Up\nSequence1_Model=Elevator_1\n[Up]\nNumberOfSteps=2\nPositionY1=-1.75\nStep2=8|none,0,none|none|linear");
+  const catalog = new Catalog(), uri="file:///animations/DeckLift.ini";
+  catalog.add({rel:"animations/DeckLift.ini",source:"Workspace",uri},library);
+  const parts = entityParts(doc,new Set()).map(r=>r.part), warnings=new Set<string>();
+  const elevators = await elevatorTravel(doc,parts,catalog,new Materials(()=>library),warnings);
+  assert.equal(warnings.size,0);
+  const objects=entityObjects(doc,parts,elevators);
+  const get=(name:string)=>objects.find(o=>o.name===name);
+  assert.deepEqual(get("Elevator1").position,[0,0,0]);
+  assert.deepEqual(get("TaxiPath1").position,[0,1.75,1]);
+  assert.deepEqual(get("TaxiPath2").route.points.slice(-2),[[0,2,1],[0,0,0]]);
+  const hold=get("FlightDeck · HoldWaypoints"), approach=get("RecoveryPoint1 · Fixed-wing approach");
+  assert.deepEqual(hold.route.points,[[27.559496,100*0.00453571,0],[0,100*0.00453571,27.559496],hold.position]);
+  assert.equal(approach.route.points.length,6);
+  assert.ok(Math.abs(approach.route.points[0][1]-100*27.559496*0.000189394)<1e-8);
+  assert.ok(Math.abs(approach.route.points[1][0]-(1-2*27.559496))<1e-8);
+  assert.deepEqual(approach.route.points.at(-1),[1,2,3]);
+  assert.equal(get("RecoveryPoint1 · Helicopter approach").route.points.length,3);
+  const scene={parts,objects,elevators,geometry:[],textures:[],warnings:[]};
+  const view=assembledEntity(scene,new LoadingManager());
+  const platform=parts.find(p=>p.id==="elevator_1");
+  poseElevator(view,platform,elevators[0],"raise/0");
+  assert.equal(view.nodes.get("elevator_1").position.y,-1.75);
+  poseElevator(view,platform,elevators[0],"raise/1");
+  assert.equal(view.nodes.get("elevator_1").position.y,0);
+  poseElevator(view,platform,elevators[0],"raise/0");
+  poseElevator(view,platform,elevators[0],"");
+  assert.equal(view.nodes.get("elevator_1").position.y,0);
+  for (const obj of [hold,get("TaxiPath1")]) {
+    const material=view.widgets.get(obj.id).material;
+    assert.ok(!Array.isArray(material) && !material.depthTest);
+  }
+  const missing=await elevatorTravel(doc,parts,new Catalog(),new Materials(()=>undefined),warnings);
+  assert.ok([...warnings].some(w=>w.includes("MoveUpAnimation=Lift")));
+  assert.deepEqual(entityObjects(doc,parts,missing).find(o=>o.name==="TaxiPath1").position,[0,0,1]);
+  const deck=new Group();
+  deck.userData={partId:"deck",previewRole:"flight"};
+  const hits = [deck,...[hold,get("TaxiPath1"),get("RecoveryPoint1")].map(obj=>view.widgets.get(obj.id))].map(object=>({object}));
+  const lookup=new Map([...objects,{...parts[0],id:"deck",collider:true}].map(p=>[p.id,p]));
+  for (const role of ["flight","hull","weapon"]) {
+    deck.userData.previewRole=role;
+    assert.deepEqual(hoverStack(hits,lookup).map(p=>p.id),[get("RecoveryPoint1").id,hold.id,get("TaxiPath1").id,"deck"]);
+  }
+  const settings={meshes:true,colliders:true,objects:false,meshWireframe:false,colliderWireframe:true};
+  for (const airPaths of [false,true]) for (const taxiPaths of [false,true]) {
+    applyDisplay(view.model,new Map(),new Set(),{...settings,airPaths,taxiPaths});
+    assert.equal(view.widgets.get(hold.id).layers.isEnabled(previewLayer.route),airPaths);
+    assert.equal(view.widgets.get(get("TaxiPath1").id).layers.isEnabled(previewLayer.route),taxiPaths);
+    assert.equal(entityBounds(view.model,true).radius>entityBounds(view.model).radius,airPaths);
+  }
+});
+
+test("inbound taxi paths carry an aircraft down the lift and off to its hangar position",()=>{
+  const ini=["[Models]","SubModel1=lift","[lift]","Mesh=platform","[FlightDeck]","NumberOfElevators=1",
+    "NumberOfRecoveryPoints=1","NumberOfTaxiPaths=3","[RecoveryPoint1]","AllowedType=Plane,Helicopter","AssociatedElevators=1","Position=0,3,8",
+    "[TaxiPoint1]","Position=0,3,6","[Elevator1]","Mesh=lift","MoveDownAnimation=Lower","RidePosition=1,1,2",
+    "HelicopterRecoveryPosition=2,1,2","SpawnPosition=0,1,0","DespawnPosition=-1,1,0",
+    "[TaxiPath1]","From=RecoveryPoint1","To=TaxiPoint1","[TaxiPath2]","From=TaxiPoint1","To=Elevator1",
+    "[TaxiPath3]","From=Elevator1","To=TaxiPoint1"].join("\n");
+  const step=(time:number,y:number)=>({time,position:[0,y,0] as Vector,rotation:[0,0,0] as Vector});
+  const lift={name:"Elevator1",part:"lift",raise:[],lower:[step(0,0),step(2,-0.5),step(5,-2)]};
+  function routes(text:string,lower=lift.lower) {
+    const doc=parse(text), parts=entityParts(doc,new Set()).map(r=>r.part);
+    return entityObjects(doc,parts,[{...lift,lower}]).filter(o=>o.route?.kind==="taxiPaths");
+  }
+  const [approach,plane,heli,outbound]=routes(ini);
+  assert.equal(approach.route.points.length,2);
+  assert.equal(outbound.route.points.length,2);
+  assert.deepEqual(plane.route.points,[[0,3,6],[1,3,2],[1,2.5,2],[1,1,2],[-1,1,0]]);
+  assert.deepEqual(heli.route.points,[[0,3,6],[2,3,2],[2,2.5,2],[2,1,2],[-1,1,0]]);
+  assert.match(plane.placement,/DespawnPosition=/);
+  assert.deepEqual(routes(ini.replace("DespawnPosition=-1,1,0",""))[1].route.points.at(-1),[0,1,0]);
+  assert.deepEqual(routes(ini,[])[1].route.points,[[0,3,6],[1,3,2]]);
+  assert.equal(routes(ini.replace("AssociatedElevators=1","AssociatedElevators=2"))[1].route.points.length,2);
+  const turn={...step(5,-2),rotation:[0,90,0] as Vector};
+  const arc=routes(ini,[step(0,0),turn])[1].route.points;
+  const disembark=new Vector3(...arc.at(-2));
+  assert.ok(disembark.distanceTo(new Vector3(2,1,-1))<1e-9);
+  assert.ok(arc.length>5);
+});
+
+test("launch and recovery markers follow mirrored INI headings through live edits",()=>{
+  function scene(yaw:number) {
+    const doc=parse("[Models]\n[LaunchPoint1]\nPosition=0,0,0\nRotation="+yaw+"\n[RecoveryPoint1]\nPosition=0,0,0\nRotation=-45\n[TaxiPoint1]\nPosition=0,0,0");
+    const parts=entityParts(doc,new Set()).map(r=>r.part);
+    return {parts,objects:entityObjects(doc,parts),geometry:[],textures:[],warnings:[]};
+  }
+  const before=scene(90),view=assembledEntity(before,new LoadingManager());
+  const launch=view.widgets.get("object:launchpoint1"), recovery=view.widgets.get("object:recoverypoint1");
+  const direction=(node:typeof launch)=>new Vector3(0,0,1).applyQuaternion(node.quaternion);
+  for (const marker of [launch,recovery]) {
+    marker.geometry.computeBoundingBox();
+    assert.ok(marker.geometry.boundingBox.max.z>2*marker.geometry.boundingBox.max.x);
+    const vertices=marker.geometry.getAttribute("position");
+    const tip=Array.from({length:vertices.count},(_,i)=>new Vector3().fromBufferAttribute(vertices,i))
+      .filter(v=>v.z===marker.geometry.boundingBox.max.z);
+    assert.deepEqual(tip.map(v=>v.x),[0]);
+  }
+  assert.ok(direction(launch).distanceTo(new Vector3(-1,0,0))<1e-10);
+  assert.ok(direction(recovery).distanceTo(new Vector3(1,0,1).normalize())<1e-10);
+  const taxi=view.widgets.get("object:taxipoint1");
+  taxi.geometry.computeBoundingBox();
+  assert.equal(taxi.geometry.boundingBox.max.z,taxi.geometry.boundingBox.max.x);
+  assert.ok(patchEntity(view,before,scene(0)));
+  assert.ok(direction(launch).distanceTo(new Vector3(0,0,1))<1e-10);
+});
+
+test("elevators cycle on independent clocks and only animated platforms receive the blue fill",()=>{
+  const doc=parse("[Models]\nSubModel1=A\nSubModel2=B\n[A]\nMesh=A\n[B]\nMesh=B");
+  const parts=entityParts(doc,new Set()).map(r=>r.part);
+  const step=(time:number,y:number)=>({time,position:[0,y,0] as Vector,rotation:[0,0,0] as Vector,linear:true});
+  const lifts=parts.slice(1).map(part=>({name:part.name,part:part.id,raise:[step(0,-4),step(8,0)],lower:[step(0,0),step(4,-4)]}));
+  for (const part of parts.slice(1)) part.geometry=0;
+  const view=assembledEntity({parts,elevators:lifts,geometry:[],textures:[],warnings:[]},new LoadingManager(),[new BoxGeometry()]);
+  const [a,b]=lifts, playA=poseElevator(view,parts[1],a,"animate"), playB=poseElevator(view,parts[2],b,"animate");
+  const y=(id:string)=>view.nodes.get(id).position.y;
+  playA(10); playB(2);
+  assert.deepEqual([y(a.part),y(b.part)],[-2,-3]);
+  assert.equal(view.platforms.get(b.part).fill.visible,true);
+  poseElevator(view,parts[2],b,"raise/1");
+  playA(13);
+  assert.deepEqual([y(a.part),y(b.part)],[-3.5,0]);
+  assert.equal(view.platforms.get(a.part).fill.visible,true);
+  assert.equal(view.platforms.get(b.part).fill.visible,false);
+});
+
+test("deck point and route hover tolerance follows screen pixels and visibility",()=>{
+  const doc=parse("[Models]\n[FlightDeck]\nNumberOfTaxiPaths=1\nHoldWaypoints=0,0,0|1,0,0\n[LaunchPoint1]\nPosition=0,0,0\n[TaxiPoint1]\nPosition=3,0,0\n[TaxiPath1]\nFrom=LaunchPoint1\nTo=TaxiPoint1");
+  const parts=entityParts(doc,new Set()).map(r=>r.part), objects=entityObjects(doc,parts);
+  const view=assembledEntity({parts,objects,geometry:[],textures:[],warnings:[]},new LoadingManager());
+  applyDisplay(view.model,new Map(),new Set(),{meshes:true,colliders:true,objects:true,taxiPaths:true,airPaths:true,meshWireframe:false,colliderWireframe:false});
+  view.model.position.set(5,1,2);
+  view.model.updateMatrixWorld(true);
+  const camera=new PerspectiveCamera(42,2,0.1,400), lookup=new Map(objects.map(obj=>[obj.id,obj]));
+  for (const height of [8,-80]) {
+    camera.position.set(5,height,6);
+    camera.lookAt(5,1,2);
+    camera.updateMatrixWorld();
+    for (const [id,x] of [["object:launchpoint1",5],["object:taxipath1",3.5],["object:flightdeck/holdwaypoints",1]] as const) {
+      const widget=view.widgets.get(id), projected=new Vector3(x,1,2).project(camera);
+      const hit=(offset:number)=>nearbyFlightWidgets([widget],lookup,camera,new Vector2(projected.x,projected.y+offset*2/400),800,400).length;
+      assert.equal(hit(4),1,id);
+      assert.equal(hit(6),0,id);
+      const mask=widget.layers.mask;
+      widget.layers.disableAll();
+      assert.equal(hit(0),0,id);
+      widget.layers.mask=mask;
+    }
+  }
+});
+
+test("elevator rides follow the platform parent and reject unregistered animations",async()=>{
+  const doc=parse("[Models]\nSubModel1=Base\nSubModel2=Lift\n[Base]\nRotation=0,0,90\nScale=2,2,2\n[Lift]\nParent=Base\nMesh=platform\n[FlightDeck]\nNumberOfElevators=1\n[Elevator1]\nMesh=Lift\nRidePosition=0,0,0\nMoveUpAnimation=Raise\nMoveDownAnimation=Lower\n[Animations]\nAnimationFile_1=platform");
+  const lib=parse("[Animations]\nNumberOfAnimations=1\nAnimation1=Raise\nAnimation2=Lower\n[Raise]\nSequence1_Model=Lift\nSequence1=Motion\n[Lower]\nSequence1_Model=Lift\nSequence1=Motion\n[Motion]\nNumberOfSteps=2\nTime1=0\nPositionY1=0\nTime2=8\nPositionY2=1");
+  const catalog=new Catalog(), warnings=new Set<string>();
+  catalog.add({rel:"animations/platform.ini",uri:"file:///animations/platform.ini",source:"Workspace"},lib);
+  const parts=entityParts(doc,warnings).map(({part})=>part);
+  const [lift]=await elevatorTravel(doc,parts,catalog,new Materials(()=>lib),warnings);
+  assert.ok(new Vector3(...lift.raisedRide).distanceTo(new Vector3(-2,0,0))<1e-10);
+  assert.deepEqual(lift.lower,[]);
+  assert.deepEqual([...warnings],["[Elevator1] MoveDownAnimation=Lower is not a registered animation."]);
 });
 
 test("system arc guides preserve separate firing sectors, wrap past 180 and show elevation",()=>{

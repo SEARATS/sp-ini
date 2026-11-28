@@ -1,5 +1,6 @@
-import { Box3, BoxGeometry, BufferAttribute, BufferGeometry, ConeGeometry, DoubleSide, Float32BufferAttribute, Group, MathUtils, Mesh, MeshBasicMaterial, MeshPhongMaterial, OctahedronGeometry, PlaneGeometry, Quaternion, RepeatWrapping, SRGBColorSpace, TextureLoader, Vector3, type LoadingManager } from "three";
-import type { EntityPart, EntityScene, EntitySpin, Vector } from "./entity-model";
+import { Box3, BoxGeometry, BufferAttribute, BufferGeometry, ConeGeometry, DoubleSide, EdgesGeometry, Float32BufferAttribute, Group, Line, LineBasicMaterial, LineSegments, MathUtils, Mesh, MeshBasicMaterial, MeshPhongMaterial, OctahedronGeometry, PlaneGeometry, Quaternion, RepeatWrapping, Sphere, SRGBColorSpace, TextureLoader, Vector3, type LoadingManager } from "three";
+import { deckPointSection, type EntityElevator, type EntityObject, type EntityPart, type EntityScene, type EntitySpin, type Vector } from "./entity-model";
+import { sampleElevatorPose } from "./elevator-motion";
 import type { OutlineNode } from "./model-outline";
 import { deckPointColor, objectColor, previewColors, type PreviewColor } from "./preview-colors";
 
@@ -11,6 +12,44 @@ function transform(node:Group, position:Vector, rotation:Vector) {
   const [x,y,z]=position, [rx,ry,rz]=rotation.map(MathUtils.degToRad);
   node.position.set(-x,y,z);
   node.rotation.set(rx,-ry,-rz,"YXZ");
+}
+
+export function elevatorClips(lift:EntityElevator) {
+  return [lift.raise,lift.lower].filter(steps=>steps.length>1 && steps.at(-1).time>0 &&
+    steps.every((step,i)=>step.time>=0 && (!i || step.time>=steps[i-1].time)) &&
+    steps.some(step=>step.position.some((v,i)=>v!==steps[0].position[i]) || step.rotation.some((v,i)=>v!==steps[0].rotation[i])));
+}
+export function poseElevator(view:ReturnType<typeof assembledEntity>, part:EntityPart, lift:EntityElevator, selection:string) {
+  const node=view.nodes.get(part.id);
+  const platform=view.platforms.get(part.id);
+  if (platform) {
+    platform.outline.visible=!!selection;
+    platform.fill.visible=selection==="animate";
+  }
+  const [motion,index]=selection.split("/");
+  const steps=motion==="raise" || motion==="lower" ? lift[motion] : [];
+  const pose=steps[Number(index)] ?? part;
+  transform(node,pose.position,pose.rotation);
+  if (selection!=="animate") return;
+  const clips=elevatorClips(lift), duration=clips.reduce((sum,clip)=>sum+clip.at(-1).time,0);
+  if (!duration) return;
+  return (elapsed:number)=>{
+    let time=elapsed % duration;
+    for (const clip of clips) {
+      const endTime=clip.at(-1).time;
+      if (time>=endTime) { time-=endTime; continue; }
+      const i=clip.findIndex(p=>p.time>=time), end=clip[i];
+      if (i===0) transform(node,end.position,end.rotation);
+      else {
+        const start=clip[i-1];
+        sampleElevatorPose(node.position,node.quaternion,start,end,(time-start.time)/(end.time-start.time));
+        node.position.x *= -1;
+        node.quaternion.y *= -1;
+        node.quaternion.z *= -1;
+      }
+      break;
+    }
+  };
 }
 
 export function entityGeometry(data: EntityScene["geometry"][number]) {
@@ -45,15 +84,52 @@ function taxiGeometry(points:Vector[], width:number) {
   for (let i=1;i<points.length;i++) {
     const a = points[i-1], b = points[i];
     const dx = a[0]-b[0], dz = b[2]-a[2], length = Math.hypot(dx,dz);
-    const sideX = length ? dz/length * width/2 : width/2, sideZ = length ? -dx/length * width/2 : 0;
-    const start = vertices.length/3;
-    for (const p of [a,b]) for (const sign of [-1,1])
-      vertices.push(x-p[0]+sign*sideX,p[1]-y,p[2]-z+sign*sideZ);
-    indices.push(start,start+1,start+2,start+1,start+3,start+2);
+    function ribbon(sideX:number,sideZ:number) {
+      const start = vertices.length/3;
+      for (const p of [a,b]) for (const sign of [-1,1])
+        vertices.push(x-p[0]+sign*sideX,p[1]-y,p[2]-z+sign*sideZ);
+      indices.push(start,start+1,start+2,start+1,start+3,start+2);
+    }
+    if (length>1e-9) ribbon(dz/length*width/2,-dx/length*width/2);
+    else if (a[1]!==b[1]) {
+      // A vertical ride needs width in both side views.
+      ribbon(width/2,0);
+      ribbon(0,width/2);
+    }
   }
   geometry.setAttribute("position",new Float32BufferAttribute(vertices,3));
   geometry.setIndex(indices);
   return geometry;
+}
+
+// The triangle points forward (+Z) from the edge of the square.
+function deckMarker(heading:number | undefined) {
+  if (heading===undefined) return new PlaneGeometry(1.7,1.7).rotateX(-Math.PI/2);
+  const geometry=new BufferGeometry();
+  geometry.setAttribute("position",new Float32BufferAttribute([
+    -0.85,0,-0.85, -0.85,0,0.85, 0.85,0,0.85, 0.85,0,-0.85,
+    -0.32,0,0.85, 0,0,2.15, 0.32,0,0.85
+  ],3));
+  geometry.setIndex([0,1,2,0,2,3,4,5,6]);
+  return geometry;
+}
+
+function routeGeometry(route:EntityObject["route"],width:number) {
+  const {points,kind} = route;
+  if (points.length===1) return new PlaneGeometry(width*4,width*4).rotateX(-Math.PI/2);
+  if (kind==="taxiPaths") return taxiGeometry(points,width);
+  const [x,y,z] = points[0];
+  return new BufferGeometry().setFromPoints(points.map(p=>new Vector3(x-p[0],p[1]-y,p[2]-z)));
+}
+
+export function entityBounds(model:Group, includeAir = false) {
+  const box = new Box3();
+  model.updateMatrixWorld(true);
+  model.traverse(node=>{
+    if ((node instanceof Mesh || node instanceof Line) &&
+      (node.userData.routeKind!=="airPaths" || (includeAir && node.layers.mask))) box.expandByObject(node);
+  });
+  return box.getBoundingSphere(new Sphere());
 }
 
 export function assembledEntity(scene: EntityScene, manager: LoadingManager, meshes = scene.geometry.map(entityGeometry)) {
@@ -62,8 +138,10 @@ export function assembledEntity(scene: EntityScene, manager: LoadingManager, mes
   const meshTree = tree("Meshes"), colliderTree = tree("Colliders"), objectTree = tree("Objects");
   const byId = new Map(scene.parts.map(part=>[part.id,part]));
   const nodes = new Map<string,Group>(), rows = new Map<string,OutlineNode>();
+  const platformIds=new Set(scene.elevators?.map(lift=>lift.part));
+  const platforms=new Map<string,{outline:LineSegments;fill:Mesh}>();
   const objectColliders = new Map<string,string[]>();
-  const widgets = new Map<string,Mesh>(), surfaces = new Map<string,Mesh<BufferGeometry,MeshBasicMaterial | MeshPhongMaterial>>();
+  const widgets = new Map<string,Mesh | Line>(), surfaces = new Map<string,Mesh<BufferGeometry,MeshBasicMaterial | MeshPhongMaterial>>();
   const objectGroups = new Map((scene.objects || []).map(obj=>[obj.name.toLowerCase(),obj.group]));
   function colliderColor(part: EntityPart): PreviewColor {
     const owners = part.referencedBy || [];
@@ -134,6 +212,18 @@ export function assembledEntity(scene: EntityScene, manager: LoadingManager, mes
     surface.userData.previewRole = rows.get(part.id).colliderStyle;
     if (part.collider) surfaces.set(part.id,surface);
     node.add(surface);
+    if (platformIds.has(part.id)) {
+      const outline=new LineSegments(new EdgesGeometry(shape),new LineBasicMaterial({color:previewColors.flight,depthTest:false,depthWrite:false}));
+      const fill=new Mesh(shape,new MeshBasicMaterial({color:previewColors.flight,transparent:true,opacity:0.42,depthTest:false,depthWrite:false}));
+      for (const overlay of [fill,outline]) {
+        overlay.userData.partId=part.id;
+        overlay.userData.platformOverlay=true;
+        overlay.visible=false;
+      }
+      node.add(fill);
+      node.add(outline);
+      platforms.set(part.id,{outline,fill});
+    }
     rows.get(part.id).parts.push({id:part.id,collider:part.collider});
   }
   const diameter = new Box3().setFromObject(model).getSize(new Vector3()).length() || 1;
@@ -149,35 +239,44 @@ export function assembledEntity(scene: EntityScene, manager: LoadingManager, mes
     const parent = nodes.get(obj.anchor);
     if (!obj.position || !parent) continue;
     const role = objectColor(obj.group);
-    const deckPoint = /^(LaunchPoint|RecoveryPoint|TaxiPoint|Elevator)\d+$/i.test(obj.name);
+    const deckPoint = deckPointSection.test(obj.name);
     const size = diameter*0.009/(parent.matrixWorld.getMaxScaleOnAxis() || 1);
-    const shape = obj.taxiPath ? taxiGeometry(obj.taxiPath,size*0.26) :
-      deckPoint ? new PlaneGeometry(1.7,1.7).rotateX(-Math.PI/2) :
+    const shape = obj.route ? routeGeometry(obj.route,size*0.26) :
+      deckPoint ? deckMarker(obj.heading) :
       role==="sensor" ? new OctahedronGeometry(1) : role==="weapon" ? new ConeGeometry(1,2,4) : new BoxGeometry(1.5,1.5,1.5);
-    const widget = new Mesh(shape,new MeshBasicMaterial({color:deckPoint ? deckPointColor : previewColors[role],
-      depthTest:false,depthWrite:false,...(deckPoint || obj.taxiPath ? {side:DoubleSide} : {})}));
+    const style = {color:deckPoint || obj.route ? deckPointColor : previewColors[role],depthTest:false,depthWrite:false};
+    const widget = obj.route?.kind==="airPaths" && obj.route.points.length>1
+      ? new Line(shape,new LineBasicMaterial(style))
+      : new Mesh(shape,new MeshBasicMaterial({...style,
+        ...(deckPoint || obj.route ? {side:DoubleSide} : {})}));
     const [x,y,z] = obj.position;
     widget.position.set(-x,y,z);
-    if (obj.taxiPath) widget.userData.pathWidth = size*0.26;
+    if (obj.heading!==undefined) widget.rotation.y=-MathUtils.degToRad(obj.heading);
+    if (obj.route) {
+      widget.userData.pathWidth = size*0.26;
+      widget.userData.routeKind = obj.route.kind;
+    }
     else widget.scale.setScalar(size);
     widget.userData.partId=obj.id;
     widget.userData.widget=true;
     widget.userData.previewRole=role;
-    if (!deckPoint && !obj.taxiPath) widget.userData.colliderIds=objectColliders.get(obj.name.toLowerCase());
+    if (!deckPoint && !obj.route) widget.userData.colliderIds=objectColliders.get(obj.name.toLowerCase());
     widget.userData.color=widget.material.color.getHex();
-    widget.renderOrder=obj.taxiPath ? 9 : 10;
+    widget.userData.deckPoint=deckPoint;
+    widget.renderOrder=deckPoint ? 14 : obj.route ? 9 : 10;
     parent.add(widget);
     widgets.set(obj.id,widget);
-    row.parts.push({id:obj.id,collider:false,widget:true});
+    row.parts.push({id:obj.id,collider:false,widget:true,routeKind:obj.route?.kind});
   }
-  return {model,outline:[meshTree,colliderTree,objectTree],surfaces,nodes,widgets};
+  return {model,outline:[meshTree,colliderTree,objectTree],surfaces,nodes,widgets,platforms};
 }
 
 // Most INI edits only move parts, toggle visibility or change source lines. Keep their GPU assets.
 export function patchEntity(view:ReturnType<typeof assembledEntity>, before:EntityScene, after:EntityScene) {
   const partShape = ({source,position,rotation,visible,...rest}:EntityPart)=>rest;
-  const objectShape = ({source,position,placement,firingArcs,elevationArc,taxiPath,...rest}:NonNullable<EntityScene["objects"]>[number])=>({...rest,placed:!!position,route:!!taxiPath});
+  const objectShape = ({source,position,heading,placement,firingArcs,elevationArc,route,...rest}:EntityObject)=>({...rest,placed:!!position,directed:heading!==undefined,kind:route?.kind,single:route?.points.length===1});
   if (before.geometry.length!==after.geometry.length || before.textures.length!==after.textures.length ||
+    JSON.stringify(before.elevators?.map(e=>e.part))!==JSON.stringify(after.elevators?.map(e=>e.part)) ||
     before.geometry.some((g,i)=>g.positions!==after.geometry[i].positions || g.uvs!==after.geometry[i].uvs || g.normals!==after.geometry[i].normals) ||
     before.textures.some((t,i)=>t.png!==after.textures[i].png || t.alpha!==after.textures[i].alpha) ||
     JSON.stringify(before.parts.map(partShape))!==JSON.stringify(after.parts.map(partShape)) ||
@@ -187,9 +286,10 @@ export function patchEntity(view:ReturnType<typeof assembledEntity>, before:Enti
     const widget = view.widgets.get(obj.id);
     if (!widget || !obj.position) continue;
     widget.position.set(-obj.position[0],obj.position[1],obj.position[2]);
-    if (obj.taxiPath && JSON.stringify(obj.taxiPath)!==JSON.stringify(before.objects[i].taxiPath)) {
+    if (obj.heading!==undefined) widget.rotation.y=-MathUtils.degToRad(obj.heading);
+    if (obj.route && JSON.stringify(obj.route.points)!==JSON.stringify(before.objects[i].route.points)) {
       widget.geometry.dispose();
-      widget.geometry = taxiGeometry(obj.taxiPath,widget.userData.pathWidth);
+      widget.geometry = routeGeometry(obj.route,widget.userData.pathWidth);
     }
   }
   return true;

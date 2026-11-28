@@ -171,10 +171,10 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
       .edit-tags[hidden] { display:none; }
       .moves{display:inline-flex;opacity:0}.row:hover .moves,.row:focus-within .moves{opacity:1}.moves button{padding:0 3px}
       #entity-pickers:not([hidden]) { display:grid; grid-template-columns:auto minmax(0,1fr); align-items:center; gap:4px 8px; margin:4px 0; }
-      #entity-pickers select { min-width:0; max-width:100%; }
-      #model-sources { grid-column:1 / -1; min-width:0; }
-      #model-sources li { margin:4px 0; white-space:normal; overflow-wrap:anywhere; }
-      #model-sources label { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:8px; align-items:center; }
+      :is(#entity-pickers,#elevators) select { min-width:0; max-width:100%; }
+      #entity-pickers details { grid-column:1 / -1; min-width:0; }
+      :is(#entity-pickers,#elevators) li { margin:4px 0; white-space:normal; overflow-wrap:anywhere; }
+      :is(#entity-pickers,#elevators) li label { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:8px; align-items:center; }
       #entity-warnings { max-width:28rem; white-space:normal; }
       #filters { display:grid; grid-template-columns:auto auto; align-items:center; gap:4px 8px; margin:6px 0; }
       #filters label, .row { display:inline-flex; align-items:center; gap:4px; }
@@ -198,8 +198,11 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
       <label for="missing-texture">Missing texture</label><select id="missing-texture"><option value="black">Black</option><option value="magenta">Magenta</option><option value="grey" selected>Grey</option></select>
       <div id="object-filter" hidden><label><input id="objects" type="checkbox" checked>Object markers</label></div>
       <div id="arc-filter" hidden><label><input id="arcs" type="checkbox" checked>System arcs</label></div>
+      <div id="taxiPaths-filter" hidden><label><input id="taxiPaths" type="checkbox" checked>Deck taxi paths</label></div>
+      <div id="airPaths-filter" hidden><label><input id="airPaths" type="checkbox">Airborne paths</label></div>
       <div id="animation-filter" hidden><label><input id="animations" type="checkbox">Animations</label></div></div>
-      <p></p><p id="sidecar-error" role="status" hidden></p><details id="entity-warnings" hidden><summary></summary><div></div></details><ul></ul></details>
+      <p></p><p id="sidecar-error" role="status" hidden></p><details id="entity-warnings" hidden><summary></summary><div></div></details><ul></ul>
+      <details id="elevators" hidden><summary>Elevators</summary><ul></ul></details></details>
       <script nonce="${nonce}" src="${script}"></script></body></html>`;
     return (next: ModelNode[]) => { roots = next; return sendFlags(); };
   }
@@ -269,9 +272,8 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
       let serial=0, sources = new Map<string,IniSource>();
       const stagedSources=new Map<number,Map<string,IniSource>>();
       function cancel() { pending?.cancel(); pending?.dispose(); pending = undefined; clearTimeout(timer); }
-      async function reveal(ids: string[]) {
-        const choices=ids.map(id=>sources.get(id)).filter(Boolean).map(source=>({label:"["+source.header+"]",source}));
-        const source=(choices.length>1 ? await vscode.window.showQuickPick(choices,{placeHolder:"Open system definition"}) : choices[0])?.source;
+      async function reveal(id: string) {
+        const source=sources.get(id);
         if (!source) return;
         const uri=vscode.Uri.parse(source.uri);
         const doc=await vscode.workspace.openTextDocument(uri);
@@ -319,7 +321,7 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
           return;
         }
         if (message.type === "openEntityPart") {
-          if (Array.isArray(message.ids)) void reveal(message.ids).catch(e=>vscode.window.showErrorMessage(e.message));
+          if (typeof message.id==="string") void reveal(message.id).catch(e=>vscode.window.showErrorMessage(e.message));
           return;
         }
         if (message.type !== "ready" && message.type !== "selectEntity") return;
