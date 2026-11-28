@@ -8,7 +8,7 @@ import { orderedSiblings } from "./mesh-order";
 import { meshMoveButtons } from "./mesh-move-buttons";
 import { colliderType, type MeshTags } from "./mesh-names";
 import { applyDisplay, previewLayer, type DisplaySettings } from "./preview-display";
-import { assembledEntity, bindEntitySpins, entityBounds, patchEntity, poseElevator } from "./entity-viewer";
+import { assembledEntity, bindEntitySpins, elevatorClips, entityBounds, patchEntity, poseElevator } from "./entity-viewer";
 import type { EntityScene } from "./entity-model";
 import { entityModes, excludedOverlays, type EntityMode } from "./entity-mode";
 import { previewColors, weaponArcColors } from "./preview-colors";
@@ -19,7 +19,7 @@ import { previewDaylight, fitEntityShadows, renderDaylight } from "./preview-lig
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
-type SavedDisplay = Partial<DisplaySettings> & {mode?: EntityMode; animations?:boolean; hidden?: string[]; wireframe?: boolean; entity?: string; appearance?: string; modelSources?:Record<string,string>};
+type SavedDisplay = Partial<DisplaySettings> & {mode?: EntityMode; animations?:boolean; elevatorPoses?:Record<string,string>; hidden?: string[]; wireframe?: boolean; entity?: string; appearance?: string; modelSources?:Record<string,string>};
 declare function acquireVsCodeApi(): { postMessage(message: unknown): void; getState(): SavedDisplay | undefined; setState(value: SavedDisplay): void };
 const vscode = acquireVsCodeApi();
 const status = document.querySelector("[role=status]");
@@ -128,7 +128,8 @@ let animationSeconds = 0;
 function animate(now:number) {
   animationSeconds += (now - previousFrame) / 1000;
   previousFrame = now;
-  sampleSpins(animationSeconds);
+  sampleSpins?.(animationSeconds);
+  for (const lift of liftStates.values()) lift.play?.(animationSeconds-lift.started);
   if (settings.arcs) for (const [id,{guides}] of arcGuides)
     placeSystemArcs(guides,active.view.model,active.view.widgets.get(id),bounds.radius*0.17);
   if (sun.castShadow) renderer.shadowMap.needsUpdate = true;
@@ -137,8 +138,9 @@ function animate(now:number) {
 }
 function syncPlayback() {
   cancelAnimationFrame(animationFrame);
-  document.getElementById("animation-filter").hidden = !sampleSpins;
-  if (sampleSpins && animationToggle.checked && !document.hidden) {
+  const playable=!!sampleSpins || [...liftStates.values()].some(lift=>lift.play);
+  document.getElementById("animation-filter").hidden = !playable;
+  if (playable && animationToggle.checked && !document.hidden) {
     previousFrame = performance.now();
     animationFrame = requestAnimationFrame(animate);
   }
@@ -164,28 +166,50 @@ let initializedEntity = saved?.entity;
 const picker = document.querySelector<HTMLElement>("#entity-pickers");
 const entitySelect = picker.querySelector<HTMLSelectElement>("#entity"), appearanceSelect = picker.querySelector<HTMLSelectElement>("#appearance");
 const warnings = document.querySelector<HTMLDetailsElement>("#entity-warnings");
-const elevatorPose = document.querySelector<HTMLSelectElement>("#elevator-pose");
-function showElevators(next:EntityScene, same:boolean) {
-  const previous=same ? elevatorPose.value : "";
-  const choices=[new Option("Model pose","")];
-  for (const lift of next.elevators ?? []) {
-    choices.push(new Option(lift.name+" · Platform",lift.name));
-    for (const motion of ["raise","lower"] as const) lift[motion].forEach((pose,i)=>choices.push(new Option(
-      lift.name+" · "+(motion==="raise" ? "Raise" : "Lower")+" · step "+(i+1)+" ("+pose.time+" s)",
-      [lift.name,motion,i].join("/"))));
-  }
-  elevatorPose.replaceChildren(...choices);
-  elevatorPose.hidden=elevatorPose.labels[0].hidden=choices.length===1;
-  elevatorPose.value=choices.some(c=>c.value===previous) ? previous : "";
-  poseElevator(active.view,next,elevatorPose.value);
+const elevatorPanel=document.querySelector<HTMLDetailsElement>("#elevators");
+const liftStates=new Map<string,{value:string; started:number; play?: (time:number)=>void}>();
+function showElevators(next:EntityScene,same:boolean) {
+  const previous=new Map(liftStates);
+  liftStates.clear();
+  const rows=(next.elevators ?? []).map(lift=>{
+    const part=next.parts.find(p=>p.id===lift.part);
+    const select=document.createElement("select");
+    const canPlay=elevatorClips(lift).length>0;
+    if (canPlay) select.add(new Option("Animate","animate"));
+    select.add(new Option("Model pose",""));
+    select.add(new Option("Highlight platform","platform"));
+    for (const motion of ["raise","lower"] as const) {
+      const steps=lift[motion];
+      steps.forEach((pose,i)=>{
+        const label=i===steps.length-1 ? (motion==="raise" ? "Raised" : "Lowered") :
+          (motion==="raise" ? "Raise" : "Lower")+" · step "+(i+1);
+        select.add(new Option(label+" ("+pose.time+" s)",motion+"/"+i));
+      });
+    }
+    const prior=same ? previous.get(lift.name) : undefined;
+    const restored=prior?.value ?? (!same && saved?.entity===active.id ? saved.elevatorPoses?.[lift.name] : undefined);
+    if ([...select.options].some(option=>option.value===restored)) select.value=restored;
+    function apply(started:number) {
+      const play=poseElevator(active.view,part,lift,select.value);
+      liftStates.set(lift.name,{value:select.value,started,play});
+      play?.(animationSeconds-started);
+    }
+    apply(prior?.value===select.value ? prior.started : animationSeconds);
+    select.onchange=()=>{
+      apply(animationSeconds);
+      fitEntityShadows(sun,model);
+      syncArcs();
+      syncPlayback();
+      changed();
+    };
+    const row=document.createElement("li"), label=document.createElement("label");
+    label.append(lift.name,select);
+    row.append(label);
+    return row;
+  });
+  elevatorPanel.querySelector("ul").replaceChildren(...rows);
+  elevatorPanel.hidden=!rows.length;
 }
-elevatorPose.onchange=()=>{
-  if (!active) return;
-  poseElevator(active.view,active.scene,elevatorPose.value);
-  fitEntityShadows(sun,model);
-  syncArcs();
-  updateDisplay();
-};
 const settings: DisplaySettings = {
   meshes: saved?.meshes ?? true, colliders: saved?.colliders ?? true, objects:saved?.objects ?? true, arcs:saved?.arcs ?? true,
   taxiPaths:saved?.taxiPaths ?? true, airPaths:saved?.airPaths ?? false,
@@ -215,7 +239,8 @@ function updateDisplay() {
 }
 function changed() {
   updateDisplay();
-  vscode.setState({...settings, mode, animations:animationToggle.checked, hidden: [...hidden], entity:selectedEntity, appearance:selectedAppearance, modelSources:selectedSources});
+  const elevatorPoses=Object.fromEntries([...liftStates].map(([name,lift])=>[name,lift.value]));
+  vscode.setState({...settings, mode, animations:animationToggle.checked, elevatorPoses, hidden: [...hidden], entity:selectedEntity, appearance:selectedAppearance, modelSources:selectedSources});
 }
 entitySelect.onchange = () => vscode.postMessage({type:"selectEntity",entity:entitySelect.value});
 appearanceSelect.onchange = () => vscode.postMessage({type:"selectEntity",entity:entitySelect.value,appearance:appearanceSelect.value,modelSources:selectedSources});
@@ -415,12 +440,12 @@ function render() {
       }
     }
   }
-  if (active && (settings.taxiPaths || settings.airPaths)) {
-    camera.layers.set(previewLayer.route);
+  if (active && liftStates.size) {
+    camera.layers.set(previewLayer.elevator);
     renderer.render(scene,camera);
   }
-  if (active && elevatorPose.value) {
-    camera.layers.set(previewLayer.elevator);
+  if (active && (settings.taxiPaths || settings.airPaths)) {
+    camera.layers.set(previewLayer.route);
     renderer.render(scene,camera);
   }
   if (selectedEntity && (settings.objects || settings.arcs)) {
@@ -511,10 +536,10 @@ async function loadEntity(id:string, next:EntityScene, documentUri:string) {
     fitEntityShadows(sun,model);
     initializedEntity=id;
     active={id,scene:next,view};
+    if (!same) animationSeconds = 0;
     showElevators(next,same);
     for (const kind of ["taxiPaths","airPaths"] as const)
       document.getElementById(kind+"-filter").hidden = !next.objects?.some(obj=>obj.route?.kind===kind);
-    if (!same) animationSeconds = 0;
     sampleSpins = bindEntitySpins(view.nodes,next.spins);
     sampleSpins?.(animationSeconds);
     syncPlayback();
@@ -545,6 +570,7 @@ async function loadEntity(id:string, next:EntityScene, documentUri:string) {
 async function load(data, layout?: ReturnType<typeof objLayout>) {
   const current = ++revision;
   sampleSpins = undefined;
+  liftStates.clear();
   syncPlayback();
   if (model) { scene.remove(model); dispose(model); model = undefined; }
   try {

@@ -39,7 +39,7 @@ export function applyDisplay(model: Object3D, categories: Map<string, boolean>, 
   model.traverse(node => {
     if (!("geometry" in node)) return;
     const id = node.userData.partId ?? String((node as Object3D & {ID?: number}).ID);
-    if (node.userData.platformOutline) {
+    if (node.userData.platformOverlay) {
       if (settings.meshes && !hidden.has(id)) node.layers.set(previewLayer.elevator);
       else node.layers.disableAll();
       return;

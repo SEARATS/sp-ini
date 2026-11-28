@@ -172,9 +172,9 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
       .moves{display:inline-flex;opacity:0}.row:hover .moves,.row:focus-within .moves{opacity:1}.moves button{padding:0 3px}
       #entity-pickers:not([hidden]) { display:grid; grid-template-columns:auto minmax(0,1fr); align-items:center; gap:4px 8px; margin:4px 0; }
       #entity-pickers select { min-width:0; max-width:100%; }
-      #model-sources { grid-column:1 / -1; min-width:0; }
-      #model-sources li { margin:4px 0; white-space:normal; overflow-wrap:anywhere; }
-      #model-sources label { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:8px; align-items:center; }
+      #entity-pickers details { grid-column:1 / -1; min-width:0; }
+      #entity-pickers li { margin:4px 0; white-space:normal; overflow-wrap:anywhere; }
+      #entity-pickers li label { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:8px; align-items:center; }
       #entity-warnings { max-width:28rem; white-space:normal; }
       #filters { display:grid; grid-template-columns:auto auto; align-items:center; gap:4px 8px; margin:6px 0; }
       #filters label, .row { display:inline-flex; align-items:center; gap:4px; }
@@ -190,7 +190,7 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
       <label for="entity">Entity</label><select id="entity"></select>
       <label for="appearance" id="appearance-label" hidden>Appearance</label><select id="appearance" hidden></select>
       <label for="entity-mode">Mode</label><select id="entity-mode">${entityModes.map(mode => `<option>${mode}</option>`).join("")}</select>
-      <label for="elevator-pose" hidden>Elevator pose</label><select id="elevator-pose" hidden></select>
+      <details id="elevators" hidden><summary>Elevators</summary><ul></ul></details>
       <details id="model-sources" hidden><summary>Model sources</summary><ul></ul></details></div>
       <div id="filters"><label><input id="meshes" type="checkbox" checked>Meshes</label>
       <select id="meshWireframe" aria-label="Mesh render mode"><option value="shaded">Shaded</option><option value="wireframe">Wireframe</option></select>

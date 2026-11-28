@@ -1,7 +1,9 @@
 import { parse, type IniSection, type IniSource } from "./ini";
 
 export type Vector = [number, number, number];
-export interface ElevatorPose { time:number; position:Vector; rotation:Vector }
+export interface ElevatorPose {
+  time:number; position:Vector; rotation:Vector; linear?:boolean; vectorPosition?:boolean; quaternionRotation?:boolean;
+}
 export interface EntityElevator {
   name:string; part:string; raise:ElevatorPose[]; lower:ElevatorPose[]; raisedRide?:Vector;
 }
@@ -9,7 +11,7 @@ export interface EntitySpin { part: string; axis: "x" | "y" | "z"; rpm: number }
 export type ObjectGroup = "Sensors" | "Weapons" | "Decoys" | "Combat systems" | "Ship systems" | "Flight deck" | "Magazines";
 export interface EntityObject {
   id: string; name: string; group: ObjectGroup; system?: string; source?: IniSource;
-  anchor?: string; position?: Vector; placement: string;
+  anchor?: string; position?: Vector; heading?:number; placement: string;
   firingArcs?: string; elevationArc?: string;
   route?: {kind:"taxiPaths" | "airPaths"; points:Vector[]};
 }
@@ -275,6 +277,10 @@ export function entityObjects(doc: ReturnType<typeof parse>, parts: EntityPart[]
       obj.anchor = root?.id;
       obj.position = point(value);
       obj.placement = obj.position ? key+"="+value : "Missing or invalid "+key;
+      if (/^(launchpoint|recoverypoint)/i.test(section.name)) {
+        const heading=Number(field(section,"rotation")?.value ?? 0);
+        if (Number.isFinite(heading)) obj.heading=heading;
+      }
       continue;
     }
     const mount = field(section,"mount")?.value;

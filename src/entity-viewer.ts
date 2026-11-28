@@ -1,5 +1,5 @@
-import { Box3, BoxGeometry, BufferAttribute, BufferGeometry, ConeGeometry, DoubleSide, EdgesGeometry, Float32BufferAttribute, Group, Line, LineBasicMaterial, LineSegments, MathUtils, Mesh, MeshBasicMaterial, MeshPhongMaterial, OctahedronGeometry, PlaneGeometry, Quaternion, RepeatWrapping, Sphere, SRGBColorSpace, TextureLoader, Vector3, type LoadingManager } from "three";
-import { deckPointSection, type EntityObject, type EntityPart, type EntityScene, type EntitySpin, type Vector } from "./entity-model";
+import { Box3, BoxGeometry, BufferAttribute, BufferGeometry, ConeGeometry, DoubleSide, Euler, EdgesGeometry, Float32BufferAttribute, Group, Line, LineBasicMaterial, LineSegments, MathUtils, Mesh, MeshBasicMaterial, MeshPhongMaterial, OctahedronGeometry, PlaneGeometry, Quaternion, RepeatWrapping, Sphere, SRGBColorSpace, TextureLoader, Vector3, type LoadingManager } from "three";
+import { deckPointSection, type ElevatorPose, type EntityElevator, type EntityObject, type EntityPart, type EntityScene, type EntitySpin, type Vector } from "./entity-model";
 import type { OutlineNode } from "./model-outline";
 import { deckPointColor, objectColor, previewColors, type PreviewColor } from "./preview-colors";
 
@@ -13,18 +13,77 @@ function transform(node:Group, position:Vector, rotation:Vector) {
   node.rotation.set(rx,-ry,-rz,"YXZ");
 }
 
-export function poseElevator(view:ReturnType<typeof assembledEntity>, scene:EntityScene, selection:string) {
-  for (const lift of scene.elevators ?? []) {
-    const part=scene.parts.find(p=>p.id===lift.part), node=view.nodes.get(lift.part);
-    if (part && node) transform(node,part.position,part.rotation);
+export function elevatorClips(lift:EntityElevator) {
+  return [lift.raise,lift.lower].filter(steps=>steps.length>1 && steps.at(-1).time>0 &&
+    steps.every((step,i)=>step.time>=0 && (!i || step.time>=steps[i-1].time)) &&
+    steps.some(step=>step.position.some((v,i)=>v!==steps[0].position[i]) || step.rotation.some((v,i)=>v!==steps[0].rotation[i])));
+}
+
+function previewRotation(rotation:Vector) {
+  const [x,y,z]=rotation.map(MathUtils.degToRad);
+  return new Quaternion().setFromEuler(new Euler(x,-y,-z,"YXZ"));
+}
+
+// Unity uses spherical interpolation for smooth full-vector positions and SmoothStep for individual axes.
+function sphericalPosition(a:Vector3,b:Vector3,t:number) {
+  const length=a.length(), target=b.length();
+  if (!length || !target) return a.lerp(b,t);
+  a.divideScalar(length); b.divideScalar(target);
+  const angle=a.angleTo(b);
+  if (angle>1e-6) {
+    const axis=new Vector3().crossVectors(a,b);
+    if (axis.lengthSq()<1e-12) axis.crossVectors(a,Math.abs(a.x)<0.9 ? new Vector3(1,0,0) : new Vector3(0,1,0));
+    a.applyAxisAngle(axis.normalize(),angle*t);
   }
-  const [name,motion,index]=selection.split("/");
-  const lift=scene.elevators?.find(l=>l.name===name);
-  const pose=(motion==="raise" || motion==="lower") && lift?.[motion][Number(index)];
-  const node=lift && view.nodes.get(lift.part);
-  if (node && pose) transform(node,pose.position,pose.rotation);
-  for (const [id,outline] of view.platformOutlines) outline.visible=id===lift?.part;
-  view.model.updateMatrixWorld(true);
+  return a.multiplyScalar(MathUtils.lerp(length,target,t));
+}
+
+function betweenPoses(node:Group, start:ElevatorPose, end:ElevatorPose, t:number) {
+  const blend=end.linear ? t : MathUtils.smoothstep(t,0,1);
+  const lerp=(from:Vector,to:Vector)=>from.map((v,i)=>MathUtils.lerp(v,to[i],blend)) as Vector;
+  transform(node,lerp(start.position,end.position),lerp(start.rotation,end.rotation));
+  if (end.vectorPosition && !end.linear) {
+    node.position.copy(sphericalPosition(new Vector3(...start.position),new Vector3(...end.position),t));
+    node.position.x *= -1;
+  }
+  if (end.quaternionRotation) {
+    const a=previewRotation(start.rotation), b=previewRotation(end.rotation);
+    if (end.linear) {
+      const sign=a.dot(b)<0 ? -1 : 1;
+      node.quaternion.set(MathUtils.lerp(a.x,sign*b.x,t),MathUtils.lerp(a.y,sign*b.y,t),
+        MathUtils.lerp(a.z,sign*b.z,t),MathUtils.lerp(a.w,sign*b.w,t)).normalize();
+    } else node.quaternion.copy(a).slerp(b,t);
+  }
+}
+
+export function poseElevator(view:ReturnType<typeof assembledEntity>, part:EntityPart, lift:EntityElevator, selection:string) {
+  const node=view.nodes.get(part.id);
+  const platform=view.platforms.get(part.id);
+  if (platform) {
+    platform.outline.visible=!!selection;
+    platform.fill.visible=selection==="animate";
+  }
+  const [motion,index]=selection.split("/");
+  const steps=motion==="raise" || motion==="lower" ? lift[motion] : [];
+  const pose=steps[Number(index)] ?? part;
+  transform(node,pose.position,pose.rotation);
+  if (selection!=="animate") return;
+  const clips=elevatorClips(lift), duration=clips.reduce((sum,clip)=>sum+clip.at(-1).time,0);
+  if (!duration) return;
+  return (elapsed:number)=>{
+    let time=elapsed % duration;
+    for (const clip of clips) {
+      const endTime=clip.at(-1).time;
+      if (time>=endTime) { time-=endTime; continue; }
+      const i=clip.findIndex(p=>p.time>=time), end=clip[i];
+      if (i===0) transform(node,end.position,end.rotation);
+      else {
+        const start=clip[i-1];
+        betweenPoses(node,start,end,(time-start.time)/(end.time-start.time));
+      }
+      break;
+    }
+  };
 }
 
 export function entityGeometry(data: EntityScene["geometry"][number]) {
@@ -70,6 +129,18 @@ function taxiGeometry(points:Vector[], width:number) {
   return geometry;
 }
 
+// The narrow tab extends from the forward (+Z) edge of the square.
+function deckMarker(heading:number | undefined) {
+  if (heading===undefined) return new PlaneGeometry(1.7,1.7).rotateX(-Math.PI/2);
+  const geometry=new BufferGeometry();
+  geometry.setAttribute("position",new Float32BufferAttribute([
+    -0.85,0,-0.85, -0.85,0,0.85, 0.85,0,0.85, 0.85,0,-0.85,
+    -0.13,0,0.85, -0.13,0,2.15, 0.13,0,2.15, 0.13,0,0.85
+  ],3));
+  geometry.setIndex([0,1,2,0,2,3,4,5,6,4,6,7]);
+  return geometry;
+}
+
 function routeGeometry(route:EntityObject["route"],width:number) {
   const {points,kind} = route;
   if (points.length===1) return new PlaneGeometry(width*4,width*4).rotateX(-Math.PI/2);
@@ -95,7 +166,7 @@ export function assembledEntity(scene: EntityScene, manager: LoadingManager, mes
   const byId = new Map(scene.parts.map(part=>[part.id,part]));
   const nodes = new Map<string,Group>(), rows = new Map<string,OutlineNode>();
   const platformIds=new Set(scene.elevators?.map(lift=>lift.part));
-  const platformOutlines=new Map<string,LineSegments>();
+  const platforms=new Map<string,{outline:LineSegments;fill:Mesh}>();
   const objectColliders = new Map<string,string[]>();
   const widgets = new Map<string,Mesh | Line>(), surfaces = new Map<string,Mesh<BufferGeometry,MeshBasicMaterial | MeshPhongMaterial>>();
   const objectGroups = new Map((scene.objects || []).map(obj=>[obj.name.toLowerCase(),obj.group]));
@@ -170,11 +241,15 @@ export function assembledEntity(scene: EntityScene, manager: LoadingManager, mes
     node.add(surface);
     if (platformIds.has(part.id)) {
       const outline=new LineSegments(new EdgesGeometry(shape),new LineBasicMaterial({color:previewColors.flight,depthTest:false,depthWrite:false}));
-      outline.userData.partId=part.id;
-      outline.userData.platformOutline=true;
-      outline.visible=false;
+      const fill=new Mesh(shape,new MeshBasicMaterial({color:previewColors.flight,transparent:true,opacity:0.42,depthTest:false,depthWrite:false}));
+      for (const overlay of [fill,outline]) {
+        overlay.userData.partId=part.id;
+        overlay.userData.platformOverlay=true;
+        overlay.visible=false;
+      }
+      node.add(fill);
       node.add(outline);
-      platformOutlines.set(part.id,outline);
+      platforms.set(part.id,{outline,fill});
     }
     rows.get(part.id).parts.push({id:part.id,collider:part.collider});
   }
@@ -194,7 +269,7 @@ export function assembledEntity(scene: EntityScene, manager: LoadingManager, mes
     const deckPoint = deckPointSection.test(obj.name);
     const size = diameter*0.009/(parent.matrixWorld.getMaxScaleOnAxis() || 1);
     const shape = obj.route ? routeGeometry(obj.route,size*0.26) :
-      deckPoint ? new PlaneGeometry(1.7,1.7).rotateX(-Math.PI/2) :
+      deckPoint ? deckMarker(obj.heading) :
       role==="sensor" ? new OctahedronGeometry(1) : role==="weapon" ? new ConeGeometry(1,2,4) : new BoxGeometry(1.5,1.5,1.5);
     const style = {color:deckPoint || obj.route ? deckPointColor : previewColors[role],depthTest:false,depthWrite:false};
     const widget = obj.route?.kind==="airPaths" && obj.route.points.length>1
@@ -203,6 +278,7 @@ export function assembledEntity(scene: EntityScene, manager: LoadingManager, mes
         ...(deckPoint || obj.route ? {side:DoubleSide} : {})}));
     const [x,y,z] = obj.position;
     widget.position.set(-x,y,z);
+    if (obj.heading!==undefined) widget.rotation.y=-MathUtils.degToRad(obj.heading);
     if (obj.route) {
       widget.userData.pathWidth = size*0.26;
       widget.userData.routeKind = obj.route.kind;
@@ -219,13 +295,13 @@ export function assembledEntity(scene: EntityScene, manager: LoadingManager, mes
     widgets.set(obj.id,widget);
     row.parts.push({id:obj.id,collider:false,widget:true,routeKind:obj.route?.kind});
   }
-  return {model,outline:[meshTree,colliderTree,objectTree],surfaces,nodes,widgets,platformOutlines};
+  return {model,outline:[meshTree,colliderTree,objectTree],surfaces,nodes,widgets,platforms};
 }
 
 // Most INI edits only move parts, toggle visibility or change source lines. Keep their GPU assets.
 export function patchEntity(view:ReturnType<typeof assembledEntity>, before:EntityScene, after:EntityScene) {
   const partShape = ({source,position,rotation,visible,...rest}:EntityPart)=>rest;
-  const objectShape = ({source,position,placement,firingArcs,elevationArc,route,...rest}:EntityObject)=>({...rest,placed:!!position,kind:route?.kind,single:route?.points.length===1});
+  const objectShape = ({source,position,heading,placement,firingArcs,elevationArc,route,...rest}:EntityObject)=>({...rest,placed:!!position,directed:heading!==undefined,kind:route?.kind,single:route?.points.length===1});
   if (before.geometry.length!==after.geometry.length || before.textures.length!==after.textures.length ||
     JSON.stringify(before.elevators?.map(e=>e.part))!==JSON.stringify(after.elevators?.map(e=>e.part)) ||
     before.geometry.some((g,i)=>g.positions!==after.geometry[i].positions || g.uvs!==after.geometry[i].uvs || g.normals!==after.geometry[i].normals) ||
@@ -237,6 +313,7 @@ export function patchEntity(view:ReturnType<typeof assembledEntity>, before:Enti
     const widget = view.widgets.get(obj.id);
     if (!widget || !obj.position) continue;
     widget.position.set(-obj.position[0],obj.position[1],obj.position[2]);
+    if (obj.heading!==undefined) widget.rotation.y=-MathUtils.degToRad(obj.heading);
     if (obj.route && JSON.stringify(obj.route.points)!==JSON.stringify(before.objects[i].route.points)) {
       widget.geometry.dispose();
       widget.geometry = routeGeometry(obj.route,widget.userData.pathWidth);

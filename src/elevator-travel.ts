@@ -44,7 +44,8 @@ function poses(sequence:IniSection, part:EntityPart, warn:(message:string)=>void
     }
     position=vector("position",compact ? compact[1] : value(sequence,"position"+i),position);
     rotation=vector("rotation",compact ? compact[2] : value(sequence,"rotation"+i),rotation);
-    steps.push({time,position,rotation});
+    steps.push({time,position,rotation,linear:(compact?.[3] ?? value(sequence,"smoothness"+i))?.toLowerCase()==="linear",
+      vectorPosition:!compact && !!field(sequence,"position"+i), quaternionRotation:!compact && !!field(sequence,"rotation"+i)});
   }
   return steps;
 }

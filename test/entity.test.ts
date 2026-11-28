@@ -8,7 +8,7 @@ import { selectEntity, paintTexture, entityDocument } from "../src/entity-select
 import { assembledEntity, bindEntitySpins, entityBounds, patchEntity, poseElevator } from "../src/entity-viewer";
 import { entitySpins } from "../src/entity-spins";
 import { elevatorTravel } from "../src/elevator-travel";
-import { Box3, Group, LoadingManager, Mesh, MeshBasicMaterial, PerspectiveCamera, Vector2, Vector3 } from "three";
+import { Box3, BoxGeometry, Group, LoadingManager, Mesh, MeshBasicMaterial, PerspectiveCamera, Vector2, Vector3 } from "three";
 import type { EntityPart, Vector } from "../src/entity-model";
 import { applyDisplay, previewLayer } from "../src/preview-display";
 import { hoverStack, nearbyFlightWidgets, sourceLocation } from "../src/entity-inspect";
@@ -127,12 +127,13 @@ test("flight paths use raised elevators, deck-relative air coordinates and indep
   assert.equal(get("RecoveryPoint1 · Helicopter approach").route.points.length,3);
   const scene={parts,objects,elevators,geometry:[],textures:[],warnings:[]};
   const view=assembledEntity(scene,new LoadingManager());
-  poseElevator(view,scene,"Elevator1/raise/0");
+  const platform=parts.find(p=>p.id==="elevator_1");
+  poseElevator(view,platform,elevators[0],"raise/0");
   assert.equal(view.nodes.get("elevator_1").position.y,-1.75);
-  poseElevator(view,scene,"Elevator1/raise/1");
+  poseElevator(view,platform,elevators[0],"raise/1");
   assert.equal(view.nodes.get("elevator_1").position.y,0);
-  poseElevator(view,scene,"Elevator1/raise/0");
-  poseElevator(view,scene,"");
+  poseElevator(view,platform,elevators[0],"raise/0");
+  poseElevator(view,platform,elevators[0],"");
   assert.equal(view.nodes.get("elevator_1").position.y,0);
   for (const obj of [hold,get("TaxiPath1")]) {
     const material=view.widgets.get(obj.id).material;
@@ -156,6 +157,47 @@ test("flight paths use raised elevators, deck-relative air coordinates and indep
     assert.equal(view.widgets.get(get("TaxiPath1").id).layers.isEnabled(previewLayer.route),taxiPaths);
     assert.equal(entityBounds(view.model,true).radius>entityBounds(view.model).radius,airPaths);
   }
+});
+
+test("launch and recovery markers follow mirrored INI headings through live edits",()=>{
+  function scene(yaw:number) {
+    const doc=parse("[Models]\n[LaunchPoint1]\nPosition=0,0,0\nRotation="+yaw+"\n[RecoveryPoint1]\nPosition=0,0,0\nRotation=-45\n[TaxiPoint1]\nPosition=0,0,0");
+    const parts=entityParts(doc,new Set()).map(r=>r.part);
+    return {parts,objects:entityObjects(doc,parts),geometry:[],textures:[],warnings:[]};
+  }
+  const before=scene(90),view=assembledEntity(before,new LoadingManager());
+  const launch=view.widgets.get("object:launchpoint1"), recovery=view.widgets.get("object:recoverypoint1");
+  const direction=(node:typeof launch)=>new Vector3(0,0,1).applyQuaternion(node.quaternion);
+  for (const marker of [launch,recovery]) {
+    marker.geometry.computeBoundingBox();
+    assert.ok(marker.geometry.boundingBox.max.z>2*marker.geometry.boundingBox.max.x);
+  }
+  assert.ok(direction(launch).distanceTo(new Vector3(-1,0,0))<1e-10);
+  assert.ok(direction(recovery).distanceTo(new Vector3(1,0,1).normalize())<1e-10);
+  const taxi=view.widgets.get("object:taxipoint1");
+  taxi.geometry.computeBoundingBox();
+  assert.equal(taxi.geometry.boundingBox.max.z,taxi.geometry.boundingBox.max.x);
+  assert.ok(patchEntity(view,before,scene(0)));
+  assert.ok(direction(launch).distanceTo(new Vector3(0,0,1))<1e-10);
+});
+
+test("elevators cycle on independent clocks and only animated platforms receive the blue fill",()=>{
+  const doc=parse("[Models]\nSubModel1=A\nSubModel2=B\n[A]\nMesh=A\n[B]\nMesh=B");
+  const parts=entityParts(doc,new Set()).map(r=>r.part);
+  const step=(time:number,y:number)=>({time,position:[0,y,0] as Vector,rotation:[0,0,0] as Vector,linear:true});
+  const lifts=parts.slice(1).map(part=>({name:part.name,part:part.id,raise:[step(0,-4),step(8,0)],lower:[step(0,0),step(4,-4)]}));
+  for (const part of parts.slice(1)) part.geometry=0;
+  const view=assembledEntity({parts,elevators:lifts,geometry:[],textures:[],warnings:[]},new LoadingManager(),[new BoxGeometry()]);
+  const [a,b]=lifts, playA=poseElevator(view,parts[1],a,"animate"), playB=poseElevator(view,parts[2],b,"animate");
+  const y=(id:string)=>view.nodes.get(id).position.y;
+  playA(10); playB(2);
+  assert.deepEqual([y(a.part),y(b.part)],[-2,-3]);
+  assert.equal(view.platforms.get(b.part).fill.visible,true);
+  poseElevator(view,parts[2],b,"raise/1");
+  playA(13);
+  assert.deepEqual([y(a.part),y(b.part)],[-3.5,0]);
+  assert.equal(view.platforms.get(a.part).fill.visible,true);
+  assert.equal(view.platforms.get(b.part).fill.visible,false);
 });
 
 test("deck point and route hover tolerance follows screen pixels and visibility",()=>{
