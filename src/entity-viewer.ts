@@ -129,15 +129,15 @@ function taxiGeometry(points:Vector[], width:number) {
   return geometry;
 }
 
-// The narrow tab extends from the forward (+Z) edge of the square.
+// The triangle points forward (+Z) from the edge of the square.
 function deckMarker(heading:number | undefined) {
   if (heading===undefined) return new PlaneGeometry(1.7,1.7).rotateX(-Math.PI/2);
   const geometry=new BufferGeometry();
   geometry.setAttribute("position",new Float32BufferAttribute([
     -0.85,0,-0.85, -0.85,0,0.85, 0.85,0,0.85, 0.85,0,-0.85,
-    -0.13,0,0.85, -0.13,0,2.15, 0.13,0,2.15, 0.13,0,0.85
+    -0.32,0,0.85, 0,0,2.15, 0.32,0,0.85
   ],3));
-  geometry.setIndex([0,1,2,0,2,3,4,5,6,4,6,7]);
+  geometry.setIndex([0,1,2,0,2,3,4,5,6]);
   return geometry;
 }
 

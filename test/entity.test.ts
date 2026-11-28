@@ -171,6 +171,10 @@ test("launch and recovery markers follow mirrored INI headings through live edit
   for (const marker of [launch,recovery]) {
     marker.geometry.computeBoundingBox();
     assert.ok(marker.geometry.boundingBox.max.z>2*marker.geometry.boundingBox.max.x);
+    const vertices=marker.geometry.getAttribute("position");
+    const tip=Array.from({length:vertices.count},(_,i)=>new Vector3().fromBufferAttribute(vertices,i))
+      .filter(v=>v.z===marker.geometry.boundingBox.max.z);
+    assert.deepEqual(tip.map(v=>v.x),[0]);
   }
   assert.ok(direction(launch).distanceTo(new Vector3(-1,0,0))<1e-10);
   assert.ok(direction(recovery).distanceTo(new Vector3(1,0,1).normalize())<1e-10);

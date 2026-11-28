@@ -4,7 +4,7 @@
 
 - Toggle individual taxi, holding and approach paths in the hierarchy. Routes are visible from either side of the hull. Hover highlights flight points and paths ahead of the deck underneath. Clicking selects the first item in the tooltip.
 - Expand **Elevators** to set each platform independently. Lifts with timed animations cycle by default and appear in blue. Choose a pose to park a lift or inspect a keyframe. Preview notes identify broken animation references.
-- Launch and recovery squares rotate with the point’s `Rotation`. A short line marks the forward edge.
+- Launch and recovery squares rotate with the point’s `Rotation`. A tapered pointer marks the forward edge.
 - The INI preview draws deck points as dark blue squares and connects taxi paths through their waypoints. Flight systems are blue, sensors yellow, and weapon arcs orange.
 - Search radars and helicopter rotors turn in the INI hierarchy preview. Use **Animations** to pause them.
 - The INI preview can filter system markers, colliders and arcs by weapons, flight, sensors or propulsion.
