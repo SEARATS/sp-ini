@@ -67,7 +67,8 @@ try {
     if (!(Test-Path -LiteralPath $env:SP_GALLERY_RESULT)) { throw "Capture stopped. See $session/profile/logs." }
     $result = Get-Content -LiteralPath $env:SP_GALLERY_RESULT -Raw
     if ($result -ne 'ok') { throw $result }
-    Write-Output (Join-Path $out 'index.html')
+    $resultFile = if ($AnimationOnly) { '33-radar-animation.gif' } else { 'index.html' }
+    Write-Output (Join-Path $out $resultFile)
     $tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\','/')
     $target = (Resolve-Path -LiteralPath $session).Path
     if ([IO.Path]::GetDirectoryName($target) -eq $tempRoot -and [IO.Path]::GetFileName($target) -match '^sp-ini-gallery-[0-9a-f-]{36}$') {
