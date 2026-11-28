@@ -11,11 +11,12 @@ import { applyDisplay, previewLayer, type DisplaySettings } from "./preview-disp
 import { assembledEntity, bindEntitySpins, elevatorClips, entityBounds, entityGeometry, entityTexture, patchEntity, poseElevator } from "./entity-viewer";
 import type { EntityScene } from "./entity-model";
 import { EntityStream } from "./entity-stream";
+import { DeckPlayback, FlightNetwork } from "./flight-traffic";
 import { entityModes, excludedOverlays, type EntityMode } from "./entity-mode";
 import { previewColors, weaponArcColors } from "./preview-colors";
 import { inspectEntity } from "./entity-inspect";
 import {placeSystemArcs,systemArcs} from "./system-arcs";
-import { Texture, TextureLoader, Box3, Color, LoadingManager, PerspectiveCamera, Scene, Sphere, WebGLRenderer } from "three";
+import { Texture, TextureLoader, Box3, BoxGeometry, Color, Group, LoadingManager, Mesh, MeshBasicMaterial, PerspectiveCamera, Scene, Sphere, WebGLRenderer } from "three";
 import { previewDaylight, fitEntityShadows, renderDaylight } from "./preview-lighting";
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
@@ -36,6 +37,55 @@ const camera = new PerspectiveCamera(42, 1, 0.01, 10000);
 const bounds = new Sphere();
 let renderer, controls, model;
 const objectLabels = new Map<string,HTMLElement>();
+const trafficGroup=new Group(), tokenShape=new BoxGeometry();
+const tokenMaterials={launch:new MeshBasicMaterial({color:0x66dcb1}),recovery:new MeshBasicMaterial({color:0xe1acfc})};
+const activity=document.getElementById("flight-activity");
+scene.add(trafficGroup);
+trafficGroup.matrixAutoUpdate=false;
+let network:FlightNetwork, traffic:DeckPlayback, layoutKey:string;
+function trafficVisible() {
+  return settings.objects && (mode==="Everything" || mode==="Flight") && (!pickedObject || !hidden.has(pickedObject));
+}
+function drawTraffic(dt:number) {
+  trafficGroup.visible=!!(traffic?.playable && trafficVisible());
+  if (!trafficGroup.visible) {activity.hidden=true;return;}
+  const root=active.view.nodes.get("models");
+  if (!root) return;
+  root.updateWorldMatrix(true,false);
+  trafficGroup.matrix.copy(root.matrixWorld);
+  trafficGroup.matrixWorldNeedsUpdate=true;
+  traffic.tick(dt);
+  const size=bounds.radius*0.022/(root.matrixWorld.getMaxScaleOnAxis() || 1);
+  while (trafficGroup.children.length<traffic.flights.length) {
+    const cube=new Mesh(tokenShape,tokenMaterials.launch);
+    cube.layers.set(previewLayer.widget);
+    cube.renderOrder=15;
+    trafficGroup.add(cube);
+  }
+  trafficGroup.children.forEach((child,i)=>{
+    const cube=child as Mesh, flight=traffic.flights[i];
+    cube.visible=!!flight;
+    if (!flight) return;
+    cube.material=tokenMaterials[flight.trip.operation];
+    const [x,y,z]=flight.position;
+    cube.position.set(-x,y+size/2,z);
+    cube.scale.setScalar(size);
+  });
+  activity.hidden=!traffic.focus || !traffic.flights.length;
+  if (!activity.hidden) {
+    const {craft,operation}=traffic.flights[0].trip;
+    const text={vtol:"VTOL",stol:"STOL",helicopter:"Helicopter",plane:"Plane"}[craft]+" · "+(operation==="launch" ? "Launch" : "Recovery");
+    if (activity.textContent!==text) activity.textContent=text;
+  }
+}
+function focusTraffic() {
+  if (!network || (pickedObject && !network.links.has(pickedObject) && !network.deck.spots.some(s=>"object:"+s.name===pickedObject))) traffic=undefined;
+  else if (traffic?.focus!==pickedObject || traffic?.network!==network) traffic=new DeckPlayback(network,pickedObject);
+  const connected=network?.links.get(pickedObject);
+  for (const [id,label] of objectLabels) label.classList.toggle("connected-object",!!connected?.has(id));
+  drawTraffic(0);
+  syncPlayback();
+}
 let active: {id:string; scene:EntityScene; view:ReturnType<typeof assembledEntity>};
 let bright:string[] = [], pickedObject:string;
 let hoveredWidget:string;
@@ -112,6 +162,7 @@ function selectObject(id: string | undefined, reveal: boolean) {
   const selected = objectLabels.get(id);
   if (id && !selected) return;
   pickedObject=id;
+  focusTraffic();
   showArcValues();
   for (const label of objectLabels.values()) label.classList.toggle("selected-object",label === selected);
   if (reveal && selected) {
@@ -126,8 +177,11 @@ const animationToggle = document.querySelector<HTMLInputElement>("#animations");
 animationToggle.checked = saved?.animations ?? true;
 let sampleSpins:ReturnType<typeof bindEntitySpins>, animationFrame:number, previousFrame:number;
 let animationSeconds = 0;
+document.addEventListener("keydown",event=>{if (event.key==="Escape" && pickedObject) selectObject(undefined,false);});
 function animate(now:number) {
-  animationSeconds += (now - previousFrame) / 1000;
+  const delta=(now-previousFrame)/1000;
+  animationSeconds += delta;
+  drawTraffic(delta);
   previousFrame = now;
   sampleSpins?.(animationSeconds);
   for (const lift of liftStates.values()) lift.play?.(animationSeconds-lift.started);
@@ -139,14 +193,14 @@ function animate(now:number) {
 }
 function syncPlayback() {
   cancelAnimationFrame(animationFrame);
-  const playable=!!sampleSpins || [...liftStates.values()].some(lift=>lift.play);
+  const playable=!!sampleSpins || [...liftStates.values()].some(lift=>lift.play) || !!(traffic?.playable && trafficVisible());
   document.getElementById("animation-filter").hidden = !playable;
   if (playable && animationToggle.checked && !document.hidden) {
     previousFrame = performance.now();
     animationFrame = requestAnimationFrame(animate);
   }
 }
-animationToggle.onchange = () => { syncPlayback(); changed(); };
+animationToggle.onchange = changed;
 document.addEventListener("visibilitychange",syncPlayback);
 let mode: EntityMode = entityModes.includes(saved?.mode) ? saved.mode : "Everything";
 let excluded = new Set<string>();
@@ -239,6 +293,8 @@ function updateDisplay() {
   }
 }
 function changed() {
+  drawTraffic(0);
+  syncPlayback();
   updateDisplay();
   const elevatorPoses=Object.fromEntries([...liftStates].map(([name,lift])=>[name,lift.value]));
   vscode.setState({...settings, mode, animations:animationToggle.checked, elevatorPoses, hidden: [...hidden], entity:selectedEntity, appearance:selectedAppearance, modelSources:selectedSources});
@@ -553,6 +609,11 @@ async function loadEntity(id:string, next:EntityScene, documentUri:string, incom
     fitEntityShadows(sun,model);
     initializedEntity=id;
     active={id,scene:next,view};
+    const key=JSON.stringify([id,next.flightDeck,next.objects?.filter(o=>o.route).map(o=>[o.id,o.route])]);
+    if (key!==layoutKey) {
+      layoutKey=key;
+      network=next.flightDeck && new FlightNetwork(next.flightDeck,next.objects ?? []);
+    }
     retained=incoming && {cachedGeometry:incoming.cachedGeometry,cachedTextures:incoming.cachedTextures};
     if (!same) animationSeconds = 0;
     showElevators(next,same);
@@ -572,6 +633,7 @@ async function loadEntity(id:string, next:EntityScene, documentUri:string, incom
     } else {
       inspector.refreshLinks(outline);
     }
+    focusTraffic();
     showArcValues();
     changed();
     if (!same && streamMoved && staged) {
@@ -599,6 +661,7 @@ async function loadEntity(id:string, next:EntityScene, documentUri:string, incom
 async function load(data, layout?: ReturnType<typeof objLayout>) {
   const current = ++revision;
   sampleSpins = undefined;
+  network=undefined; traffic=undefined; layoutKey=undefined; trafficGroup.visible=false;
   liftStates.clear();
   syncPlayback();
   if (model) { scene.remove(model); dispose(model); model = undefined; }

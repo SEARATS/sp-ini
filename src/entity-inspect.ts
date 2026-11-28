@@ -173,7 +173,7 @@ export function inspectEntity(canvas: HTMLCanvasElement, camera: PerspectiveCame
       const id=targetId(hits,event.shiftKey);
       if (id) { select(event.shiftKey ? id : part.id); open(id); }
     }
-    else if (part) select(part.id);
+    else select(part?.id);
   });
   return {
     setParts(next: (EntityPart | EntityObject)[], uri: string) {

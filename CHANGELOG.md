@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Select a flight path or deck point to highlight its connections in the hierarchy and follow one aircraft cube. Clear the selection with Escape to see concurrent operations. **Animations** pauses playback.
+- Unit hints abbreviate Unity units as `uu`.
+
 - Flight-deck values show unit hints. Ctrl-click an elevator’s launch-point numbers to open their definitions. Static analysis checks flight-deck counts against numbered sections and deck-zone points.
 
 - The INI preview draws meshes while textures load in the background. It caches unchanged assets across reloads and watches the model, material and texture files used by each open preview.

@@ -14,6 +14,7 @@ import { type parse } from "./ini";
 import { paintTexture, type Appearance } from "./entity-selection";
 import { entitySpins } from "./entity-spins";
 import { elevatorTravel } from "./elevator-travel";
+import { flightDeckLayout } from "./flight-traffic";
 
 async function previewTexture(image: PNG, opaque: boolean): Promise<EntityScene["textures"][number]> {
   let alpha: "opaque" | "cutout" | "blend" = "opaque";
@@ -150,6 +151,7 @@ export async function entityAssets(doc: ReturnType<typeof parse>, uri: string, c
     for (const definition of definitions) await loadGeometry(definition);
     scene.elevators = await elevatorTravel(doc,scene.parts,catalog,materials,warnings);
     scene.objects = entityObjects(doc,scene.parts,scene.elevators);
+    scene.flightDeck = flightDeckLayout(doc,scene);
     scene.spins = await entitySpins(doc,scene.parts,catalog,materials);
     await textureWork;
     if (textureFailure) throw textureFailure;

@@ -9,7 +9,7 @@ const uri="file:///mod/vessels/carrier.ini";
 test("deck hints use seconds, knots and the coordinate system of each path", async()=>{
   const doc=parse("[FlightDeck]\nSpawnInterval=1\nForwardsTaxiVelocity=10\nHoldWaypoints=0,500,1|2,600,1\n[RecoveryPoint4]\nLandingInterval=100\nRotation=180\n[TaxiPath1]\nWaypoints=0,1,2|4,5,6\n[Other]\nLandingInterval=100");
   const hints=await unitHints(doc,uri,{start:{line:0,character:0},end:{line:20,character:0}});
-  assert.deepEqual(hints.map(h=>h.label),["s","kt","nmi, ft, nmi","s","°","Unity units"]);
+  assert.deepEqual(hints.map(h=>h.label),["s","kt","nmi, ft, nmi","s","°","uu"]);
   assert.equal(hints[3].position.character,"LandingInterval=100".length);
 });
 
