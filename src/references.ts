@@ -26,8 +26,15 @@ function referenceContext(doc, uri, catalog) {
   }
   const bases = doc.modifiers.filter(m => /^(alias|extend|prepend|copy)$/.test(m.name));
   const inheritedParts = bases.flatMap(m => tokens(m.args, 0).flatMap(t => catalog.modelParts.get(normalize(t.name)) || []));
+  const inheritedDeck = bases.flatMap(m=>tokens(m.args,0).flatMap(t=>catalog.deckSections.get(normalize(t.name)) ||
+    catalog.deckSections.get(path.join(folder,normalize(t.name))) || [])).filter(r=>uriKey(r.file.uri)!==uriKey(uri));
+  const launchCount=doc.sections.find(s=>/^flightdeck$/i.test(s.name))?.keys.find(k=>/^numberoflaunchpoints$/i.test(k.name));
+  const launches=[...locals.keys()].filter(name=>/^launchpoint[1-9]\d*$/.test(name))
+    .map(name=>Number(name.slice(11))).filter(i=>i<=Number(launchCount?.value)).sort((a,b)=>a-b);
   const rootMesh = doc.sections.find(s => /^models$/i.test(s.name))?.keys.find(k => /^resourcesmesh$/i.test(k.name));
-  return { catalog, folder, resources, locals, meshColliders, parts: submodelNames(doc), rootMesh, uri, inheritedParts, inherited: !!bases.length };
+  const deckTemplate=doc.sections.some(s=>/^(?:LaunchPoint|RecoveryPoint|Elevator).*\{/.test(s.name));
+  return { catalog, folder, resources, locals, meshColliders, parts: submodelNames(doc), rootMesh, uri, inheritedParts, inheritedDeck,
+    launches:launchCount && !bases.length && !deckTemplate ? launches : undefined, deckTemplate, inherited: !!bases.length };
 }
 
 function meshColliderSections(doc) {
@@ -60,6 +67,18 @@ function domainFor(section, key) {
 
 function reference(entry, token, ctx) {
   const key = entry.name, value = normalize(token);
+  const deckSection=/^(elevator|launchpoint|recoverypoint)\d+$/i.test(entry.section?.name);
+  const points=deckSection && /^(?:associated|blocks)(elevators|launchpoints|recoverypoints)$/i.exec(key);
+  if (points || (deckSection && /^takeoffrequiresfreelaunchpoints$/i.test(key))) {
+    if (!/^\d+$/.test(token) || (/^associatedlaunchpoints$/i.test(key) && entry.value.includes("-1"))) return {refs:[]};
+    const index=Number(token);
+    const ordinal=/^associatedlaunchpoints$/i.test(key) && ctx.launches;
+    const number=ordinal ? ordinal[index-1] : index;
+    const prefix=points ? points[1].slice(0,-1).toLowerCase() : "launchpoint";
+    const name=prefix+number;
+    return {refs:ctx.locals.get(name) || ctx.inheritedDeck.filter(r=>r.name.toLowerCase()===name),
+      missing:!ctx.inherited && !ctx.deckTemplate && "No matching flight-deck point for "+key+" index "+token+"."};
+  }
   if (isMesh(entry, ctx.meshColliders) && !/\.(obj|fbx)$/i.test(value)) return { refs: [] };
   if (/^(containerbase|containerbaseparent|gun\d+)$/i.test(key)) {
     if (/^containerbase$/i.test(key) && /^(dummy|mount)$/i.test(token)) return { refs: [] };

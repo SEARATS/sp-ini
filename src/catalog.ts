@@ -81,6 +81,7 @@ class Catalog {
     return (local.length ? local : files).reduce((best,f) => !best || this.rank(f.source) < this.rank(best.source) ? f : best, undefined);
   }
   modelParts = new Map();
+  deckSections = new Map();
   objOwners = new Map();
   sections = new Map();
   units = new Map();
@@ -95,6 +96,9 @@ class Catalog {
   add(file, doc) {
     const group = family(file.rel, doc);
     const ref = (name, line, start = 0) => ({ name, line, start, file });
+    for (const s of doc.sections) if (/^(?:Elevator|LaunchPoint|RecoveryPoint)\d+$/i.test(s.name)) {
+      getOrCreate(this.deckSections,normalize(file.rel),()=>[]).push(ref(s.name,s.line,s.start));
+    }
     const names = submodelNames(doc);
     const models = doc.entries.filter(e=>/^(resourcesroot|rootmesh)$/i.test(e.name)).map(e=>modelResourcePath(e.value).file);
     for (const name of new Set(models.filter(file=>/\.obj$/i.test(file)).map(file=>path.posix.basename(normalize(file))))) {

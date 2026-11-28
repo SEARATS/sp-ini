@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Flight-deck values show unit hints. Ctrl-click an elevator’s launch-point numbers to open their definitions. Static analysis checks flight-deck counts against numbered sections and deck-zone points.
+
 - The INI preview draws meshes while textures load in the background. It caches unchanged assets across reloads and watches the model, material and texture files used by each open preview.
 - Taxi, holding and approach paths use a darker blue than deck points.
 
