@@ -12,6 +12,29 @@ function select(editor, position) {
   editor.revealRange(editor.selection, vscode.TextEditorRevealType.InCenter);
 }
 
+const stockIni = () => vscode.Uri.file(path.join(process.env.SP_GALLERY_GAME,"Sea Power_Data/StreamingAssets/original/vessels/usn_dd_spruance_vls.ini"));
+async function radarAnimation(screen:Awaited<ReturnType<typeof camera>>) {
+  await screen.resize(880,540);
+  await command("workbench.action.closeSidebar");
+  await command("workbench.action.closeAuxiliaryBar");
+  await command("vscode.openWith",stockIni(),"seapower-ini.entity",vscode.ViewColumn.One);
+  await renderedModel(Number(process.env.SP_GALLERY_PORT),()=>{
+    const canvas = document.querySelector<HTMLCanvasElement>('canvas[aria-label*="spruance"]');
+    const toggle = document.querySelector<HTMLInputElement>("#animations");
+    if (!canvas || !toggle || document.getElementById("animation-filter").hidden || !document.querySelector('[data-part-id="sps_40"]')) return "waiting for radar";
+    for (const id of ["objects","arcs","colliders"]) {
+      const input = document.querySelector<HTMLInputElement>("#"+id);
+      if (input.checked) input.click();
+    }
+    if (!toggle.checked) toggle.click();
+    document.querySelector<HTMLDetailsElement>("#outline").open=false;
+    document.querySelector<HTMLButtonElement>("aside button").click();
+    canvas.dispatchEvent(new WheelEvent("wheel",{deltaY:-3400,cancelable:true}));
+    return "verified controls";
+  });
+  await screen.radarGif();
+}
+
 async function capture(screen) {
   const workspace = vscode.workspace.workspaceFolders[0].uri;
   const doc = await vscode.workspace.openTextDocument(vscode.Uri.joinPath(workspace, "vessels/usn_dd_spruance_vls.ini"));
@@ -120,7 +143,7 @@ async function capture(screen) {
   await doc.save();
 
   await command("seapower-ini.referencePreviews");
-  const stock = vscode.Uri.file(path.join(process.env.SP_GALLERY_GAME, "Sea Power_Data/StreamingAssets/original/vessels/usn_dd_spruance_vls.ini"));
+  const stock = stockIni();
   const ref = await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(stock), { preview: true });
   select(ref, new vscode.Position(3, 1));
   await waitFor(() => vscode.window.tabGroups.activeTabGroup.activeTab?.isPreview, "Reference tab");
@@ -143,6 +166,9 @@ async function capture(screen) {
   await renderedModel(port, inspectSpruance, "overview");
   await screen.pan(470,310,-40,-119);
   await screen.capture("26-entity-preview","Spruance VLS with wireframe colliders and system arcs",{preview:true});
+  await radarAnimation(screen);
+  await screen.resize(920,600);
+  await renderedModel(port,inspectSpruance,"overview");
   await renderedModel(port, inspectSpruance, "overlap");
   await screen.capture("23-collider-highlight", "Highlighted colliders with the weapon system first in the tooltip", { preview: [0,0.44,1,1] });
   await renderedModel(port, inspectSpruance, "sphere");
@@ -192,7 +218,8 @@ async function capture(screen) {
 export const run = async () => {
   const screen = await camera();
   try {
-    await capture(screen);
+    if (process.env.SP_GALLERY_ANIMATION_ONLY==="True") await radarAnimation(screen);
+    else await capture(screen);
     await fs.writeFile(process.env.SP_GALLERY_RESULT, "ok");
   } catch (error) {
     await fs.writeFile(process.env.SP_GALLERY_RESULT, error.stack || error.message);

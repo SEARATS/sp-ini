@@ -8,6 +8,12 @@ export interface Choice { id: string; label: string }
 export interface Appearance { general?: IniSection; defaults?: IniSection; selected?: IniSection }
 export interface PreviewRequest {uri: string; text: string; entity?: string; appearance?: string; render?: boolean; modelSources?: Record<string,string>; card?: boolean; locale?: string}
 
+export async function readEntityDefinition(file:{uri:string}, catalog:Catalog, materials:Materials) {
+  const doc = await materials.readIni(file);
+  if (!doc?.modifiers.some(m=>/^(copy|alias|extend|prepend)$/.test(m.name))) return doc;
+  return entityDocument(doc.lines.join("\n"),file.uri,catalog,materials).catch(()=>doc);
+}
+
 export async function entityDocument(text: string, uri: string, catalog: Catalog, materials: Materials, ancestors = new Set<string>(), copySources?: string[]) {
   const doc = expandEntityIni(text, uri);
   const base = doc.modifiers.find(m => /^(alias|copy|extend|prepend)$/.test(m.name));

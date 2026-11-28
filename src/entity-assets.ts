@@ -10,6 +10,7 @@ import { field, entityParts, entityObjects, type EntityScene } from "./entity-mo
 import { entityResourceSources, modelResource } from "./entity-resources";
 import { type parse } from "./ini";
 import { paintTexture, type Appearance } from "./entity-selection";
+import { entitySpins } from "./entity-spins";
 
 function previewTexture(image: PNG, opaque: boolean): EntityScene["textures"][number] {
   let alpha: "opaque" | "cutout" | "blend" = "opaque";
@@ -99,5 +100,6 @@ export async function entityAssets(doc: ReturnType<typeof parse>, uri: string, c
   }
   scene.warnings = [...warnings];
   scene.objects = entityObjects(doc,scene.parts);
+  scene.spins = await entitySpins(doc,scene.parts,catalog,materials);
   return scene;
 }
