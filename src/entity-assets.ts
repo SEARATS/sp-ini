@@ -1,6 +1,7 @@
 import { posix as path } from "node:path";
 import { PNG } from "pngjs";
 import { Catalog, normalize } from "./catalog";
+import { modelResourcePath } from "./model-resource-path";
 import { Materials } from "./materials";
 import { MeshFiles, parseObj, triangles } from "./meshes";
 import { referenceContext } from "./references";
@@ -26,13 +27,13 @@ export async function entityAssets(doc: ReturnType<typeof parse>, uri: string, c
   const scene: EntityScene = {parts:[],geometry:[],textures:[],warnings:[]};
   const geometry = new Map<string,number | undefined>(), textures = new Map<string,number | undefined>(), modelFiles = new Map();
   if (resources.needsBlender) warnings.add("Install Blender or set Sea Power INI: Blender Path to preview .blend sources.");
-  const chosenModels = new Map<string,ReturnType<typeof parseObj>>();
+  const chosenModels = new Map<string,{model:ReturnType<typeof parseObj>;obj:boolean}>();
   for (const choice of resources.choices) {
     const files = resources.groups.get(choice.key);
     for (const file of choice.selected ? files.filter(f=>f.uri===choice.selected) : files) {
       signal.throwIfAborted();
       const model = await meshes.model(file,/\.blend$/i.test(file.full) ? {blender:resources.blender,signal} : undefined);
-      if (model?.objects.some(o=>o.faces.length)) { chosenModels.set(choice.key,model); break; }
+      if (model?.objects.some(o=>o.faces.length)) { chosenModels.set(choice.key,{model,obj:/\.obj$/i.test(file.full)}); break; }
       warnings.add("Could not read geometry from "+file.rel);
     }
   }
@@ -41,20 +42,20 @@ export async function entityAssets(doc: ReturnType<typeof parse>, uri: string, c
     signal.throwIfAborted();
     scene.parts.push(part);
     if (part.primitive || !mesh || /^dummy$/i.test(mesh.value)) continue;
-    const root = field(mesh.section,"rootmesh")?.value || field(models,"resourcesroot")?.value || "";
+    const {file:root,mirrorObjX} = modelResourcePath(field(mesh.section,"rootmesh")?.value || field(models,"resourcesroot")?.value || "");
     const folder = field(mesh.section,"resourcesmeshfolder")?.value || ctx.resources || "";
     const scope = path.join(folder, root);
     const resource = modelResource(mesh.section,models);
-    const key = JSON.stringify([resource?.key ?? scope,mesh.value]);
+    const key = JSON.stringify([resource?.key ?? scope,mesh.value,mirrorObjX]);
     if (!geometry.has(key)) {
       let data:ReturnType<typeof triangles>;
       if (resource && resources.groups.has(resource.key)) {
-        const model = chosenModels.get(resource.key);
-        const object = model?.objects.find(o=>o.name===mesh.value);
-        if (object) data = triangles(model,object);
+        const source = chosenModels.get(resource.key);
+        const object = source?.model.objects.find(o=>o.name===mesh.value);
+        if (object) data = triangles(source.model,object,source.obj && mirrorObjX);
       } else {
         const [ref] = await meshes.resolve(doc,uri,{...mesh,name:part.collider ? "Collider" : "Mesh"},catalog,ctx,modelFiles);
-        data = await catalog.withPacked(ref?.file,async()=>triangles(ref.model,ref.object),async()=>{
+        data = await catalog.withPacked(ref?.file,async()=>triangles(ref.model,ref.object,mirrorObjX && /\.obj$/i.test(ref.file.full)),async()=>{
           if (/\.(?:obj|fbx)$/i.test(root)) return;
           const packed = await stock.read("Mesh",mesh.value,scope);
           if (packed) {

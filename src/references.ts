@@ -74,6 +74,7 @@ function reference(entry, token, ctx) {
   const unit = unitSection.exec(entry.section?.name || "");
   if (unit && /^type$/i.test(key)) return { refs: (ctx.catalog.units.get(value) || []).filter(ref => ref.kinds.includes(unit[1].toLowerCase())) };
   const modelRoot = /^(resourcesroot|rootmesh)$/i.test(key);
+  if (modelRoot && entry.value?.split(",").slice(1).some(flag=>flag.trim()===token)) return {refs:[]};
   const material = /^(resourcesmaterial|material)$/i.test(key);
   const texture = /^textures$/i.test(entry.section?.name || "");
   const folderKey = material ? "resourcesmaterialfolder" : modelRoot ? "resourcesmeshfolder" : "";

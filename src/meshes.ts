@@ -1,12 +1,13 @@
 import { readBlendPreview } from "./blend-export";
 import { fbxGeometry } from "./fbx-geometry";
 import * as fs from "node:fs/promises";
+import { modelResourcePath } from "./model-resource-path";
 import { reference, referenceContext, isMesh } from "./references";
 
 const objectHeader = /^\s*o\s+([^#]+?)(?:\s*#.*)?$/;
 
 function parseObj(text: string, groupObjects = false) {
-  const vertices = [], uvs = [], objects = [], libraries = [];
+  const vertices = [], normals = [], uvs = [], objects = [], libraries = [];
   let object, material;
   const groups = new Map<string, typeof object>();
   let activeGroups = [];
@@ -33,39 +34,44 @@ function parseObj(text: string, groupObjects = false) {
     } else if (/^vt\s/.test(data)) {
       const uv = data.slice(2).trim().split(/\s+/, 2).map(Number);
       uvs.push(uv.length === 2 && uv.every(Number.isFinite) ? uv : null);
-    } else if (/^v\s/.test(data)) {
-      const point = data.slice(1).trim().split(/\s+/, 3).map(Number);
-      vertices.push(point.length === 3 && point.every(Number.isFinite) ? point : null);
-      if (object) object.vertexCount++;
+    } else if (/^vn?\s/.test(data)) {
+      const normal = data.startsWith("vn");
+      const point = data.slice(normal ? 2 : 1).trim().split(/\s+/, 3).map(Number);
+      (normal ? normals : vertices).push(point.length === 3 && point.every(Number.isFinite) ? point : null);
+      if (!normal && object) object.vertexCount++;
     } else if ((object || activeGroups.length) && /^f\s/.test(data)) {
-      const indices = [], texcoords = [];
+      const indices = [], texcoords = [], normalIndices = [];
       for (const token of data.slice(1).trim().split(/\s+/)) {
-        const [v, t] = token.split("/", 2).map(Number);
+        const [v, t, n] = token.split("/").map(Number);
         indices.push(v < 0 ? vertices.length + v : v - 1);
         texcoords.push(t < 0 ? uvs.length + t : t - 1);
+        normalIndices.push(n < 0 ? normals.length+n : n-1);
       }
       if (indices.length >= 3) {
-        const face = { indices, texcoords, material };
+        const face = { indices, texcoords, normalIndices, material };
         if (object) object.faces.push(face);
         else activeGroups.forEach(group => group.faces.push(face));
       }
     }
   }
-  return { vertices, uvs, objects, libraries };
+  return { vertices, normals, uvs, objects, libraries };
 }
 
-export function triangles(model: ReturnType<typeof parseObj>, object: ReturnType<typeof parseObj>["objects"][number]) {
-  const positions: number[] = [], uvs: number[] = [];
+export function triangles(model: ReturnType<typeof parseObj>, object: ReturnType<typeof parseObj>["objects"][number], mirrorX = false) {
+  const positions: number[] = [], uvs: number[] = [], normals:number[] = [];
   for (const face of object.faces) for (let j=1; j+1<face.indices.length; j++) {
-    const corners = [0,j,j+1];
+    const corners = mirrorX ? [0,j+1,j] : [0,j,j+1];
     if (corners.some(i=>!model.vertices[face.indices[i]])) continue;
     for (const i of corners) {
-      positions.push(...model.vertices[face.indices[i]]);
+      const [x,y,z] = model.vertices[face.indices[i]];
+      positions.push(mirrorX ? -x : x,y,z);
+      const normal = model.normals?.[face.normalIndices?.[i]];
+      if (normal) normals.push(mirrorX ? -normal[0] : normal[0],normal[1],normal[2]);
       uvs.push(...(model.uvs[face.texcoords[i]] || [0,0]));
     }
   }
   const encode = (values: number[]) => Buffer.from(new Float32Array(values).buffer).toString("base64");
-  return positions.length ? {positions:encode(positions),uvs:encode(uvs)} : undefined;
+  return positions.length ? {positions:encode(positions),uvs:encode(uvs),normals:normals.length===positions.length ? encode(normals) : undefined} : undefined;
 }
 
 class MeshFiles {
@@ -104,10 +110,11 @@ class MeshFiles {
     if (!root) return [];
     const resources = entry.section?.keys.find(k => /^resourcesmeshfolder$/i.test(k.name))?.value || ctx.resources;
     const context = { ...ctx, resources };
-    const explicit = /\.(obj|fbx)$/i.test(root.value);
-    const refs = explicit ? reference(root,root.value,context).refs : catalog.ordered([
-      ...reference(root,root.value+".obj",context).refs, ...reference(root,root.value+".fbx",context).refs,
-      ...catalog.mirrorModels.get(root.value.toLowerCase()) || [], ...(!all && catalog.mirrorMeshes.get(entry.value.toLowerCase()) || [])
+    const {file} = modelResourcePath(root.value);
+    const explicit = /\.(obj|fbx)$/i.test(file);
+    const refs = explicit ? reference(root,file,context).refs : catalog.ordered([
+      ...reference(root,file+".obj",context).refs, ...reference(root,file+".fbx",context).refs,
+      ...catalog.mirrorModels.get(file.toLowerCase()) || [], ...(!all && catalog.mirrorMeshes.get(entry.value.toLowerCase()) || [])
     ]);
     const result = [];
     for (const { file } of refs) {

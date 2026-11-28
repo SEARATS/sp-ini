@@ -13,7 +13,8 @@ import type { EntityScene } from "./entity-model";
 import { previewColors } from "./preview-colors";
 import { inspectEntity } from "./entity-inspect";
 import {placeSystemArcs,systemArcs} from "./system-arcs";
-import { Texture, Box3, Color, DirectionalLight, HemisphereLight, LoadingManager, PerspectiveCamera, Scene, Sphere, WebGLRenderer } from "three";
+import { Texture, Box3, Color, LoadingManager, PerspectiveCamera, Scene, Sphere, WebGLRenderer } from "three";
+import { previewDaylight, fitEntityShadows, renderDaylight } from "./preview-lighting";
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
@@ -28,6 +29,7 @@ const textureSelect = document.querySelector<HTMLSelectElement>("#missing-textur
 let missingTextureColor: MissingTextureColor = "grey";
 textureSelect.onchange = () => vscode.postMessage({type:"setMissingTextureColor", value:textureSelect.value});
 const scene = new Scene();
+const sun = previewDaylight(scene);
 const camera = new PerspectiveCamera(42, 1, 0.01, 10000);
 const bounds = new Sphere();
 let renderer, controls, model;
@@ -129,7 +131,11 @@ let updateFlagRows: (() => void)[] = [];
 const inCategory = (part: PreviewPart) => part.widget ? settings.objects || (settings.arcs && arcGuides.has(part.id)) : part.collider ? settings.colliders : settings.meshes;
 function updateDisplay() {
   updateRows.forEach(update => update());
-  if (model) { applyDisplay(model, categories, hidden, {...settings, missingTextureColor}); draw(); }
+  if (model) {
+    applyDisplay(model, categories, hidden, {...settings, missingTextureColor});
+    if (sun.castShadow) renderer.shadowMap.needsUpdate = true;
+    draw();
+  }
 }
 function changed() {
   updateDisplay();
@@ -305,7 +311,7 @@ function render() {
   arcValues.hidden=!arcValues.childElementCount || !settings.arcs || hidden.has(pickedObject);
   renderer.clear();
   camera.layers.set(previewLayer.mesh);
-  renderer.render(scene,camera);
+  renderDaylight(renderer,scene,camera);
   if (settings.colliders) {
     renderer.clearDepth();
     camera.layers.set(previewLayer.collider);
@@ -405,6 +411,7 @@ async function loadEntity(id:string, next:EntityScene, documentUri:string) {
       if (oldVisibility.has(part.id) && oldVisibility.get(part.id)!==part.visible && part.visible) hidden.delete(part.id);
       if (!part.visible && oldVisibility.get(part.id)!==false) hidden.add(part.id);
     }
+    fitEntityShadows(sun,model);
     initializedEntity=id;
     active={id,scene:next,view};
     syncArcs();
@@ -500,12 +507,8 @@ try {
   });
   controls = new OrbitControls(camera, canvas);
   controls.addEventListener("change", draw);
-  const light = new DirectionalLight(0xffffff, 2);
-  light.position.set(1, 2, 3);
-  const ambient = new HemisphereLight(0xffffff, 0x999999, 2);
-  light.layers.enableAll();
-  ambient.layers.enableAll();
-  scene.add(light,ambient);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.autoUpdate = false;
   resize();
   window.addEventListener("resize", resize);
   fit.addEventListener("click", frame);

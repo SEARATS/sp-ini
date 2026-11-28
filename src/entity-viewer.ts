@@ -17,7 +17,8 @@ export function entityGeometry(data: EntityScene["geometry"][number]) {
   const geometry = new BufferGeometry();
   geometry.setAttribute("position",new BufferAttribute(floats(data.positions),3));
   geometry.setAttribute("uv",new BufferAttribute(floats(data.uvs),2));
-  geometry.computeVertexNormals();
+  if (data.normals) geometry.setAttribute("normal",new BufferAttribute(floats(data.normals),3));
+  else geometry.computeVertexNormals();
   return geometry;
 }
 
@@ -91,6 +92,8 @@ export function assembledEntity(scene: EntityScene, manager: LoadingManager, mes
       if (!objectColliders.has(key)) objectColliders.set(key,[]);
       objectColliders.get(key).push(part.id);
     }
+    surface.castShadow = !part.collider && part.castShadows !== false;
+    surface.receiveShadow = !part.collider;
     surface.name = part.name;
     surface.userData.partId = part.id;
     surface.userData.previewRole = rows.get(part.id).colliderStyle;
@@ -136,7 +139,7 @@ export function patchEntity(view:ReturnType<typeof assembledEntity>, before:Enti
   const partShape = ({source,position,rotation,visible,...rest}:EntityPart)=>rest;
   const objectShape = ({source,position,placement,firingArcs,elevationArc,...rest}:NonNullable<EntityScene["objects"]>[number])=>({...rest,placed:!!position});
   if (before.geometry.length!==after.geometry.length || before.textures.length!==after.textures.length ||
-    before.geometry.some((g,i)=>g.positions!==after.geometry[i].positions || g.uvs!==after.geometry[i].uvs) ||
+    before.geometry.some((g,i)=>g.positions!==after.geometry[i].positions || g.uvs!==after.geometry[i].uvs || g.normals!==after.geometry[i].normals) ||
     before.textures.some((t,i)=>t.png!==after.textures[i].png || t.alpha!==after.textures[i].alpha) ||
     JSON.stringify(before.parts.map(partShape))!==JSON.stringify(after.parts.map(partShape)) ||
     JSON.stringify(before.objects?.map(objectShape))!==JSON.stringify(after.objects?.map(objectShape))) return false;
