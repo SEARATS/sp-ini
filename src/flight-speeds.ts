@@ -3,7 +3,7 @@ import type { IniSection, parse } from "./ini";
 
 export type Craft="vtol"|"helicopter"|"plane"|"stol";
 export type FlightPhase="forward"|"backward"|"slow"|"hold"|"circuit"|"approach"|"touchdown"|"departure";
-export interface AircraftPerformance {name?:string; craft:Craft; maxKnots:number; climb:number; stall:number; warmup:number}
+export interface AircraftPerformance {name?:string; craft:Craft; elevatorClearance:number; taxiSpacing:number; maxKnots:number; climb:number; stall:number; warmup:number}
 export interface DeckSpeeds {forward:number; backward:number; slow:number; hold:number; circuit:number; approach:number}
 const knot=0.0076554087;
 const positive=(value:string|undefined,fallback:number)=>Number(value)>0 && Number.isFinite(Number(value)) ? Number(value) : fallback;
@@ -18,12 +18,16 @@ export function deckSpeeds(deck:IniSection):DeckSpeeds {
     slow:Math.max(2,numeric(deck,"slowtaxivelocity",5)),hold:positive(landing[0],250),circuit:positive(landing[1],300),approach:positive(landing[2],150)};
 }
 
-export function aircraftPerformance(craft:Craft,section?:IniSection,name?:string):AircraftPerformance {
+export function aircraftPerformance(craft:Craft,section?:IniSection,name?:string,general?:IniSection):AircraftPerformance {
   const heli=craft==="helicopter";
   const stall=positive(field(section,"stallspeed")?.value,114.65);
   const climb=heli ? positive(field(section,"climbrate")?.value,35.5)*0.00453571 :
     positive(field(section,"maxclimbrate")?.value,12.7)*0.0148809375;
-  return {name,craft,stall,climb,maxKnots:positive(field(section,"maxspeedatsealevel")?.value,heli ? 138 : 601.4),
+  const span=positive(field(section,"wingspan")?.value,1)*0.0148809375;
+  const taxiSpacing=heli ? Math.max(0.2,numeric(general,"groundtaxiinterval",0.4)) :
+    positive(field(general,"taxiinterval")?.value,Math.max(0.4,2.5*span));
+  return {name,craft,stall,climb,taxiSpacing,elevatorClearance:heli ? 0.44642812 : 1.5*span,
+    maxKnots:positive(field(section,"maxspeedatsealevel")?.value,heli ? 138 : 601.4),
     warmup:Math.max(0,numeric(section,"enginewarmuptime",heli ? 30 : 20))+(heli ? Math.max(0,numeric(section,"rotorsspinuptime",30)) : 0)};
 }
 
@@ -32,7 +36,7 @@ export function airGroupPerformance(name:string,doc:ReturnType<typeof parse>) {
   const kind=field(section("general"),"unittype")?.value.toLowerCase();
   const craft:Craft=kind==="aircraft" || kind==="plane" ? "plane" : kind as Craft;
   if (["vtol","stol","plane","helicopter"].includes(craft))
-    return aircraftPerformance(craft,section(craft==="helicopter" ? "physics" : "performance"),name);
+    return aircraftPerformance(craft,section(craft==="helicopter" ? "physics" : "performance"),name,section("general"));
 }
 
 // Target speeds in hull-relative uu/s. Cube motion omits thrust, turns and ship motion.

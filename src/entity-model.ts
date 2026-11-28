@@ -15,7 +15,7 @@ export interface EntityObject {
   id: string; name: string; group: ObjectGroup; system?: string; source?: IniSource;
   anchor?: string; position?: Vector; heading?:number; placement: string;
   firingArcs?: string; elevationArc?: string;
-  route?: {kind:"taxiPaths" | "airPaths"; points:Vector[]; taxiEnd?:number; elevator?:string; operation?:"launch"|"recovery"; taxiSpeed?:"forward"|"backward"|"slow"; from?:string; to?:string; types?:string[]; arrivals?:string[]; ride?:{start:number; end:number}};
+  route?: {kind:"taxiPaths" | "airPaths"; points:Vector[]; taxiEnd?:number; queueClearance?:number; elevator?:string; operation?:"launch"|"recovery"; taxiSpeed?:"forward"|"backward"|"slow"; from?:string; to?:string; types?:string[]; arrivals?:string[]; ride?:{start:number; end:number}};
 }
 export function visibleRoutePoints(route:EntityObject["route"]) {
   return route?.taxiEnd===undefined ? route?.points : route.points.slice(0,route.taxiEnd+1);
@@ -359,7 +359,9 @@ export function entityObjects(doc: ReturnType<typeof parse>, parts: EntityPart[]
     if (taxi) {
       const from = field(section,"from")?.value, to = field(section,"to")?.value;
       const points = Number(taxi[1])<=taxiPaths && taxiRoute(section,sections,lifts);
-      if (points) obj.route = {kind:"taxiPaths",points,taxiSpeed:/^true$/i.test(field(section,"isbackwards")?.value) ? "backward" :
+      if (points) obj.route = {kind:"taxiPaths",points,
+        queueClearance:/^true$/i.test(field(section,"allowqueue")?.value) ? Number(field(section,"queueclearance")?.value) || 0 : undefined,
+        taxiSpeed:/^true$/i.test(field(section,"isbackwards")?.value) ? "backward" :
         /^true$/i.test(field(section,"isslow")?.value) ? "slow" : "forward",from:from.toLowerCase(),to:to.toLowerCase()};
       obj.placement = [from,to].filter(Boolean).join(" → ");
       obj.position = obj.route?.points[0];

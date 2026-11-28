@@ -7,7 +7,7 @@ import { parse } from "../src/ini";
 import { Catalog } from "../src/catalog";
 import { Materials } from "../src/materials";
 import { carrierAircraft } from "../src/entity-assets";
-import { flightSpeed } from "../src/flight-speeds";
+import { airGroupPerformance, flightSpeed } from "../src/flight-speeds";
 import { DeckPlayback, FlightNetwork, flightDeckLayout } from "../src/flight-traffic";
 
 const ini=`[Models]
@@ -88,7 +88,7 @@ test("fleet playback fills independent stations, honors reciprocal blocks and al
     const phases=new Set<string>();
     for (let i=0;i<5000;i++) {
       play.tick(0.1);most=Math.max(most,play.flights.length);
-      const points=play.flights.map(f=>f.trip.station.name);
+      const points=play.flights.filter(f=>f.stationHeld).map(f=>f.trip.station.name);
       assert.ok(!(points.includes("launchpoint1") && points.includes("recoverypoint1")));
       const operations=play.flights.map(f=>f.trip.operation);
       operations.forEach(o=>phases.add(o));
@@ -156,6 +156,60 @@ test("deck speed uses knots, taxi path flags and embarked helicopter performance
   const play=new DeckPlayback(net,"object:launchpoint1");
   play.tick(0);play.tick(1);
   assert.ok(Math.abs(Math.hypot(...play.flights[0].position)-4*0.0076554087)<1e-8);
+});
+
+test("launches share a taxi point once the first aircraft clears the lift",()=>{
+  const route=ini.replace("NumberOfRecoveryPoints=2","NumberOfRecoveryPoints=0")
+    .replace("NumberOfTaxiPaths=2","NumberOfTaxiPoints=1\nNumberOfTaxiPaths=3")
+    .replace("AssociatedLaunchPoints=1","AssociatedLaunchPoints=1,2\nRidePosition=1,0,0")
+    .replace("Position=1,0,1","Position=5,0,2")
+    .replace("From=Elevator1\nTo=LaunchPoint1","From=Elevator1\nTo=TaxiPoint1")
+    .replace("From=RecoveryPoint1\nTo=Elevator1","From=TaxiPoint1\nTo=LaunchPoint1")+
+    "\n[TaxiPoint1]\nPosition=4,0,1\n[TaxiPath3]\nFrom=TaxiPoint1\nTo=LaunchPoint2";
+  for (const [craft,extra,clearance] of [["Helicopter","",0.44642812],["Plane","",1.5*20*0.0148809375],
+    ["Helicopter","\nAllowQueue=True\nQueueClearance=1",1]] as const) {
+    const net=network(route.replaceAll("AllowedType=Helicopter,VTOL","AllowedType="+craft).replaceAll("AllowedType=Helicopter\n","AllowedType="+craft+"\n")
+      .replace("[TaxiPath1]","[TaxiPath1]"+extra));
+    if (craft==="Plane") net.deck.aircraft=[airGroupPerformance("test",parse("[General]\nUnitType=Aircraft\n[Performance]\nWingSpan=20"))];
+    const play=new DeckPlayback(net);
+    play.tick(0);
+    const first=play.flights[0];
+    let separation=0;
+    for (let i=0;i<4000 && play.flights.length<2;i++) {
+      play.tick(0.05);
+      assert.equal(play.flights.filter(f=>f.platform).length,1);
+      separation=Math.hypot(first.position[0]-1,first.position[1],first.position[2]);
+      if (first.leg>=first.trip.taxiStart && separation<clearance) assert.ok(first.liftHeld);
+    }
+    assert.equal(play.flights.length,2);
+    assert.ok(!first.liftHeld && first.stationHeld);
+    assert.ok(separation>=clearance && separation<clearance+0.01);
+    assert.equal(first.trip.phases[first.leg],"forward");
+    assert.equal(play.flights[1].trip.lift,first.trip.lift);
+  }
+});
+
+test("holding aircraft defer reservations and release the recovery point before the ride to the hangar",()=>{
+  const net=network(ini.replace("NumberOfLaunchPoints=2","NumberOfLaunchPoints=0")
+    .replace("NumberOfTaxiPaths=2","HoldWaypoints=0,40,0|0.01,40,0\nNumberOfTaxiPaths=2")
+    .replace("[RecoveryPoint2]","[RecoveryPoint2]\nAssociatedElevators=1\nBlocksElevators=1")
+    .replace("From=Elevator1\nTo=LaunchPoint1","From=RecoveryPoint2\nTo=Elevator1")
+    .replace("From=RecoveryPoint1\nTo=Elevator1","From=RecoveryPoint1\nWaypoints=1,0,0\nTo=Elevator1"));
+  const play=new DeckPlayback(net);
+  play.tick(0);
+  const [a,b]=play.flights;
+  assert.ok(a.holding && b.holding && !a.liftHeld && !b.stationHeld);
+  assert.ok(b.position[1]>a.position[1]);
+  let cleared=false,waited=false;
+  for (let i=0;i<3000 && play.flights.includes(a);i++) {
+    play.tick(0.05);
+    if (a.liftHeld && b.holding) {waited=true;assert.ok(!b.liftHeld);}
+    if (!a.stationHeld && a.liftHeld && a.platform && a.leg>=a.trip.taxiStart) {
+      cleared=true;
+      assert.ok(a.position[2]<0.01);
+    }
+  }
+  assert.ok(cleared && waited && !play.flights.includes(a));
 });
 
 test("selecting a station follows all valid branches to the hangar, and an elevator shows both directions",()=>{

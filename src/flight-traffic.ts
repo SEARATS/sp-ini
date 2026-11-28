@@ -18,10 +18,10 @@ interface Spot {
   name:string; role:string; position?:Vector; types:Craft[]; elevators:string[]; launches:string[];
   blocks:string[]; free:string[]; interval:number; heading:number; vtolHeading:number; ascend:number;
   roll:number; ride?:Vector[]; heliRide?:Vector[];
-  single:boolean; startsLowered:boolean;
+  single:boolean; startsLowered:boolean; closeAfterTaxi:boolean; requiresFree:boolean; ridePosition?:Vector; exit?:Vector;
 }
 export interface FlightDeckLayout {
-  speeds:DeckSpeeds; aircraft:AircraftPerformance[];
+  holdSeparation:number; heliSeparation:number; speeds:DeckSpeeds; aircraft:AircraftPerformance[];
   spots:Spot[]; landingWhileLaunching:boolean; launchDelay:number; spawnInterval:number;
   departures:Partial<Record<Craft,Vector>>;
 }
@@ -38,7 +38,8 @@ export function flightDeckLayout(doc:ReturnType<typeof parse>,scene:EntityScene)
     if (role==="elevator" && /^true$/i.test(get(s,"unused"))) continue;
     const links=(k:string,prefix:string)=>list(s,k).filter(n=>/^[1-9]\d*$/.test(n)).map(n=>prefix+n);
     const heading=number(s,"rotation",0);
-    const spot:Spot={name,role,position:point(get(s,role==="elevator" ? "spawnposition" : "position")),
+    const spot:Spot={name,role,requiresFree:/^true$/i.test(get(s,"requiresfreelaunchpoint")),closeAfterTaxi:/^true$/i.test(get(s,"closedoorsaftertaxi")),
+      exit:point(get(s,"exitposition")),position:point(get(s,role==="elevator" ? "spawnposition" : "position")),
       types:craftOrder.filter(t=>list(s,"allowedtype").includes(t)),
       elevators:links("associatedelevators","elevator"),launches:links("associatedlaunchpoints","launchpoint"),
       blocks:names.flatMap(p=>links("blocks"+p+"s",p)),free:links("takeoffrequiresfreelaunchpoints","launchpoint"),
@@ -47,7 +48,7 @@ export function flightDeckLayout(doc:ReturnType<typeof parse>,scene:EntityScene)
     if (role==="elevator") {
       if ((get(s,"associatedlaunchpoints") ?? "").includes("-1")) spot.launches=[];
       const lift=scene.elevators?.find(l=>l.name.toLowerCase()===name), part=parts.get(lift?.part);
-      const ride=point(get(s,"rideposition")) ?? spot.position;
+      const ride=spot.ridePosition=point(get(s,"rideposition")) ?? spot.position;
       function rise(board:Vector) {
         return board && spot.position && [spot.position,...(part && elevatorRidePath(board,part,parts,lift.raise,"path") || [board])];
       }
@@ -67,7 +68,8 @@ export function flightDeckLayout(doc:ReturnType<typeof parse>,scene:EntityScene)
     spot.launches=spot.launches.map(resolveLaunch).filter(Boolean);
     spot.free=spot.free.map(resolveLaunch).filter(Boolean);
   }
-  return {spots,departures,speeds:deckSpeeds(deck),aircraft:[],launchDelay:number(deck,"launchdelay",0),spawnInterval:Math.max(0.1,number(deck,"spawninterval",0.1)),
+  return {spots,departures,holdSeparation:number(deck,"holdstackseparation",500)*0.00453571,heliSeparation:number(deck,"helicopterholdstackseparation",-1)*0.00453571,
+    speeds:deckSpeeds(deck),aircraft:[],launchDelay:number(deck,"launchdelay",0),spawnInterval:Math.max(0.1,number(deck,"spawninterval",0.1)),
     landingWhileLaunching:!/^false$/i.test(get(deck,"landingwhilelaunching"))};
 }
 
@@ -77,7 +79,8 @@ interface LiftRide {
 }
 interface Trip {
   phases:FlightPhase[]; finalApproachStarts:number; ride?:LiftRide;
-  craft:Craft; operation:Operation; station:Spot; lift?:Spot; legs:Vector[][]; uses:Set<string>; blocks:Set<string>;
+  craft:Craft; operation:Operation; station:Spot; lift?:Spot; legs:Vector[][];
+  taxiStart:number; clearLeg:number; clearSegment:number; queueClearance:number;
 }
 const rolls=(s:Spot,craft:Craft)=>craft==="plane" || (craft!=="helicopter" && s.types.includes("plane"));
 export class FlightNetwork {
@@ -226,15 +229,11 @@ export class FlightNetwork {
         for (const lift of eligible.length ? eligible : [undefined]) {
           const taxi=lift ? this.taxi(launch ? lift.name : station.name,launch ? station.name : lift.name,station.name,craft,via) : [];
           if (!taxi || (!lift && (via || lifts.length))) continue;
-          const uses=new Set([station.name]);
-          if (lift) uses.add(lift.name);
-          for (const edge of taxi) for (const n of [edge.id,edge.route.from,edge.route.to]) uses.add(n);
-          const blocks=new Set([...uses].flatMap(n=>this.spots.get(n)?.blocks ?? []));
-          if (launch && rolls(station,craft)) station.free.forEach(n=>blocks.add(n));
           const legs=taxi.map(r=>r.route.points);
           const phases:FlightPhase[]=taxi.map(r=>r.route.taxiSpeed ?? "forward");
           let liftRide:LiftRide;
-          let finalApproachStarts=0;
+          let finalApproachStarts=0,taxiStart=0,clearLeg=0,clearSegment=0;
+          const queueClearance=Math.max(-1,...taxi.map(r=>r.route.queueClearance ?? -1));
           if (launch) {
             const ride=craft==="helicopter" ? lift?.heliRide : lift?.ride;
             if (ride) {
@@ -242,6 +241,7 @@ export class FlightNetwork {
               phases.unshift("slow");
               liftRide=this.addRide(legs,0,{start:1,end:ride.length-1},lift.name,"raise");
             }
+            taxiStart=legs.length-taxi.length;
             legs.push(this.departure(station,craft));
             phases.push("departure");
           } else {
@@ -251,13 +251,26 @@ export class FlightNetwork {
             if (hold) phases.unshift("hold","circuit","approach");
             else phases.unshift("approach");
             finalApproachStarts=Math.max(0,approach.route.points.length-(craft==="helicopter" || !rolls(station,craft) ? 2 : 5));
-            if (lift) liftRide=this.addRide(legs,legs.length-1,taxi.at(-1)?.route.ride,lift.name,"lower");
+            taxiStart=legs.length-taxi.length;
+            clearLeg=legs.length-1;
+            const last=taxi.at(-1)?.route;
+            let board=last?.taxiEnd ?? 0,range=last?.ride;
+            if (taxi.length && station.exit?.some(Boolean) && distance(station.position,station.exit)>0.14880937) {
+              const first=legs[taxiStart];
+              legs[taxiStart]=[first[0],station.exit,...first.slice(1)];
+              if (taxi.length===1) {
+                board++;
+                if (range) range={start:range.start+1,end:range.end+1};
+              }
+            }
+            clearSegment=Math.max(0,board-1);
+            if (lift) liftRide=this.addRide(legs,clearLeg,range,lift.name,"lower");
           }
           if (liftRide) {
             const i=liftRide.leg-1;
             phases.splice(i,1,phases[i],"slow","slow");
           }
-          trips.push({station,craft,operation,lift,legs,phases,finalApproachStarts,ride:liftRide,uses,blocks});
+          trips.push({station,craft,operation,lift,legs,phases,finalApproachStarts,ride:liftRide,taxiStart,clearLeg,clearSegment,queueClearance});
         }
       }
     }
@@ -276,7 +289,11 @@ export class FlightNetwork {
   }
 }
 
-interface Flight {trip:Trip; aircraft:AircraftPerformance; start:number; warmup:number;leg:number;segment:number;distance:number;position:Vector;rideTime:number;returnTime?:number}
+interface Flight {
+  stationHeld:boolean; liftHeld:boolean; holding:boolean; platform:boolean; departed:boolean; restoreTime?:number;
+  trip:Trip; aircraft:AircraftPerformance; start:number; warmup:number; leg:number; segment:number; distance:number;
+  position:Vector; rideTime:number; returnTime?:number;
+}
 export class DeckPlayback {
   readonly flights:Flight[]=[];
   readonly elevators=new Map<string,{motion:ElevatorMotion;time:number}>();
@@ -305,38 +322,157 @@ export class DeckPlayback {
     }
   }
   get playable() {return !!this.stations.length;}
+  private busy(point:Spot,owner?:Flight,allowSame=false) {
+    if (!point) return false;
+    const conflicts=(held:Spot)=>held.name===point.name ? !allowSame || point.blocks.includes(point.name) :
+      point.blocks.includes(held.name) || held.blocks.includes(point.name);
+    if (this.network.deck.spots.some(lift=>!(owner?.liftHeld && lift===owner.trip.lift) && lift.role==="elevator" && conflicts(lift) && this.awayFromHome(lift))) return true;
+    return this.flights.some(f=>f!==owner && ((f.stationHeld && conflicts(f.trip.station)) || (f.liftHeld && conflicts(f.trip.lift))));
+  }
+  private awayFromHome(lift:Spot) {
+    const pose=this.elevators.get(lift.name);
+    if (!pose) return false;
+    const movingHome=pose.motion===(lift.startsLowered ? "lower" : "raise");
+    // A moving platform has an owner. An idle pose is at one end of its clip.
+    return movingHome ? pose.time===0 : pose.time>0;
+  }
+  private canRecover(t:Trip,owner?:Flight) {
+    return this.time>=(this.available.get(t.station.name) ?? 0) && !this.busy(t.station,owner,true) &&
+      (!t.lift || ((!t.lift.single || this.focus || this.launchedFrom.has(t.lift.name)) &&
+        !this.flights.some(f=>f!==owner && f.liftHeld && f.trip.lift===t.lift && f.trip.operation==="launch")));
+  }
+  private board(f:Flight) {
+    const {lift,ride}=f.trip;
+    if (!lift || f.platform) return true;
+    if (this.flights.some(other=>other!==f && other.platform && other.trip.lift===lift)) return false;
+    f.platform=true;
+    if (ride) {
+      const last=this.elevators.get(lift.name);
+      if (last?.motion===ride.motion && last.time===ride.duration && ride.returnDuration) {
+        f.returnTime=0;
+        this.elevators.set(lift.name,{motion:ride.motion==="raise" ? "lower" : "raise",time:0});
+      } else this.elevators.set(lift.name,{motion:ride.motion,time:0});
+    }
+    return true;
+  }
+  private releaseLift(f:Flight) {
+    f.liftHeld=false;
+    f.platform=false;
+  }
+  private restoreLift(f:Flight,elapsed:number) {
+    const {ride,lift}=f.trip;
+    if (ride.returnDuration) {
+      f.restoreTime=Math.min(ride.returnDuration,(f.restoreTime ?? 0)+elapsed);
+      this.elevators.set(lift.name,{motion:ride.motion==="lower" ? "raise" : "lower",time:f.restoreTime});
+      if (f.restoreTime<ride.returnDuration) return false;
+    }
+    this.releaseLift(f);
+    return true;
+  }
+  private admit(f:Flight) {
+    f.holding=false;
+    f.stationHeld=true;
+    f.liftHeld=!!f.trip.lift;
+    this.available.set(f.trip.station.name,this.time+f.trip.station.interval);
+  }
+  private stackHold(trip:Trip,owner?:Flight) {
+    const {holdSeparation,heliSeparation}=this.network.deck;
+    const heli=trip.craft==="helicopter";
+    const queue=owner ? this.flights.slice(0,this.flights.indexOf(owner)) : this.flights;
+    const ahead=queue.filter(f=>f.holding && (heliSeparation<0 || (f.trip.craft==="helicopter")===heli)).length;
+    const offset=ahead*(heli && heliSeparation>=0 ? heliSeparation : holdSeparation);
+    if (!offset && !owner) return trip;
+    const legs=trip.legs.slice();
+    legs[0]=legs[0].map(([x,y,z])=>[x,y+offset,z]);
+    if (owner && legs[0].length>1) legs[0][0]=owner.position;
+    legs[1]=[legs[0].at(-1),...legs[1].slice(1)];
+    return {...trip,legs};
+  }
+  private advanceHold(f:Flight) {
+    const {trip}=f, leg=trip.legs[0];
+    if (f.segment<leg.length-2) return true;
+    const options=this.stations.find(s=>s[0].station===trip.station).filter(t=>t.craft===trip.craft);
+    const base=options[0], ceiling=Math.max(...base.legs[0].map(p=>p[1]))+3;
+    if (this.flights.find(other=>other.holding)===f && f.position[1]<=ceiling) {
+      const incoming=(t:Trip)=>this.flights.filter(other=>other.liftHeld && other.trip.lift===t.lift).length;
+      const next=options.filter(t=>this.canRecover(t,f)).sort((a,b)=>incoming(a)-incoming(b))[0];
+      if (next) {
+        f.trip={...next,legs:[...trip.legs.slice(0,2),...next.legs.slice(2)]};
+        this.admit(f);
+        return true;
+      }
+    }
+    if (f.segment+1<leg.length) return true;
+    f.trip=this.stackHold(base,f);
+    f.segment=0;
+    f.distance=0;
+    if (leg.length===1) f.position=f.trip.legs[0][0];
+    return false;
+  }
+  // Return the time left to move after acquiring the required deck resources.
+  private taxiReservations(f:Flight,elapsed:number) {
+    const {trip}=f, {lift,ride}=trip;
+    if (trip.operation==="recovery") {
+      if (!lift || f.leg<trip.clearLeg || (f.leg===trip.clearLeg && f.segment<trip.clearSegment)) return elapsed;
+      f.stationHeld=false;
+      return this.board(f) ? elapsed : undefined;
+    }
+    if (f.leg<trip.taxiStart || f.departed) return elapsed;
+    if (!f.stationHeld) {
+      if (this.busy(trip.station,f,trip.queueClearance>=0)) return;
+      f.stationHeld=true;
+    }
+    if (!f.liftHeld) return elapsed;
+    const atLaunch=trip.phases[f.leg]==="departure";
+    const clearance=Math.max(f.aircraft.elevatorClearance,trip.queueClearance);
+    if (!atLaunch && (!lift.ridePosition || distance(f.position,lift.ridePosition)<clearance)) return elapsed;
+    if (ride && lift.startsLowered && lift.closeAfterTaxi) {
+      if (!atLaunch) return elapsed;
+      const left=ride.returnDuration-(f.restoreTime ?? 0);
+      return this.restoreLift(f,elapsed) ? Math.max(0,elapsed-left) : undefined;
+    }
+    this.releaseLift(f);
+    return elapsed;
+  }
+  private waitingForTraffic(f:Flight,b:Vector) {
+    // GroundTaxiPhysics enables its forward 45-degree spacing check on queued vessel routes.
+    const [x,y,z]=f.position,dx=b[0]-x,dz=b[2]-z;
+    return this.flights.some(other=>{
+      if (other===f || other.holding || other.departed || other.leg>=other.trip.legs.length ||
+        (other.trip.operation==="recovery" && other.leg<other.trip.taxiStart)) return false;
+      const p=other.position,ox=p[0]-x,oz=p[2]-z;
+      return Math.hypot(ox,p[1]-y,oz)<=Math.max(f.aircraft.taxiSpacing,other.aircraft.taxiSpacing) &&
+        dx*ox+dz*oz>Math.SQRT1_2*Math.hypot(dx,dz)*Math.hypot(ox,oz);
+    });
+  }
   private start(operation:Operation) {
     if (!this.network.deck.landingWhileLaunching && this.flights.length && this.flights[0].trip.operation!==operation) return false;
     for (let n=0;n<this.stations.length;n++) {
       const i=(this.cursor+n)%this.stations.length, station=this.stations[i], s=station[0].station;
-      if (this.served.has(s.name) || station[0].operation!==operation || this.time<(this.available.get(s.name) ?? 0)) continue;
+      if (this.served.has(s.name) || station[0].operation!==operation) continue;
       if (operation==="launch" && this.time<(this.available.get("launch") ?? 0)) continue;
       const types=craftOrder.filter(t=>station.some(p=>p.craft===t)), turn=this.next.get(s.name) ?? 0;
       const candidates=station.filter(t=>t.craft===types[turn%types.length] &&
         !(operation==="launch" && !this.focus && t.lift?.single && this.launchedFrom.has(t.lift.name)));
-      const trip=candidates.find(t=>this.flights.every(f=>{
-        for (const key of t.uses) if (f.trip.uses.has(key) || f.trip.blocks.has(key)) return false;
-        for (const key of t.blocks) if (f.trip.uses.has(key)) return false;
-        return true;
-      }));
+      const launch=operation==="launch";
+      let trip=candidates.find(t=>launch ? !this.busy(t.lift) && ((t.lift && !t.lift.requiresFree) || !this.busy(s)) :
+        t.phases[0]==="hold" || this.canRecover(t));
       if (!trip) continue;
-      const {lift,ride}=trip;
-      let returnTime:number;
-      if (ride) {
-        const last=this.elevators.get(lift.name);
-        if (last?.motion===ride.motion && last.time===ride.duration && ride.returnDuration) {
-          returnTime=0;
-          this.elevators.set(lift.name,{motion:ride.motion==="raise" ? "lower" : "raise",time:0});
-        } else this.elevators.set(lift.name,{motion:ride.motion,time:0});
-      }
+      const holding=!launch && trip.phases[0]==="hold";
+      if (holding) trip=this.stackHold(trip);
       const profiles=this.network.deck.aircraft.filter(p=>p.craft===trip.craft);
       const aircraft=profiles.length ? profiles[Math.floor(turn/types.length)%profiles.length] : aircraftPerformance(trip.craft);
-      this.flights.push({trip,aircraft,start:this.time,warmup:aircraft.warmup,leg:0,segment:0,distance:0,position:trip.legs[0][0],rideTime:0,returnTime});
+      const f:Flight={trip,aircraft,start:this.time,warmup:aircraft.warmup,leg:0,segment:0,distance:0,position:trip.legs[0][0],rideTime:0,
+        holding,stationHeld:false,liftHeld:launch && !!trip.lift,platform:false,departed:false};
+      this.flights.push(f);
+      if (launch) {
+        this.board(f);
+        if (!trip.lift) f.stationHeld=true;
+      } else if (!holding) this.admit(f);
       this.next.set(s.name,turn+1);
       if (!this.focus) this.served.add(s.name);
-      if (operation==="launch" && trip.lift?.single) this.launchedFrom.add(trip.lift.name);
-      if (operation==="launch") this.available.set("launch",this.time+Math.max(this.network.deck.launchDelay,this.network.deck.spawnInterval));
-      else this.available.set(s.name,this.time+s.interval);
+      if (launch && trip.lift?.single) this.launchedFrom.add(trip.lift.name);
+      if (launch) this.available.set("launch",this.time+this.network.deck.spawnInterval);
       this.cursor=(i+1)%this.stations.length;
       this.preferred=operation==="launch" ? "recovery" : "launch";
       return true;
@@ -348,25 +484,23 @@ export class DeckPlayback {
     for (let i=this.flights.length-1;i>=0;i--) {
       const f=this.flights[i];
       let elapsed=dt;
-      const {ride,lift}=f.trip;
-      const readyAfter=f.returnTime===undefined ? 0 : ride.returnDuration-f.returnTime;
-      if (f.returnTime!==undefined) {
-        const step=Math.min(elapsed,readyAfter);
-        f.returnTime+=step;
-        this.elevators.get(lift.name).time=f.returnTime;
-        if (f.returnTime>=ride.returnDuration) {
+      while (f.leg<f.trip.legs.length) {
+        if (f.holding && !this.advanceHold(f)) break;
+        const {trip}=f, launch=trip.operation==="launch";
+        const {ride,lift}=trip,leg=trip.legs[f.leg],phase=trip.phases[f.leg];
+        const taxiTime=this.taxiReservations(f,elapsed);
+        if (taxiTime===undefined) break;
+        elapsed=taxiTime;
+        if (f.returnTime!==undefined) {
+          const step=Math.min(elapsed,ride.returnDuration-f.returnTime);
+          f.returnTime+=step;
+          elapsed-=step;
+          this.elevators.get(lift.name).time=f.returnTime;
+          if (f.returnTime<ride.returnDuration) break;
           f.returnTime=undefined;
           this.elevators.set(lift.name,{motion:ride.motion,time:0});
         }
-        if (f.trip.operation==="launch") {
-          if (f.returnTime!==undefined) continue;
-          elapsed-=step;
-        }
-      }
-      while (f.leg<f.trip.legs.length) {
         if (ride && f.leg===ride.leg) {
-          if (f.returnTime!==undefined) break;
-          elapsed=Math.min(elapsed,dt-readyAfter);
           const step=Math.min(elapsed,ride.duration-f.rideTime);
           f.rideTime+=step;
           elapsed-=step;
@@ -376,10 +510,10 @@ export class DeckPlayback {
           f.leg++;
           continue;
         }
-        const leg=f.trip.legs[f.leg];
         if (f.segment+1>=leg.length) {f.leg++;f.segment=0;f.distance=0;continue;}
         const a=leg[f.segment],b=leg[f.segment+1],len=distance(a,b);
-        let phase=f.trip.phases[f.leg];
+        if (launch && trip.queueClearance>=0 && f.leg>=trip.taxiStart && phase!=="departure" && len && this.waitingForTraffic(f,b)) break;
+        let speedPhase=phase;
         if (phase==="departure" && f.warmup>0) {
           if (f.aircraft.craft==="plane" || f.aircraft.craft==="stol")
             f.warmup=Math.max(0,f.aircraft.warmup-(this.time-elapsed-f.start));
@@ -389,10 +523,17 @@ export class DeckPlayback {
           if (f.warmup>0) break;
         }
         if (phase==="approach") {
-          if (f.segment+1<f.trip.finalApproachStarts) phase="circuit";
-          else if (f.segment===leg.length-2) phase="touchdown";
+          if (f.segment+1<f.trip.finalApproachStarts) speedPhase="circuit";
+          else if (f.segment===leg.length-2) speedPhase="touchdown";
         }
-        const speed=flightSpeed(phase,this.network.deck.speeds,f.aircraft,a,b,len-f.distance,!rolls(f.trip.station,f.trip.craft));
+        if (phase==="departure" && !f.departed) {
+          if (this.time<(this.available.get("takeoff") ?? 0) ||
+            (rolls(trip.station,trip.craft) && this.flights.some(other=>other!==f && other.stationHeld && trip.station.free.includes(other.trip.station.name)))) break;
+          this.available.set("takeoff",this.time+this.network.deck.launchDelay);
+          f.departed=true;
+        }
+        if (f.departed && (trip.craft==="helicopter" || f.segment===leg.length-2)) f.stationHeld=false;
+        const speed=flightSpeed(speedPhase,this.network.deck.speeds,f.aircraft,a,b,len-f.distance,!rolls(f.trip.station,f.trip.craft));
         const left=(len-f.distance)/speed;
         if (elapsed<left) {
           f.distance+=elapsed*speed;
@@ -402,6 +543,8 @@ export class DeckPlayback {
         elapsed-=left;f.position=b;f.segment++;f.distance=0;
       }
       if (f.leg===f.trip.legs.length) {
+        const {ride,lift}=f.trip;
+        if (ride && f.platform && !lift.startsLowered && f.trip.operation==="recovery" && !this.restoreLift(f,elapsed)) continue;
         if (f.trip.operation==="recovery" && f.trip.lift?.single) this.launchedFrom.delete(f.trip.lift.name);
         this.flights.splice(i,1);
       }
