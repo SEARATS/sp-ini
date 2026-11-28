@@ -1,4 +1,4 @@
-import { Box3, BoxGeometry, BufferAttribute, BufferGeometry, ConeGeometry, DoubleSide, Float32BufferAttribute, Group, Line, LineBasicMaterial, MathUtils, Mesh, MeshBasicMaterial, MeshPhongMaterial, OctahedronGeometry, PlaneGeometry, Quaternion, RepeatWrapping, Sphere, SRGBColorSpace, TextureLoader, Vector3, type LoadingManager } from "three";
+import { Box3, BoxGeometry, BufferAttribute, BufferGeometry, ConeGeometry, DoubleSide, EdgesGeometry, Float32BufferAttribute, Group, Line, LineBasicMaterial, LineSegments, MathUtils, Mesh, MeshBasicMaterial, MeshPhongMaterial, OctahedronGeometry, PlaneGeometry, Quaternion, RepeatWrapping, Sphere, SRGBColorSpace, TextureLoader, Vector3, type LoadingManager } from "three";
 import { deckPointSection, type EntityObject, type EntityPart, type EntityScene, type EntitySpin, type Vector } from "./entity-model";
 import type { OutlineNode } from "./model-outline";
 import { deckPointColor, objectColor, previewColors, type PreviewColor } from "./preview-colors";
@@ -11,6 +11,20 @@ function transform(node:Group, position:Vector, rotation:Vector) {
   const [x,y,z]=position, [rx,ry,rz]=rotation.map(MathUtils.degToRad);
   node.position.set(-x,y,z);
   node.rotation.set(rx,-ry,-rz,"YXZ");
+}
+
+export function poseElevator(view:ReturnType<typeof assembledEntity>, scene:EntityScene, selection:string) {
+  for (const lift of scene.elevators ?? []) {
+    const part=scene.parts.find(p=>p.id===lift.part), node=view.nodes.get(lift.part);
+    if (part && node) transform(node,part.position,part.rotation);
+  }
+  const [name,motion,index]=selection.split("/");
+  const lift=scene.elevators?.find(l=>l.name===name);
+  const pose=(motion==="raise" || motion==="lower") && lift?.[motion][Number(index)];
+  const node=lift && view.nodes.get(lift.part);
+  if (node && pose) transform(node,pose.position,pose.rotation);
+  for (const [id,outline] of view.platformOutlines) outline.visible=id===lift?.part;
+  view.model.updateMatrixWorld(true);
 }
 
 export function entityGeometry(data: EntityScene["geometry"][number]) {
@@ -80,6 +94,8 @@ export function assembledEntity(scene: EntityScene, manager: LoadingManager, mes
   const meshTree = tree("Meshes"), colliderTree = tree("Colliders"), objectTree = tree("Objects");
   const byId = new Map(scene.parts.map(part=>[part.id,part]));
   const nodes = new Map<string,Group>(), rows = new Map<string,OutlineNode>();
+  const platformIds=new Set(scene.elevators?.map(lift=>lift.part));
+  const platformOutlines=new Map<string,LineSegments>();
   const objectColliders = new Map<string,string[]>();
   const widgets = new Map<string,Mesh | Line>(), surfaces = new Map<string,Mesh<BufferGeometry,MeshBasicMaterial | MeshPhongMaterial>>();
   const objectGroups = new Map((scene.objects || []).map(obj=>[obj.name.toLowerCase(),obj.group]));
@@ -152,6 +168,14 @@ export function assembledEntity(scene: EntityScene, manager: LoadingManager, mes
     surface.userData.previewRole = rows.get(part.id).colliderStyle;
     if (part.collider) surfaces.set(part.id,surface);
     node.add(surface);
+    if (platformIds.has(part.id)) {
+      const outline=new LineSegments(new EdgesGeometry(shape),new LineBasicMaterial({color:previewColors.flight,depthTest:false,depthWrite:false}));
+      outline.userData.partId=part.id;
+      outline.userData.platformOutline=true;
+      outline.visible=false;
+      node.add(outline);
+      platformOutlines.set(part.id,outline);
+    }
     rows.get(part.id).parts.push({id:part.id,collider:part.collider});
   }
   const diameter = new Box3().setFromObject(model).getSize(new Vector3()).length() || 1;
@@ -172,10 +196,10 @@ export function assembledEntity(scene: EntityScene, manager: LoadingManager, mes
     const shape = obj.route ? routeGeometry(obj.route,size*0.26) :
       deckPoint ? new PlaneGeometry(1.7,1.7).rotateX(-Math.PI/2) :
       role==="sensor" ? new OctahedronGeometry(1) : role==="weapon" ? new ConeGeometry(1,2,4) : new BoxGeometry(1.5,1.5,1.5);
-    const style = {color:deckPoint || obj.route ? deckPointColor : previewColors[role],depthTest:!!obj.route,depthWrite:false};
+    const style = {color:deckPoint || obj.route ? deckPointColor : previewColors[role],depthTest:false,depthWrite:false};
     const widget = obj.route?.kind==="airPaths" && obj.route.points.length>1
       ? new Line(shape,new LineBasicMaterial(style))
-      : new Mesh(shape,new MeshBasicMaterial({...style,polygonOffset:!!obj.route,polygonOffsetFactor:-1,polygonOffsetUnits:-1,
+      : new Mesh(shape,new MeshBasicMaterial({...style,
         ...(deckPoint || obj.route ? {side:DoubleSide} : {})}));
     const [x,y,z] = obj.position;
     widget.position.set(-x,y,z);
@@ -195,7 +219,7 @@ export function assembledEntity(scene: EntityScene, manager: LoadingManager, mes
     widgets.set(obj.id,widget);
     row.parts.push({id:obj.id,collider:false,widget:true,routeKind:obj.route?.kind});
   }
-  return {model,outline:[meshTree,colliderTree,objectTree],surfaces,nodes,widgets};
+  return {model,outline:[meshTree,colliderTree,objectTree],surfaces,nodes,widgets,platformOutlines};
 }
 
 // Most INI edits only move parts, toggle visibility or change source lines. Keep their GPU assets.
@@ -203,6 +227,7 @@ export function patchEntity(view:ReturnType<typeof assembledEntity>, before:Enti
   const partShape = ({source,position,rotation,visible,...rest}:EntityPart)=>rest;
   const objectShape = ({source,position,placement,firingArcs,elevationArc,route,...rest}:EntityObject)=>({...rest,placed:!!position,kind:route?.kind,single:route?.points.length===1});
   if (before.geometry.length!==after.geometry.length || before.textures.length!==after.textures.length ||
+    JSON.stringify(before.elevators?.map(e=>e.part))!==JSON.stringify(after.elevators?.map(e=>e.part)) ||
     before.geometry.some((g,i)=>g.positions!==after.geometry[i].positions || g.uvs!==after.geometry[i].uvs || g.normals!==after.geometry[i].normals) ||
     before.textures.some((t,i)=>t.png!==after.textures[i].png || t.alpha!==after.textures[i].alpha) ||
     JSON.stringify(before.parts.map(partShape))!==JSON.stringify(after.parts.map(partShape)) ||

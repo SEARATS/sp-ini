@@ -99,8 +99,9 @@ export async function entityAssets(doc: ReturnType<typeof parse>, uri: string, c
     part.texture = textures.get(textureKey);
     if (missingDiffuse.has(textureKey)) part.missingDiffuse = true;
   }
+  scene.elevators = await elevatorTravel(doc,scene.parts,catalog,materials,warnings);
+  scene.objects = entityObjects(doc,scene.parts,scene.elevators);
   scene.warnings = [...warnings];
-  scene.objects = entityObjects(doc,scene.parts,await elevatorTravel(doc,catalog,materials));
   scene.spins = await entitySpins(doc,scene.parts,catalog,materials);
   return scene;
 }

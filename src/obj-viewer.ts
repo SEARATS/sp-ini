@@ -8,7 +8,7 @@ import { orderedSiblings } from "./mesh-order";
 import { meshMoveButtons } from "./mesh-move-buttons";
 import { colliderType, type MeshTags } from "./mesh-names";
 import { applyDisplay, previewLayer, type DisplaySettings } from "./preview-display";
-import { assembledEntity, bindEntitySpins, entityBounds, patchEntity } from "./entity-viewer";
+import { assembledEntity, bindEntitySpins, entityBounds, patchEntity, poseElevator } from "./entity-viewer";
 import type { EntityScene } from "./entity-model";
 import { entityModes, excludedOverlays, type EntityMode } from "./entity-mode";
 import { previewColors, weaponArcColors } from "./preview-colors";
@@ -91,7 +91,7 @@ function highlight(ids:string[]) {
   bright=next;
   if (renderer) render();
 }
-const inspector = inspectEntity(canvas,camera,()=>model,ids=>vscode.postMessage({type:"openEntityPart",ids}),id=>selectObject(id,true),highlight,
+const inspector = inspectEntity(canvas,camera,()=>model,id=>vscode.postMessage({type:"openEntityPart",id}),id=>selectObject(id,true),highlight,
   id=>!excluded.has(id));
 function selectObject(id: string | undefined, reveal: boolean) {
   const selected = objectLabels.get(id);
@@ -155,6 +155,28 @@ let initializedEntity = saved?.entity;
 const picker = document.querySelector<HTMLElement>("#entity-pickers");
 const entitySelect = picker.querySelector<HTMLSelectElement>("#entity"), appearanceSelect = picker.querySelector<HTMLSelectElement>("#appearance");
 const warnings = document.querySelector<HTMLDetailsElement>("#entity-warnings");
+const elevatorPose = document.querySelector<HTMLSelectElement>("#elevator-pose");
+function showElevators(next:EntityScene, same:boolean) {
+  const previous=same ? elevatorPose.value : "";
+  const choices=[new Option("Model pose","")];
+  for (const lift of next.elevators ?? []) {
+    choices.push(new Option(lift.name+" · Platform",lift.name));
+    for (const motion of ["raise","lower"] as const) lift[motion].forEach((pose,i)=>choices.push(new Option(
+      lift.name+" · "+(motion==="raise" ? "Raise" : "Lower")+" · step "+(i+1)+" ("+pose.time+" s)",
+      [lift.name,motion,i].join("/"))));
+  }
+  elevatorPose.replaceChildren(...choices);
+  elevatorPose.hidden=elevatorPose.labels[0].hidden=choices.length===1;
+  elevatorPose.value=choices.some(c=>c.value===previous) ? previous : "";
+  poseElevator(active.view,next,elevatorPose.value);
+}
+elevatorPose.onchange=()=>{
+  if (!active) return;
+  poseElevator(active.view,active.scene,elevatorPose.value);
+  fitEntityShadows(sun,model);
+  syncArcs();
+  updateDisplay();
+};
 const settings: DisplaySettings = {
   meshes: saved?.meshes ?? true, colliders: saved?.colliders ?? true, objects:saved?.objects ?? true, arcs:saved?.arcs ?? true,
   taxiPaths:saved?.taxiPaths ?? true, airPaths:saved?.airPaths ?? false,
@@ -247,8 +269,8 @@ function showOutline(nodes: OutlineNode[], note = "", uri?: string, preserve=fal
     const fullPath = path ? path + " / " + node.name : node.name;
     const label = document.createElement(node.children.length || node.tree ? "summary" : "span");
     label.title = fullPath;
-    if (node.entityId) inspector.link(label,node.entityId);
-    if (node.entityId?.startsWith("object:")) {
+    if (node.entityId) {
+      inspector.link(label,node.entityId);
       objectLabels.set(node.entityId,label);
       label.addEventListener("click",event=>{
         if (!event.ctrlKey && !event.metaKey && !(event.target instanceof HTMLInputElement)) selectObject(node.entityId,false);
@@ -278,6 +300,12 @@ function showOutline(nodes: OutlineNode[], note = "", uri?: string, preserve=fal
     check.title = "Show or hide " + node.name;
     check.onclick = event => event.stopPropagation();
     check.onchange = () => {
+      const route=node.parts[0]?.routeKind;
+      if (route && check.checked && !settings[route]) {
+        for (const obj of active?.scene.objects ?? []) if (obj.route?.kind===route) hidden.add(obj.id);
+        settings[route]=true;
+        document.querySelector<HTMLInputElement>("#"+route).checked=true;
+      }
       for (const part of targets.filter(inCategory)) {
         if (check.checked) hidden.delete(part.id);
         else hidden.add(part.id);
@@ -327,7 +355,7 @@ function showOutline(nodes: OutlineNode[], note = "", uri?: string, preserve=fal
       const visible = active.filter(part => !hidden.has(part.id)).length;
       check.checked = visible > 0 && visible === active.length;
       check.indeterminate = visible > 0 && visible < active.length;
-      check.disabled = !active.length;
+      check.disabled = !active.length && !(node.parts[0]?.routeKind && !excluded.has(node.entityId));
       if (entityTrees) {
         const matches = node.entityId && !excluded.has(node.entityId);
         item.hidden = mode !== "Everything" && !matches && children.every(child=>child.item.hidden);
@@ -363,10 +391,6 @@ function render() {
   renderer.clear();
   camera.layers.set(previewLayer.mesh);
   renderDaylight(renderer,scene,camera);
-  if (active && (settings.taxiPaths || settings.airPaths)) {
-    camera.layers.set(previewLayer.route);
-    renderer.render(scene,camera);
-  }
   if (settings.colliders) {
     renderer.clearDepth();
     camera.layers.set(previewLayer.collider);
@@ -381,6 +405,14 @@ function render() {
         renderer.render(scene,camera);
       }
     }
+  }
+  if (active && (settings.taxiPaths || settings.airPaths)) {
+    camera.layers.set(previewLayer.route);
+    renderer.render(scene,camera);
+  }
+  if (active && elevatorPose.value) {
+    camera.layers.set(previewLayer.elevator);
+    renderer.render(scene,camera);
   }
   if (selectedEntity && (settings.objects || settings.arcs)) {
     renderer.clearDepth();
@@ -470,6 +502,7 @@ async function loadEntity(id:string, next:EntityScene, documentUri:string) {
     fitEntityShadows(sun,model);
     initializedEntity=id;
     active={id,scene:next,view};
+    showElevators(next,same);
     for (const kind of ["taxiPaths","airPaths"] as const)
       document.getElementById(kind+"-filter").hidden = !next.objects?.some(obj=>obj.route?.kind===kind);
     if (!same) animationSeconds = 0;
@@ -481,8 +514,8 @@ async function loadEntity(id:string, next:EntityScene, documentUri:string) {
     syncArcs();
     inspector.setParts([...next.parts,...(next.objects || [])],documentUri);
     if (staged) {
-      if (!same || !next.objects?.some(obj=>obj.id===pickedObject)) pickedObject=undefined;
       showOutline(view.outline,"",undefined,same);
+      if (!same || !objectLabels.has(pickedObject)) pickedObject=undefined;
       if (pickedObject) selectObject(pickedObject,false);
     } else {
       inspector.refreshLinks(outline);

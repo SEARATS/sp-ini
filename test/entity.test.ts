@@ -5,7 +5,7 @@ import { parse } from "../src/ini";
 import { Materials } from "../src/materials";
 import { entityObjects, entityParts, expandEntityIni } from "../src/entity-model";
 import { selectEntity, paintTexture, entityDocument } from "../src/entity-selection";
-import { assembledEntity, bindEntitySpins, entityBounds, patchEntity } from "../src/entity-viewer";
+import { assembledEntity, bindEntitySpins, entityBounds, patchEntity, poseElevator } from "../src/entity-viewer";
 import { entitySpins } from "../src/entity-spins";
 import { elevatorTravel } from "../src/elevator-travel";
 import { Box3, Group, LoadingManager, Mesh, MeshBasicMaterial, Vector3 } from "three";
@@ -101,16 +101,19 @@ test("deck squares and taxi ribbons use authored positions and update when a way
 });
 
 test("flight paths use raised elevators, deck-relative air coordinates and independent visibility",async()=>{
-  const doc = parse(["[Models]","Mesh=hull","[FlightDeck]","NumberOfRecoveryPoints=1","NumberOfTaxiPaths=2",
+  const doc = parse(["[Models]","Mesh=hull","[Submodels]","SubModel1=Elevator_1","[Elevator_1]","Mesh=lift",
+    "[FlightDeck]","NumberOfElevators=1","NumberOfRecoveryPoints=1","NumberOfTaxiPaths=2",
     "HoldWaypoints=1,100,0|0,100,1","[RecoveryPoint1]","Position=1,2,3","Rotation=90","AllowedType=Plane,Helicopter",
     "CircuitWaypoints=1,100,0","[Elevator1]","SpawnPosition=0,0,0","RidePosition=0,0,1","MoveUpAnimation=Lift",
-    "[TaxiPath1]","From=Elevator1","To=RecoveryPoint1","[TaxiPath2]","From=RecoveryPoint1","To=Elevator1",
+    "[TaxiPath1]","From=Elevator1","Waypoints=0,999,0","To=RecoveryPoint1","[TaxiPath2]","From=RecoveryPoint1","Waypoints=0,-999,0","To=Elevator1",
     "[Animations]","AnimationFile_1=DeckLift"].join("\n"));
-  const library = parse("[Lift]\nSequence1=Up\nSequence1_Model=Elevator_1\n[Up]\nNumberOfSteps=2\nPositionY1=-1.75\nPositionY2=0");
+  const library = parse("[Animations]\nAnimation1=Lift\n[Lift]\nSequence1=Up\nSequence1_Model=Elevator_1\n[Up]\nNumberOfSteps=2\nPositionY1=-1.75\nStep2=8|none,0,none|none|linear");
   const catalog = new Catalog(), uri="file:///animations/DeckLift.ini";
   catalog.add({rel:"animations/DeckLift.ini",source:"Workspace",uri},library);
-  const travel = await elevatorTravel(doc,catalog,new Materials(()=>library));
-  const parts = entityParts(doc,new Set()).map(r=>r.part), objects=entityObjects(doc,parts,travel);
+  const parts = entityParts(doc,new Set()).map(r=>r.part), warnings=new Set<string>();
+  const elevators = await elevatorTravel(doc,parts,catalog,new Materials(()=>library),warnings);
+  assert.equal(warnings.size,0);
+  const objects=entityObjects(doc,parts,elevators);
   const get=(name:string)=>objects.find(o=>o.name===name);
   assert.deepEqual(get("Elevator1").position,[0,0,0]);
   assert.deepEqual(get("TaxiPath1").position,[0,1.75,1]);
@@ -122,7 +125,22 @@ test("flight paths use raised elevators, deck-relative air coordinates and indep
   assert.ok(Math.abs(approach.route.points[1][0]-(1-2*27.559496))<1e-8);
   assert.deepEqual(approach.route.points.at(-1),[1,2,3]);
   assert.equal(get("RecoveryPoint1 · Helicopter approach").route.points.length,3);
-  const view=assembledEntity({parts,objects,geometry:[],textures:[],warnings:[]},new LoadingManager());
+  const scene={parts,objects,elevators,geometry:[],textures:[],warnings:[]};
+  const view=assembledEntity(scene,new LoadingManager());
+  poseElevator(view,scene,"Elevator1/raise/0");
+  assert.equal(view.nodes.get("elevator_1").position.y,-1.75);
+  poseElevator(view,scene,"Elevator1/raise/1");
+  assert.equal(view.nodes.get("elevator_1").position.y,0);
+  poseElevator(view,scene,"Elevator1/raise/0");
+  poseElevator(view,scene,"");
+  assert.equal(view.nodes.get("elevator_1").position.y,0);
+  for (const obj of [hold,get("TaxiPath1")]) {
+    const material=view.widgets.get(obj.id).material;
+    assert.ok(!Array.isArray(material) && !material.depthTest);
+  }
+  const missing=await elevatorTravel(doc,parts,new Catalog(),new Materials(()=>undefined),warnings);
+  assert.ok([...warnings].some(w=>w.includes("MoveUpAnimation=Lift")));
+  assert.deepEqual(entityObjects(doc,parts,missing).find(o=>o.name==="TaxiPath1").position,[0,0,1]);
   const hits = [hold,get("TaxiPath1"),get("RecoveryPoint1")].map(obj=>({object:view.widgets.get(obj.id)}));
   assert.equal(hoverStack(hits,new Map(objects.map(obj=>[obj.id,obj])))[0].id,get("RecoveryPoint1").id);
   const settings={meshes:true,colliders:true,objects:false,meshWireframe:false,colliderWireframe:true};
@@ -132,6 +150,18 @@ test("flight paths use raised elevators, deck-relative air coordinates and indep
     assert.equal(view.widgets.get(get("TaxiPath1").id).layers.isEnabled(previewLayer.route),taxiPaths);
     assert.equal(entityBounds(view.model,true).radius>entityBounds(view.model).radius,airPaths);
   }
+});
+
+test("elevator rides follow the platform parent and reject unregistered animations",async()=>{
+  const doc=parse("[Models]\nSubModel1=Base\nSubModel2=Lift\n[Base]\nRotation=0,0,90\nScale=2,2,2\n[Lift]\nParent=Base\nMesh=platform\n[FlightDeck]\nNumberOfElevators=1\n[Elevator1]\nMesh=Lift\nRidePosition=0,0,0\nMoveUpAnimation=Raise\nMoveDownAnimation=Lower\n[Animations]\nAnimationFile_1=platform");
+  const lib=parse("[Animations]\nNumberOfAnimations=1\nAnimation1=Raise\nAnimation2=Lower\n[Raise]\nSequence1_Model=Lift\nSequence1=Motion\n[Lower]\nSequence1_Model=Lift\nSequence1=Motion\n[Motion]\nNumberOfSteps=2\nTime1=0\nPositionY1=0\nTime2=8\nPositionY2=1");
+  const catalog=new Catalog(), warnings=new Set<string>();
+  catalog.add({rel:"animations/platform.ini",uri:"file:///animations/platform.ini",source:"Workspace"},lib);
+  const parts=entityParts(doc,warnings).map(({part})=>part);
+  const [lift]=await elevatorTravel(doc,parts,catalog,new Materials(()=>lib),warnings);
+  assert.ok(new Vector3(...lift.raisedRide).distanceTo(new Vector3(-2,0,0))<1e-10);
+  assert.deepEqual(lift.lower,[]);
+  assert.deepEqual([...warnings],["[Elevator1] MoveDownAnimation=Lower is not a registered animation."]);
 });
 
 test("system arc guides preserve separate firing sectors, wrap past 180 and show elevation",()=>{

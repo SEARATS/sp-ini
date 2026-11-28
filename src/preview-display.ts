@@ -2,7 +2,7 @@ import { Mesh, type Color, type Material, type Object3D } from "three";
 import { isColliderName } from "./mesh-names";
 import { missingTextureColors, type MissingTextureColor } from "./missing-textures";
 
-export const previewLayer = { mesh:0, collider:1, widget:2, highlight:3, arc:4, route:5 } as const;
+export const previewLayer = { mesh:0, collider:1, widget:2, highlight:3, arc:4, route:5, elevator:6 } as const;
 
 export interface DisplaySettings {
   meshes: boolean;
@@ -39,6 +39,11 @@ export function applyDisplay(model: Object3D, categories: Map<string, boolean>, 
   model.traverse(node => {
     if (!("geometry" in node)) return;
     const id = node.userData.partId ?? String((node as Object3D & {ID?: number}).ID);
+    if (node.userData.platformOutline) {
+      if (settings.meshes && !hidden.has(id)) node.layers.set(previewLayer.elevator);
+      else node.layers.disableAll();
+      return;
+    }
     const collider = categories.get(id) ?? isColliderName(node.userData.originalName || node.name);
     const widget = node.userData.widget;
     const hasVisibleCollider = widget && settings.colliders && node.userData.colliderIds?.some((partId:string)=>!hidden.has(partId));

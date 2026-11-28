@@ -1,6 +1,10 @@
 import { parse, type IniSection, type IniSource } from "./ini";
 
 export type Vector = [number, number, number];
+export interface ElevatorPose { time:number; position:Vector; rotation:Vector }
+export interface EntityElevator {
+  name:string; part:string; raise:ElevatorPose[]; lower:ElevatorPose[]; raisedRide?:Vector;
+}
 export interface EntitySpin { part: string; axis: "x" | "y" | "z"; rpm: number }
 export type ObjectGroup = "Sensors" | "Weapons" | "Decoys" | "Combat systems" | "Ship systems" | "Flight deck" | "Magazines";
 export interface EntityObject {
@@ -21,6 +25,7 @@ export interface EntityPart {
 }
 export interface EntityScene {
   parts: EntityPart[];
+  elevators?: EntityElevator[];
   spins?: EntitySpin[];
   objects?: EntityObject[];
   geometry: {positions: string; uvs: string; normals?:string}[];
@@ -88,15 +93,21 @@ function airborneRoutes(sections:Map<string,IniSection>, anchor:string | undefin
   return routes;
 }
 
-function taxiRoute(section:IniSection, sections:Map<string,IniSection>, lifts:ReadonlyMap<string,number>) {
+function taxiRoute(section:IniSection, sections:Map<string,IniSection>, lifts:ReadonlyMap<string,EntityElevator>) {
   function endpoint(key:"from" | "to") {
     const name = field(section,key)?.value.toLowerCase();
     const target = sections.get(name);
     if (!target) return;
     if (/^elevator\d+$/i.test(name)) {
       const recovery = key==="to" && field(target,"recoveryposition");
+      const raised=lifts.get(name)?.raisedRide;
+      if (key==="from" && raised) return raised;
       const p = point((recovery || field(target,"rideposition") || field(target,"spawnposition"))?.value);
-      if (p) p[1] += lifts.get(name) ?? 0;
+      const origin = field(section,"from")?.value.toLowerCase();
+      if (p && key==="to" && /^recoverypoint\d+$/.test(origin)) {
+        const touchdown = point(field(sections.get(origin),"position")?.value);
+        if (touchdown) p[1] = touchdown[1];
+      }
       return p;
     }
     if (/^(launchpoint|recoverypoint|taxipoint)\d+$/i.test(name)) return point(field(target,"position")?.value);
@@ -104,14 +115,6 @@ function taxiRoute(section:IniSection, sections:Map<string,IniSection>, lifts:Re
   const via = field(section,"waypoints")?.value;
   const points = [endpoint("from"),...(via ? via.split("|").map(point) : []),endpoint("to")];
   if (!points.every(p=>p!==undefined)) return;
-  for (const [index,key] of [[0,"from"],[points.length-1,"to"]] as const) {
-    const name = field(section,key)?.value.toLowerCase();
-    const target = sections.get(name);
-    // EmbarkElevator uses deck height on recovery. The adjacent deck point also
-    // provides a raised-stop estimate when the animation has no readable translation.
-    if (/^elevator\d+$/i.test(name) && field(target,"moveupanimation") && (key==="to" || !lifts.has(name)))
-      points[index][1] = points[index===0 ? 1 : index-1][1];
-  }
   return points;
 }
 
@@ -231,7 +234,8 @@ export function exportRigScene(ini: string, geometry: ReadonlyMap<string, number
   return {parts, geometry:[], textures:[], warnings:[...warnings]};
 }
 
-export function entityObjects(doc: ReturnType<typeof parse>, parts: EntityPart[], lifts:ReadonlyMap<string,number> = new Map()): EntityObject[] {
+export function entityObjects(doc: ReturnType<typeof parse>, parts: EntityPart[], elevators:EntityElevator[] = []): EntityObject[] {
+  const lifts = new Map(elevators.map(lift=>[lift.name.toLowerCase(),lift]));
   const anchors = new Map(parts.map(part => [part.id,part.id]));
   const root = parts.find(part => part.id === "models");
   if (root) anchors.set(root.name.toLowerCase(),root.id);

@@ -190,6 +190,7 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
       <label for="entity">Entity</label><select id="entity"></select>
       <label for="appearance" id="appearance-label" hidden>Appearance</label><select id="appearance" hidden></select>
       <label for="entity-mode">Mode</label><select id="entity-mode">${entityModes.map(mode => `<option>${mode}</option>`).join("")}</select>
+      <label for="elevator-pose" hidden>Elevator pose</label><select id="elevator-pose" hidden></select>
       <details id="model-sources" hidden><summary>Model sources</summary><ul></ul></details></div>
       <div id="filters"><label><input id="meshes" type="checkbox" checked>Meshes</label>
       <select id="meshWireframe" aria-label="Mesh render mode"><option value="shaded">Shaded</option><option value="wireframe">Wireframe</option></select>
@@ -271,9 +272,8 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
       let serial=0, sources = new Map<string,IniSource>();
       const stagedSources=new Map<number,Map<string,IniSource>>();
       function cancel() { pending?.cancel(); pending?.dispose(); pending = undefined; clearTimeout(timer); }
-      async function reveal(ids: string[]) {
-        const choices=ids.map(id=>sources.get(id)).filter(Boolean).map(source=>({label:"["+source.header+"]",source}));
-        const source=(choices.length>1 ? await vscode.window.showQuickPick(choices,{placeHolder:"Open INI definition"}) : choices[0])?.source;
+      async function reveal(id: string) {
+        const source=sources.get(id);
         if (!source) return;
         const uri=vscode.Uri.parse(source.uri);
         const doc=await vscode.workspace.openTextDocument(uri);
@@ -321,7 +321,7 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
           return;
         }
         if (message.type === "openEntityPart") {
-          if (Array.isArray(message.ids)) void reveal(message.ids).catch(e=>vscode.window.showErrorMessage(e.message));
+          if (typeof message.id==="string") void reveal(message.id).catch(e=>vscode.window.showErrorMessage(e.message));
           return;
         }
         if (message.type !== "ready" && message.type !== "selectEntity") return;

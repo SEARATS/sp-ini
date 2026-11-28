@@ -1,7 +1,7 @@
 import { Raycaster, Vector2, type Object3D, type PerspectiveCamera } from "three";
 import { previewLayer } from "./preview-display";
-import { deckPointSection, type EntityPart, type EntityObject } from "./entity-model";
-import type { PreviewColor } from "./preview-colors";
+import type { EntityPart, EntityObject } from "./entity-model";
+import {objectColor,type PreviewColor} from "./preview-colors";
 import type { IniSource } from "./ini";
 
 type Inspectable = EntityPart | EntityObject;
@@ -36,7 +36,7 @@ export function hoverStack(hits: readonly {object:Object3D}[], parts: ReadonlyMa
   return [...ranked.entries()].sort((a,b)=>a[1]-b[1]).map(([part])=>part);
 }
 
-export function inspectEntity(canvas: HTMLCanvasElement, camera: PerspectiveCamera, model: () => Object3D, open: (ids: string[]) => void,
+export function inspectEntity(canvas: HTMLCanvasElement, camera: PerspectiveCamera, model: () => Object3D, open: (id: string) => void,
   select: (id: string) => void, highlight: (ids:string[])=>void, inMode: (id:string)=>boolean) {
   const tip = document.querySelector<HTMLElement>("#part-tip");
   const parts = new Map<string,Inspectable>();
@@ -49,26 +49,19 @@ export function inspectEntity(canvas: HTMLCanvasElement, camera: PerspectiveCame
   let scheduled = 0, press: PointerEvent;
   let documentUri: string;
 
-  function owners(part:Inspectable) {
+  function firstOwner(part:Inspectable) {
     return ("referencedBy" in part ? part.referencedBy || [] : []).map(name=>parts.get("object:"+name.toLowerCase()))
-      .filter((owner):owner is EntityObject=>!!owner && "group" in owner && inMode(owner.id));
+      .filter((owner):owner is EntityObject=>!!owner && "group" in owner && inMode(owner.id))
+      .sort((a,b)=>hoverPriority[objectColor(a.group)]-hoverPriority[objectColor(b.group)])[0];
   }
-  function targets(hits:Inspectable[],shift:boolean) {
-    if (shift) return hits.filter(part=>"collider" in part && part.collider).slice(0,1).map(part=>part.id);
-    const isDeckPoint = (p:Inspectable)=>p && "group" in p && deckPointSection.test(p.name);
-    if (isDeckPoint(hits[0])) return hits.filter(isDeckPoint).map(p=>p.id);
-    for (const part of hits) {
-      if (!("collider" in part) || !part.collider) return [part.id];
-      const ids=owners(part).map(owner=>owner.id);
-      if (ids.length) return ids;
-    }
-    return [];
+  function targetId(hits:Inspectable[],shift:boolean) {
+    if (shift) return hits.find(part=>"collider" in part && part.collider)?.id;
+    const first=hits[0];
+    return first && (firstOwner(first)?.id ?? first.id);
   }
   function hint(hits:Inspectable[]) {
     if (!hits.some(part=>"collider" in part && part.collider)) return openHint;
-    const ids=targets(hits,false);
-    const label = "group" in hits[0] && deckPointSection.test(hits[0].name) ? "point" : "system";
-    return [ids.length && modifier+"+click: "+(ids.length===1 ? "" : "choose ")+label,"Shift+click: collider"].filter(Boolean).join(" · ");
+    return openHint+" · Shift+click: collider";
   }
   function arcText(obj:EntityObject) {
     return [obj.firingArcs && "FiringArcs="+obj.firingArcs,obj.elevationArc && "ElevationArc="+obj.elevationArc].filter(Boolean);
@@ -106,13 +99,13 @@ export function inspectEntity(canvas: HTMLCanvasElement, camera: PerspectiveCame
     scheduled = requestAnimationFrame(()=>{
       const hits = hitsAt(event);
       if (!hits.length) { hide(); return; }
-      highlight(hits.filter(part=>"collider" in part && part.collider).map(part=>part.id));
+      highlight("collider" in hits[0] && hits[0].collider ? hits.filter(part=>"collider" in part && part.collider).map(part=>part.id) : []);
       tip.textContent = hits.map(description).join("\n\n")+"\n"+hint(hits);
       tip.scrollTop = 0;
       tip.hidden = false;
       tip.style.left = Math.max(0,Math.min(event.clientX+12,innerWidth-tip.offsetWidth))+"px";
       tip.style.top = Math.max(0,Math.min(event.clientY+14,innerHeight-tip.offsetHeight))+"px";
-      canvas.classList.toggle("source-link", !!((event.ctrlKey || event.metaKey || event.shiftKey) && targets(hits,event.shiftKey).length));
+      canvas.classList.toggle("source-link", !!((event.ctrlKey || event.metaKey || event.shiftKey) && targetId(hits,event.shiftKey)));
     });
   });
   canvas.addEventListener("wheel",event=>{
@@ -127,21 +120,17 @@ export function inspectEntity(canvas: HTMLCanvasElement, camera: PerspectiveCame
     hide(); press=undefined;
     if (event.button !== 0) return;
     press=event;
-    if ((event.ctrlKey || event.metaKey || event.shiftKey) && targets(hitsAt(event),event.shiftKey).length) event.stopImmediatePropagation();
+    if ((event.ctrlKey || event.metaKey || event.shiftKey) && targetId(hitsAt(event),event.shiftKey)) event.stopImmediatePropagation();
   },true);
   canvas.addEventListener("click",event=>{
     if (event.button !== 0 || !press || Math.hypot(press.clientX-event.clientX,press.clientY-event.clientY)>4) return;
     press=undefined;
     const hits=hitsAt(event), part=hits[0];
     if (event.ctrlKey || event.metaKey || event.shiftKey) {
-      const ids=targets(hits,event.shiftKey);
-      if (ids.length) open(ids);
+      const id=targetId(hits,event.shiftKey);
+      if (id) { select(event.shiftKey ? id : part.id); open(id); }
     }
-    else if (part && "group" in part) select(part.id);
-    else if (part) {
-      const linked=owners(part);
-      if (linked.length===1) select(linked[0].id);
-    }
+    else if (part) select(part.id);
   });
   return {
     setParts(next: (EntityPart | EntityObject)[], uri: string) {
@@ -164,9 +153,9 @@ export function inspectEntity(canvas: HTMLCanvasElement, camera: PerspectiveCame
       function navigate(event:MouseEvent | KeyboardEvent) {
         const current=parts.get(id);
         if (!current || !(event.ctrlKey || event.metaKey || event.shiftKey) || event.target instanceof HTMLInputElement) return;
-        const ids=targets([current],event.shiftKey);
-        if (!ids.length) return;
-        event.preventDefault(); event.stopImmediatePropagation(); open(ids);
+        const target=targetId([current],event.shiftKey);
+        if (!target) return;
+        event.preventDefault(); event.stopImmediatePropagation(); open(target);
       }
       label.addEventListener("click",navigate);
       label.addEventListener("keydown",event=>{
