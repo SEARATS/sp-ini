@@ -11,16 +11,17 @@ import { applyDisplay, previewLayer, type DisplaySettings } from "./preview-disp
 import { assembledEntity, bindEntitySpins, elevatorClips, entityBounds, entityGeometry, entityTexture, patchEntity, poseElevator } from "./entity-viewer";
 import type { EntityScene } from "./entity-model";
 import { EntityStream } from "./entity-stream";
+import { DeckPlayback, FlightNetwork } from "./flight-traffic";
 import { entityModes, excludedOverlays, type EntityMode } from "./entity-mode";
 import { previewColors, weaponArcColors } from "./preview-colors";
 import { inspectEntity } from "./entity-inspect";
 import {placeSystemArcs,systemArcs} from "./system-arcs";
-import { Texture, TextureLoader, Box3, Color, LoadingManager, PerspectiveCamera, Scene, Sphere, WebGLRenderer } from "three";
+import { Texture, TextureLoader, Box3, BoxGeometry, Color, Group, LoadingManager, Mesh, MeshBasicMaterial, PerspectiveCamera, Scene, Sphere, WebGLRenderer } from "three";
 import { previewDaylight, fitEntityShadows, renderDaylight } from "./preview-lighting";
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
-type SavedDisplay = Partial<DisplaySettings> & {mode?: EntityMode; animations?:boolean; elevatorPoses?:Record<string,string>; hidden?: string[]; wireframe?: boolean; entity?: string; appearance?: string; modelSources?:Record<string,string>};
+type SavedDisplay = Partial<DisplaySettings> & {mode?: EntityMode; animations?:boolean; aircraft?:boolean; elevatorPoses?:Record<string,string>; hidden?: string[]; wireframe?: boolean; entity?: string; appearance?: string; modelSources?:Record<string,string>};
 declare function acquireVsCodeApi(): { postMessage(message: unknown): void; getState(): SavedDisplay | undefined; setState(value: SavedDisplay): void };
 const vscode = acquireVsCodeApi();
 const status = document.querySelector("[role=status]");
@@ -36,6 +37,67 @@ const camera = new PerspectiveCamera(42, 1, 0.01, 10000);
 const bounds = new Sphere();
 let renderer, controls, model;
 const objectLabels = new Map<string,HTMLElement>();
+const trafficGroup=new Group(), tokenShape=new BoxGeometry();
+const tokenMaterials={launch:new MeshBasicMaterial({color:0x66dcb1}),recovery:new MeshBasicMaterial({color:0xe1acfc})};
+const activity=document.getElementById("flight-activity");
+scene.add(trafficGroup);
+trafficGroup.matrixAutoUpdate=false;
+let network:FlightNetwork, traffic:DeckPlayback, layoutKey:string;
+let connectedObjects:ReadonlySet<string>;
+function trafficVisible() {
+  return aircraftToggle.checked && (mode==="Everything" || mode==="Flight") && (!pickedObject || !hidden.has(pickedObject));
+}
+function drawTraffic(dt:number) {
+  trafficGroup.visible=!!(traffic?.playable && trafficVisible());
+  if (!trafficGroup.visible) {activity.hidden=true;return;}
+  const root=active.view.nodes.get("models");
+  if (!root) return;
+  root.updateWorldMatrix(true,false);
+  trafficGroup.matrix.copy(root.matrixWorld);
+  trafficGroup.matrixWorldNeedsUpdate=true;
+  traffic.tick(dt);
+  const size=bounds.radius*0.022/(root.matrixWorld.getMaxScaleOnAxis() || 1);
+  while (trafficGroup.children.length<traffic.flights.length) {
+    const cube=new Mesh(tokenShape,tokenMaterials.launch);
+    cube.layers.set(previewLayer.aircraft);
+    cube.renderOrder=15;
+    trafficGroup.add(cube);
+  }
+  trafficGroup.children.forEach((child,i)=>{
+    const cube=child as Mesh, flight=traffic.flights[i];
+    cube.visible=!!flight && (flight.trip.operation==="recovery" || flight.returnTime===undefined);
+    if (!flight) return;
+    cube.material=tokenMaterials[flight.trip.operation];
+    const [x,y,z]=flight.position;
+    cube.position.set(-x,y+size/2,z);
+    cube.scale.setScalar(size);
+  });
+  activity.hidden=!traffic.focus || !traffic.flights.length;
+  if (!activity.hidden) {
+    const {craft,operation}=traffic.flights[0].trip;
+    const text={vtol:"VTOL",stol:"STOL",helicopter:"Helicopter",plane:"Plane"}[craft]+" · "+(operation==="launch" ? "Launch" : "Recovery");
+    const name=traffic.flights[0].aircraft.name;
+    const label=name ? text+" · "+name : text;
+    if (activity.textContent!==label) activity.textContent=label;
+  }
+}
+function focusTraffic() {
+  if (!network || (pickedObject && !network.links.has(pickedObject) && !network.deck.spots.some(s=>"object:"+s.name===pickedObject))) traffic=undefined;
+  else if (traffic?.focus!==pickedObject || traffic?.network!==network) traffic=new DeckPlayback(network,pickedObject);
+  refreshConnections(true);
+  drawTraffic(0);
+  syncPlayback();
+}
+function refreshConnections(force=false) {
+  const anchor=network?.links.has(hoveredWidget) ? hoveredWidget : pickedObject;
+  const related=network?.related(anchor);
+  if (!force && related===connectedObjects) return;
+  connectedObjects=related;
+  for (const label of elevatorPanel.querySelectorAll<HTMLElement>("[data-elevator]"))
+    label.classList.toggle("connected-object",!!related?.has(label.dataset.elevator));
+  for (const [id,label] of objectLabels) label.classList.toggle("connected-object",!!related?.has(id));
+  active?.view.widgets.forEach(styleWidget);
+}
 let active: {id:string; scene:EntityScene; view:ReturnType<typeof assembledEntity>};
 let bright:string[] = [], pickedObject:string;
 let hoveredWidget:string;
@@ -79,20 +141,25 @@ function showArcValues() {
   }
 }
 const white=new Color(0xffffff);
+const connectedBlue=new Color(0x85c4ff);
 function styleWidget(node) {
   const {partId,deckPoint,pathWidth,color}=node.userData;
-  const selected=partId===pickedObject, hovered=partId===hoveredWidget;
+  const selected=partId===pickedObject, hovered=partId===hoveredWidget, connected=connectedObjects?.has(partId);
   node.material.color.set(selected ? 0xffff77 : color);
   if (hovered) node.material.color.lerp(white,0.55);
-  node.renderOrder=(deckPoint ? 14 : pathWidth ? 9 : 10)+(selected || hovered ? 1 : 0);
+  else if (!selected && connected) node.material.color.lerp(connectedBlue,0.48);
+  // Shared routes often overlap exactly. Paint the active states over their idle siblings.
+  const emphasis=hovered ? 0.75 : selected ? 0.5 : connected ? 0.25 : 0;
+  node.renderOrder=(deckPoint ? 14 : pathWidth ? 9 : 10)+emphasis;
 }
 function highlight(ids:string[]) {
   const next=ids.filter(id=>active?.view.surfaces.get(id)?.layers.isEnabled(previewLayer.collider));
   const widget=active?.view.widgets.get(ids[0]);
-  const nextWidget=widget?.layers.mask ? ids[0] : undefined;
+  const nextWidget=widget?.layers.mask || network?.links.has(ids[0]) ? ids[0] : undefined;
   if (nextWidget===hoveredWidget && next.length===bright.length && next.every((id,i)=>id===bright[i])) return;
   const previous=active?.view.widgets.get(hoveredWidget);
   hoveredWidget=nextWidget;
+  refreshConnections();
   if (previous) styleWidget(previous);
   if (widget) styleWidget(widget);
   for (const id of new Set([...bright,...next])) {
@@ -112,25 +179,35 @@ function selectObject(id: string | undefined, reveal: boolean) {
   const selected = objectLabels.get(id);
   if (id && !selected) return;
   pickedObject=id;
+  focusTraffic();
   showArcValues();
   for (const label of objectLabels.values()) label.classList.toggle("selected-object",label === selected);
   if (reveal && selected) {
     for (let el: HTMLElement = selected; el; el=el.parentElement) if (el instanceof HTMLDetailsElement) el.open=true;
     selected.scrollIntoView({block:"nearest"});
   }
-  active?.view.widgets.forEach(styleWidget);
   if (renderer) draw();
 }
 const saved = vscode.getState();
 const animationToggle = document.querySelector<HTMLInputElement>("#animations");
 animationToggle.checked = saved?.animations ?? true;
+const aircraftToggle=document.querySelector<HTMLInputElement>("#aircraft");
+aircraftToggle.checked=saved?.aircraft ?? true;
 let sampleSpins:ReturnType<typeof bindEntitySpins>, animationFrame:number, previousFrame:number;
 let animationSeconds = 0;
+document.addEventListener("keydown",event=>{if (event.key==="Escape" && pickedObject) selectObject(undefined,false);});
 function animate(now:number) {
-  animationSeconds += (now - previousFrame) / 1000;
+  const delta=(now-previousFrame)/1000;
+  if (animationToggle.checked) animationSeconds += delta;
+  drawTraffic(delta);
   previousFrame = now;
-  sampleSpins?.(animationSeconds);
-  for (const lift of liftStates.values()) lift.play?.(animationSeconds-lift.started);
+  if (animationToggle.checked) sampleSpins?.(animationSeconds);
+  for (const [name,lift] of liftStates) {
+    if (!lift.play) continue;
+    const pose=trafficGroup.visible && traffic.elevators.get(name.toLowerCase());
+    if (pose) lift.play(pose.time,pose.motion);
+    else if (animationToggle.checked) lift.play(animationSeconds-lift.started);
+  }
   if (settings.arcs) for (const [id,{guides}] of arcGuides)
     placeSystemArcs(guides,active.view.model,active.view.widgets.get(id),bounds.radius*0.17);
   if (sun.castShadow) renderer.shadowMap.needsUpdate = true;
@@ -141,12 +218,13 @@ function syncPlayback() {
   cancelAnimationFrame(animationFrame);
   const playable=!!sampleSpins || [...liftStates.values()].some(lift=>lift.play);
   document.getElementById("animation-filter").hidden = !playable;
-  if (playable && animationToggle.checked && !document.hidden) {
+  document.getElementById("aircraft-filter").hidden=!network?.deck.spots.some(s=>s.types.length);
+  if (((playable && animationToggle.checked) || (traffic?.playable && trafficVisible())) && !document.hidden) {
     previousFrame = performance.now();
     animationFrame = requestAnimationFrame(animate);
   }
 }
-animationToggle.onchange = () => { syncPlayback(); changed(); };
+animationToggle.onchange = aircraftToggle.onchange = changed;
 document.addEventListener("visibilitychange",syncPlayback);
 let mode: EntityMode = entityModes.includes(saved?.mode) ? saved.mode : "Everything";
 let excluded = new Set<string>();
@@ -168,7 +246,7 @@ const picker = document.querySelector<HTMLElement>("#entity-pickers");
 const entitySelect = picker.querySelector<HTMLSelectElement>("#entity"), appearanceSelect = picker.querySelector<HTMLSelectElement>("#appearance");
 const warnings = document.querySelector<HTMLDetailsElement>("#entity-warnings");
 const elevatorPanel=document.querySelector<HTMLDetailsElement>("#elevators");
-const liftStates=new Map<string,{value:string; started:number; play?: (time:number)=>void}>();
+const liftStates=new Map<string,{value:string; started:number; play?:ReturnType<typeof poseElevator>}>();
 function showElevators(next:EntityScene,same:boolean) {
   const previous=new Map(liftStates);
   liftStates.clear();
@@ -204,6 +282,9 @@ function showElevators(next:EntityScene,same:boolean) {
       changed();
     };
     const row=document.createElement("li"), label=document.createElement("label");
+    label.dataset.elevator="object:"+lift.name.toLowerCase();
+    label.onpointerenter=()=>highlight([label.dataset.elevator]);
+    label.onpointerleave=()=>highlight([]);
     label.append(lift.name,select);
     row.append(label);
     return row;
@@ -239,9 +320,11 @@ function updateDisplay() {
   }
 }
 function changed() {
+  drawTraffic(0);
+  syncPlayback();
   updateDisplay();
   const elevatorPoses=Object.fromEntries([...liftStates].map(([name,lift])=>[name,lift.value]));
-  vscode.setState({...settings, mode, animations:animationToggle.checked, elevatorPoses, hidden: [...hidden], entity:selectedEntity, appearance:selectedAppearance, modelSources:selectedSources});
+  vscode.setState({...settings, mode, animations:animationToggle.checked, aircraft:aircraftToggle.checked, elevatorPoses, hidden: [...hidden], entity:selectedEntity, appearance:selectedAppearance, modelSources:selectedSources});
 }
 entitySelect.onchange = () => vscode.postMessage({type:"selectEntity",entity:entitySelect.value});
 appearanceSelect.onchange = () => vscode.postMessage({type:"selectEntity",entity:entitySelect.value,appearance:appearanceSelect.value,modelSources:selectedSources});
@@ -449,10 +532,11 @@ function render() {
     camera.layers.set(previewLayer.route);
     renderer.render(scene,camera);
   }
-  if (selectedEntity && (settings.objects || settings.arcs)) {
+  if (selectedEntity && (settings.objects || settings.arcs || trafficGroup.visible)) {
     renderer.clearDepth();
     camera.layers.disableAll();
     if (settings.objects) camera.layers.enable(previewLayer.widget);
+    if (trafficGroup.visible) camera.layers.enable(previewLayer.aircraft);
     if (settings.arcs) {
       camera.layers.enable(previewLayer.arc);
       for (const [id,{guides}] of arcGuides) {
@@ -553,6 +637,11 @@ async function loadEntity(id:string, next:EntityScene, documentUri:string, incom
     fitEntityShadows(sun,model);
     initializedEntity=id;
     active={id,scene:next,view};
+    const key=JSON.stringify([id,next.flightDeck,next.elevators,next.objects?.filter(o=>o.route).map(o=>[o.id,o.route])]);
+    if (key!==layoutKey) {
+      layoutKey=key;
+      network=next.flightDeck && new FlightNetwork(next.flightDeck,next.objects ?? [],next);
+    }
     retained=incoming && {cachedGeometry:incoming.cachedGeometry,cachedTextures:incoming.cachedTextures};
     if (!same) animationSeconds = 0;
     showElevators(next,same);
@@ -572,6 +661,7 @@ async function loadEntity(id:string, next:EntityScene, documentUri:string, incom
     } else {
       inspector.refreshLinks(outline);
     }
+    focusTraffic();
     showArcValues();
     changed();
     if (!same && streamMoved && staged) {
@@ -599,6 +689,7 @@ async function loadEntity(id:string, next:EntityScene, documentUri:string, incom
 async function load(data, layout?: ReturnType<typeof objLayout>) {
   const current = ++revision;
   sampleSpins = undefined;
+  network=undefined; traffic=undefined; layoutKey=undefined; trafficGroup.visible=false;
   liftStates.clear();
   syncPlayback();
   if (model) { scene.remove(model); dispose(model); model = undefined; }

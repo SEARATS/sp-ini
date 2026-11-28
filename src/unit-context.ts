@@ -18,13 +18,13 @@ const deckUnits:Record<string,Record<string,string>>={
     forwardstaxivelocity:"kt",backwardstaxivelocity:"kt",slowtaxivelocity:"kt",
     holdstackseparation:"ft",helicopterholdstackseparation:"ft",holdenterdistance:"nmi",helicopterholdenterdistance:"nmi"
   },
-  "recoverypoint#":{landinginterval:"s",position:"Unity units",exitposition:"Unity units",rotation:"°"},
+  "recoverypoint#":{landinginterval:"s",position:"uu",exitposition:"uu",rotation:"°"},
   "launchpoint#":{takeofftime:"s",catapultparticlesduration:"s",nosegearparticlesduration:"s",
-    position:"Unity units",holdposition:"Unity units",mintakeofflength:"Unity units",mintakeofflengthlarge:"Unity units",
+    position:"uu",holdposition:"uu",mintakeofflength:"uu",mintakeofflengthlarge:"uu",
     rotation:"°",vtol_rotation:"°",verticalrotation:"°"},
-  "elevator#":{spawnposition:"Unity units",despawnposition:"Unity units",rideposition:"Unity units",recoveryposition:"Unity units",
-    helicopterrideposition:"Unity units",helicopterrecoveryposition:"Unity units",spawnrotation:"°",returnrotation:"°"},
-  "taxipoint#":{position:"Unity units"}
+  "elevator#":{spawnposition:"uu",despawnposition:"uu",rideposition:"uu",recoveryposition:"uu",
+    helicopterrideposition:"uu",helicopterrecoveryposition:"uu",spawnrotation:"°",returnrotation:"°"},
+  "taxipoint#":{position:"uu"}
 };
 export function flightDeckUnit(section:string,key:string,value:string) {
   const path=(section==="flightdeck" && /^(?:(?:large|helicopter)?holdwaypoints|(?:plane|vtol|helicopter)initialwaypoint)$/.test(key)) ||
@@ -32,7 +32,7 @@ export function flightDeckUnit(section:string,key:string,value:string) {
   const taxi=section==="taxipath#" && key==="waypoints";
   if (path || taxi) {
     if (value.split("|").every(p=>numericValue.test(p.trim()) && p.split(",").length===3))
-      return taxi ? "Unity units" : "nmi, ft, nmi";
+      return taxi ? "uu" : "nmi, ft, nmi";
     return;
   }
   if (numericValue.test(value)) return deckUnits[section]?.[key];

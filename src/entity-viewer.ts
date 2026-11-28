@@ -1,6 +1,7 @@
+import { visibleRoutePoints } from "./entity-model";
 import { Box3, BoxGeometry, BufferAttribute, BufferGeometry, ConeGeometry, DoubleSide, EdgesGeometry, Float32BufferAttribute, Group, Line, LineBasicMaterial, LineSegments, MathUtils, Mesh, MeshBasicMaterial, MeshPhongMaterial, OctahedronGeometry, PlaneGeometry, Quaternion, RepeatWrapping, Sphere, SRGBColorSpace, TextureLoader, Vector3, type LoadingManager } from "three";
 import { deckPointSection, type EntityElevator, type EntityObject, type EntityPart, type EntityScene, type EntitySpin, type Vector } from "./entity-model";
-import { sampleElevatorPose } from "./elevator-motion";
+import { sampleElevatorClip, timedElevatorClip, type ElevatorMotion } from "./elevator-motion";
 import type { OutlineNode } from "./model-outline";
 import { deckPointColor, flightPathColor, objectColor, previewColors, type PreviewColor } from "./preview-colors";
 
@@ -15,9 +16,7 @@ function transform(node:Group, position:Vector, rotation:Vector) {
 }
 
 export function elevatorClips(lift:EntityElevator) {
-  return [lift.raise,lift.lower].filter(steps=>steps.length>1 && steps.at(-1).time>0 &&
-    steps.every((step,i)=>step.time>=0 && (!i || step.time>=steps[i-1].time)) &&
-    steps.some(step=>step.position.some((v,i)=>v!==steps[0].position[i]) || step.rotation.some((v,i)=>v!==steps[0].rotation[i])));
+  return [lift.raise,lift.lower].filter(timedElevatorClip);
 }
 export function poseElevator(view:ReturnType<typeof assembledEntity>, part:EntityPart, lift:EntityElevator, selection:string) {
   const node=view.nodes.get(part.id);
@@ -33,22 +32,17 @@ export function poseElevator(view:ReturnType<typeof assembledEntity>, part:Entit
   if (selection!=="animate") return;
   const clips=elevatorClips(lift), duration=clips.reduce((sum,clip)=>sum+clip.at(-1).time,0);
   if (!duration) return;
-  return (elapsed:number)=>{
-    let time=elapsed % duration;
-    for (const clip of clips) {
-      const endTime=clip.at(-1).time;
-      if (time>=endTime) { time-=endTime; continue; }
-      const i=clip.findIndex(p=>p.time>=time), end=clip[i];
-      if (i===0) transform(node,end.position,end.rotation);
-      else {
-        const start=clip[i-1];
-        sampleElevatorPose(node.position,node.quaternion,start,end,(time-start.time)/(end.time-start.time));
-        node.position.x *= -1;
-        node.quaternion.y *= -1;
-        node.quaternion.z *= -1;
-      }
-      break;
+  return (elapsed:number, motion?:ElevatorMotion)=>{
+    let time=motion ? elapsed : elapsed % duration;
+    let clip=motion ? lift[motion] : clips[0];
+    if (!motion && clips.length>1 && time>=clip.at(-1).time) {
+      time-=clip.at(-1).time;
+      clip=clips[1];
     }
+    sampleElevatorClip(node.position,node.quaternion,clip,time);
+    node.position.x *= -1;
+    node.quaternion.y *= -1;
+    node.quaternion.z *= -1;
   };
 }
 
@@ -115,7 +109,7 @@ function deckMarker(heading:number | undefined) {
 }
 
 function routeGeometry(route:EntityObject["route"],width:number) {
-  const {points,kind} = route;
+  const {kind}=route, points=visibleRoutePoints(route);
   if (points.length===1) return new PlaneGeometry(width*4,width*4).rotateX(-Math.PI/2);
   if (kind==="taxiPaths") return taxiGeometry(points,width);
   const [x,y,z] = points[0];
@@ -333,7 +327,7 @@ export function patchEntity(view:ReturnType<typeof assembledEntity>, before:Enti
     if (!widget || !obj.position) continue;
     widget.position.set(-obj.position[0],obj.position[1],obj.position[2]);
     if (obj.heading!==undefined) widget.rotation.y=-MathUtils.degToRad(obj.heading);
-    if (obj.route && JSON.stringify(obj.route.points)!==JSON.stringify(before.objects[i].route.points)) {
+    if (obj.route && JSON.stringify(visibleRoutePoints(obj.route))!==JSON.stringify(visibleRoutePoints(before.objects[i].route))) {
       widget.geometry.dispose();
       widget.geometry = routeGeometry(obj.route,widget.userData.pathWidth);
     }

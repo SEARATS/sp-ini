@@ -166,6 +166,7 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
       #outline li { line-height:1.55; white-space:nowrap; }
       #outline li > span { padding-left:1em; }
       .selected-object { background:var(--vscode-list-activeSelectionBackground); color:var(--vscode-list-activeSelectionForeground); }
+      .connected-object:not(.selected-object) { background:color-mix(in srgb,var(--vscode-focusBorder) 17%,transparent); }
       #outline p { margin:4px 0; color:var(--vscode-descriptionForeground); }
       .row .edit-tags { padding:0 3px; background:transparent; color:inherit; opacity:0; }
       .row:hover .edit-tags, .row:focus-within .edit-tags { opacity:1; }
@@ -184,7 +185,7 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
       select { color:var(--vscode-dropdown-foreground); background:var(--vscode-dropdown-background); }
       button { color:var(--vscode-button-foreground); background:var(--vscode-button-background); border:0; padding:5px 10px; cursor:pointer; }
       </style></head><body>
-      <canvas aria-label="3D model"></canvas><aside><div id="arc-values" hidden></div><button hidden>Fit model</button> <span role="status">${loading}</span></aside>
+      <canvas aria-label="3D model"></canvas><aside><div id="arc-values" hidden></div><div id="flight-activity" hidden></div><button hidden>Fit model</button> <span role="status">${loading}</span></aside>
       <div id="part-tip" role="tooltip" hidden></div>
       <details id="outline" open><summary>Model hierarchy</summary>
       <div id="entity-pickers" hidden>
@@ -201,7 +202,8 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
       <div id="arc-filter" hidden><label><input id="arcs" type="checkbox" checked>System arcs</label></div>
       <div id="taxiPaths-filter" hidden><label><input id="taxiPaths" type="checkbox" checked>Deck taxi paths</label></div>
       <div id="airPaths-filter" hidden><label><input id="airPaths" type="checkbox">Airborne paths</label></div>
-      <div id="animation-filter" hidden><label><input id="animations" type="checkbox">Animations</label></div></div>
+      <div id="animation-filter" hidden><label><input id="animations" type="checkbox">Animations</label></div>
+      <div id="aircraft-filter" hidden><label><input id="aircraft" type="checkbox">Aircraft</label></div></div>
       <p></p><p id="sidecar-error" role="status" hidden></p><details id="entity-warnings" hidden><summary></summary><div></div></details><ul></ul>
       <details id="elevators" hidden><summary>Elevators</summary><ul></ul></details></details>
       <script nonce="${nonce}" src="${script}"></script></body></html>`;
