@@ -1,4 +1,5 @@
 import { parse, type IniSection, type IniSource } from "./ini";
+import { elevatorRidePath } from "./elevator-motion";
 
 export type Vector = [number, number, number];
 export interface ElevatorPose {
@@ -104,7 +105,7 @@ function taxiRoute(section:IniSection, sections:Map<string,IniSection>, lifts:Re
       const recovery = key==="to" && field(target,"recoveryposition");
       const raised=lifts.get(name)?.raisedRide;
       if (key==="from" && raised) return raised;
-      const p = point((recovery || field(target,"rideposition") || field(target,"spawnposition"))?.value);
+      const p = point((recovery || field(target,"rideposition") || field(target,"spawnposition"))?.value ?? "0,0,0");
       const origin = field(section,"from")?.value.toLowerCase();
       if (p && key==="to" && /^recoverypoint\d+$/.test(origin)) {
         const touchdown = point(field(sections.get(origin),"position")?.value);
@@ -118,6 +119,58 @@ function taxiRoute(section:IniSection, sections:Map<string,IniSection>, lifts:Re
   const points = [endpoint("from"),...(via ? via.split("|").map(point) : []),endpoint("to")];
   if (!points.every(p=>p!==undefined)) return;
   return points;
+}
+
+// Several recovery points can share the final taxi segment. Each retains its own deck height.
+function recoveryOrigins(from:string, incoming:Map<string,string[]>, sections:Map<string,IniSection>) {
+  const found:IniSection[]=[], visited=new Set<string>(), pending=[from];
+  while (pending.length) {
+    const id=pending.pop();
+    if (visited.has(id)) continue;
+    visited.add(id);
+    const s=sections.get(id);
+    if (!s) continue;
+    const index=/^recoverypoint([1-9]\d*)$/.exec(id);
+    if (index && Number(index[1])<=Number(field(sections.get("flightdeck"),"numberofrecoverypoints")?.value ?? 0)) found.push(s);
+    else if (/^taxipoint\d+$/.test(id)) for (const prior of incoming.get(id) ?? []) pending.push(prior);
+  }
+  return found;
+}
+
+function hangarRoutes(elevator:IniSection, origins:IniSection[], lift:EntityElevator | undefined, parts:Map<string,EntityPart>) {
+  const routes=new Map<string,{label:string; points:Vector[]; destination:string}>();
+  const get=(key:string)=>field(elevator,key)?.value;
+  const parkingKey=get("despawnposition")===undefined ? "SpawnPosition" : "DespawnPosition";
+  const parking=point(get(parkingKey.toLowerCase()) ?? "0,0,0");
+  const generic=get("recoveryposition") ?? get("rideposition") ?? get("spawnposition") ?? "0,0,0";
+  const expectsMotion=!/^(?:none|false|)$/i.test(get("movedownanimation") ?? "") && !/^dummy$/i.test(get("mesh") ?? "");
+  const platform=lift && parts.get(lift.part);
+  for (const origin of origins) {
+    const associated=field(origin,"associatedelevators")?.value.split(",");
+    if (!associated?.some(index=>"elevator"+index.trim()===elevator.name.toLowerCase())) continue;
+    const touchdown=point(field(origin,"position")?.value);
+    if (!touchdown) continue;
+    const types=(field(origin,"allowedtype")?.value ?? "").toLowerCase().split(",").map(t=>t.trim());
+    const candidates:{label:string;position:string}[]=[];
+    if (types.some(t=>["plane","stol","vtol"].includes(t))) candidates.push({label:origin.name,position:generic});
+    if (types.includes("helicopter")) candidates.push({label:origin.name+" · Helicopter",position:get("helicopterrecoveryposition") ?? generic});
+    for (const candidate of candidates) {
+      const board=point(candidate.position);
+      if (!board) continue;
+      board[1]=touchdown[1];
+      const key=board.join(",");
+      if (routes.has(key)) continue;
+      const ride=platform && elevatorRidePath(board,platform,parts,lift.lower,"path");
+      const points=ride ?? [board];
+      let destination="";
+      if (parking && (ride || !expectsMotion)) {
+        if (parking.some((v,i)=>Math.abs(v-points.at(-1)[i])>1e-9)) points.push(parking);
+        destination=parkingKey+"="+parking.join(",");
+      }
+      routes.set(key,{label:candidate.label,points,destination});
+    }
+  }
+  return [...routes.values()];
 }
 
 export function expandEntityIni(text: string, uri?: string) {
@@ -252,6 +305,16 @@ export function entityObjects(doc: ReturnType<typeof parse>, parts: EntityPart[]
   const objects: EntityObject[] = [];
   const sections = new Map(doc.sections.map(s=>[s.name.toLowerCase(),s]));
   const taxiPaths = Number(field(sections.get("flightdeck"),"numberoftaxipaths")?.value ?? 0);
+  const partById=new Map(parts.map(p=>[p.id,p]));
+  const incoming=new Map<string,string[]>();
+  for (const section of doc.sections) {
+    const index=/^taxipath([1-9]\d*)$/i.exec(section.name);
+    if (!index || Number(index[1])>taxiPaths) continue;
+    const from=field(section,"from")?.value.toLowerCase(), to=field(section,"to")?.value.toLowerCase();
+    if (!from || !to) continue;
+    if (!incoming.has(to)) incoming.set(to,[]);
+    incoming.get(to).push(from);
+  }
   for (const section of doc.sections) {
     const magazine = magazines.has(section.name.toLowerCase()) || /magazine$/i.test(field(section,"moduletype")?.value || "");
     const group = magazine ? "Magazines" : groups.find(([pattern]) => pattern.test(section.name))?.[1];
@@ -269,6 +332,19 @@ export function entityObjects(doc: ReturnType<typeof parse>, parts: EntityPart[]
       obj.placement = [from,to].filter(Boolean).join(" → ");
       obj.position = obj.route?.points[0];
       obj.anchor = root?.id;
+      const elevator=/^elevator([1-9]\d*)$/i.exec(to);
+      if (points && elevator && Number(elevator[1])<=Number(field(sections.get("flightdeck"),"numberofelevators")?.value ?? 0)) {
+        const target=sections.get(to.toLowerCase());
+        if (/^true$/i.test(field(target,"unused")?.value ?? "")) continue;
+        const routes=hangarRoutes(target,recoveryOrigins(from.toLowerCase(),incoming,sections),lifts.get(to.toLowerCase()),partById);
+        const placement=obj.placement;
+        routes.forEach(({label,points:tail,destination},i)=>{
+          const variant=i ? {...obj,id:obj.id+"/"+label.toLowerCase(),name:section.name+" · "+label} : obj;
+          variant.route={kind:"taxiPaths",points:[...points.slice(0,-1),...tail]};
+          variant.placement=[placement,routes.length>1 ? label : "",destination].filter(Boolean).join(" → ");
+          if (i) objects.push(variant);
+        });
+      }
       continue;
     }
     if (deckPointSection.test(section.name)) {

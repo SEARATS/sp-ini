@@ -1,5 +1,6 @@
-import { Box3, BoxGeometry, BufferAttribute, BufferGeometry, ConeGeometry, DoubleSide, Euler, EdgesGeometry, Float32BufferAttribute, Group, Line, LineBasicMaterial, LineSegments, MathUtils, Mesh, MeshBasicMaterial, MeshPhongMaterial, OctahedronGeometry, PlaneGeometry, Quaternion, RepeatWrapping, Sphere, SRGBColorSpace, TextureLoader, Vector3, type LoadingManager } from "three";
-import { deckPointSection, type ElevatorPose, type EntityElevator, type EntityObject, type EntityPart, type EntityScene, type EntitySpin, type Vector } from "./entity-model";
+import { Box3, BoxGeometry, BufferAttribute, BufferGeometry, ConeGeometry, DoubleSide, EdgesGeometry, Float32BufferAttribute, Group, Line, LineBasicMaterial, LineSegments, MathUtils, Mesh, MeshBasicMaterial, MeshPhongMaterial, OctahedronGeometry, PlaneGeometry, Quaternion, RepeatWrapping, Sphere, SRGBColorSpace, TextureLoader, Vector3, type LoadingManager } from "three";
+import { deckPointSection, type EntityElevator, type EntityObject, type EntityPart, type EntityScene, type EntitySpin, type Vector } from "./entity-model";
+import { sampleElevatorPose } from "./elevator-motion";
 import type { OutlineNode } from "./model-outline";
 import { deckPointColor, objectColor, previewColors, type PreviewColor } from "./preview-colors";
 
@@ -18,44 +19,6 @@ export function elevatorClips(lift:EntityElevator) {
     steps.every((step,i)=>step.time>=0 && (!i || step.time>=steps[i-1].time)) &&
     steps.some(step=>step.position.some((v,i)=>v!==steps[0].position[i]) || step.rotation.some((v,i)=>v!==steps[0].rotation[i])));
 }
-
-function previewRotation(rotation:Vector) {
-  const [x,y,z]=rotation.map(MathUtils.degToRad);
-  return new Quaternion().setFromEuler(new Euler(x,-y,-z,"YXZ"));
-}
-
-// Unity uses spherical interpolation for smooth full-vector positions and SmoothStep for individual axes.
-function sphericalPosition(a:Vector3,b:Vector3,t:number) {
-  const length=a.length(), target=b.length();
-  if (!length || !target) return a.lerp(b,t);
-  a.divideScalar(length); b.divideScalar(target);
-  const angle=a.angleTo(b);
-  if (angle>1e-6) {
-    const axis=new Vector3().crossVectors(a,b);
-    if (axis.lengthSq()<1e-12) axis.crossVectors(a,Math.abs(a.x)<0.9 ? new Vector3(1,0,0) : new Vector3(0,1,0));
-    a.applyAxisAngle(axis.normalize(),angle*t);
-  }
-  return a.multiplyScalar(MathUtils.lerp(length,target,t));
-}
-
-function betweenPoses(node:Group, start:ElevatorPose, end:ElevatorPose, t:number) {
-  const blend=end.linear ? t : MathUtils.smoothstep(t,0,1);
-  const lerp=(from:Vector,to:Vector)=>from.map((v,i)=>MathUtils.lerp(v,to[i],blend)) as Vector;
-  transform(node,lerp(start.position,end.position),lerp(start.rotation,end.rotation));
-  if (end.vectorPosition && !end.linear) {
-    node.position.copy(sphericalPosition(new Vector3(...start.position),new Vector3(...end.position),t));
-    node.position.x *= -1;
-  }
-  if (end.quaternionRotation) {
-    const a=previewRotation(start.rotation), b=previewRotation(end.rotation);
-    if (end.linear) {
-      const sign=a.dot(b)<0 ? -1 : 1;
-      node.quaternion.set(MathUtils.lerp(a.x,sign*b.x,t),MathUtils.lerp(a.y,sign*b.y,t),
-        MathUtils.lerp(a.z,sign*b.z,t),MathUtils.lerp(a.w,sign*b.w,t)).normalize();
-    } else node.quaternion.copy(a).slerp(b,t);
-  }
-}
-
 export function poseElevator(view:ReturnType<typeof assembledEntity>, part:EntityPart, lift:EntityElevator, selection:string) {
   const node=view.nodes.get(part.id);
   const platform=view.platforms.get(part.id);
@@ -79,7 +42,10 @@ export function poseElevator(view:ReturnType<typeof assembledEntity>, part:Entit
       if (i===0) transform(node,end.position,end.rotation);
       else {
         const start=clip[i-1];
-        betweenPoses(node,start,end,(time-start.time)/(end.time-start.time));
+        sampleElevatorPose(node.position,node.quaternion,start,end,(time-start.time)/(end.time-start.time));
+        node.position.x *= -1;
+        node.quaternion.y *= -1;
+        node.quaternion.z *= -1;
       }
       break;
     }
@@ -118,11 +84,18 @@ function taxiGeometry(points:Vector[], width:number) {
   for (let i=1;i<points.length;i++) {
     const a = points[i-1], b = points[i];
     const dx = a[0]-b[0], dz = b[2]-a[2], length = Math.hypot(dx,dz);
-    const sideX = length ? dz/length * width/2 : width/2, sideZ = length ? -dx/length * width/2 : 0;
-    const start = vertices.length/3;
-    for (const p of [a,b]) for (const sign of [-1,1])
-      vertices.push(x-p[0]+sign*sideX,p[1]-y,p[2]-z+sign*sideZ);
-    indices.push(start,start+1,start+2,start+1,start+3,start+2);
+    function ribbon(sideX:number,sideZ:number) {
+      const start = vertices.length/3;
+      for (const p of [a,b]) for (const sign of [-1,1])
+        vertices.push(x-p[0]+sign*sideX,p[1]-y,p[2]-z+sign*sideZ);
+      indices.push(start,start+1,start+2,start+1,start+3,start+2);
+    }
+    if (length>1e-9) ribbon(dz/length*width/2,-dx/length*width/2);
+    else if (a[1]!==b[1]) {
+      // A vertical ride needs width in both side views.
+      ribbon(width/2,0);
+      ribbon(0,width/2);
+    }
   }
   geometry.setAttribute("position",new Float32BufferAttribute(vertices,3));
   geometry.setIndex(indices);

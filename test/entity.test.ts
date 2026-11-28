@@ -103,7 +103,7 @@ test("deck squares and taxi ribbons use authored positions and update when a way
 test("flight paths use raised elevators, deck-relative air coordinates and independent visibility",async()=>{
   const doc = parse(["[Models]","Mesh=hull","[Submodels]","SubModel1=Elevator_1","[Elevator_1]","Mesh=lift",
     "[FlightDeck]","NumberOfElevators=1","NumberOfRecoveryPoints=1","NumberOfTaxiPaths=2",
-    "HoldWaypoints=1,100,0|0,100,1","[RecoveryPoint1]","Position=1,2,3","Rotation=90","AllowedType=Plane,Helicopter",
+    "HoldWaypoints=1,100,0|0,100,1","[RecoveryPoint1]","Position=1,2,3","Rotation=90","AllowedType=Plane,Helicopter","AssociatedElevators=1",
     "CircuitWaypoints=1,100,0","[Elevator1]","SpawnPosition=0,0,0","RidePosition=0,0,1","MoveUpAnimation=Lift",
     "[TaxiPath1]","From=Elevator1","Waypoints=0,999,0","To=RecoveryPoint1","[TaxiPath2]","From=RecoveryPoint1","Waypoints=0,-999,0","To=Elevator1",
     "[Animations]","AnimationFile_1=DeckLift"].join("\n"));
@@ -117,7 +117,7 @@ test("flight paths use raised elevators, deck-relative air coordinates and indep
   const get=(name:string)=>objects.find(o=>o.name===name);
   assert.deepEqual(get("Elevator1").position,[0,0,0]);
   assert.deepEqual(get("TaxiPath1").position,[0,1.75,1]);
-  assert.deepEqual(get("TaxiPath2").route.points.at(-1),[0,2,1]);
+  assert.deepEqual(get("TaxiPath2").route.points.slice(-2),[[0,2,1],[0,0,0]]);
   const hold=get("FlightDeck · HoldWaypoints"), approach=get("RecoveryPoint1 · Fixed-wing approach");
   assert.deepEqual(hold.route.points,[[27.559496,100*0.00453571,0],[0,100*0.00453571,27.559496],hold.position]);
   assert.equal(approach.route.points.length,6);
@@ -157,6 +157,35 @@ test("flight paths use raised elevators, deck-relative air coordinates and indep
     assert.equal(view.widgets.get(get("TaxiPath1").id).layers.isEnabled(previewLayer.route),taxiPaths);
     assert.equal(entityBounds(view.model,true).radius>entityBounds(view.model).radius,airPaths);
   }
+});
+
+test("inbound taxi paths carry an aircraft down the lift and off to its hangar position",()=>{
+  const ini=["[Models]","SubModel1=lift","[lift]","Mesh=platform","[FlightDeck]","NumberOfElevators=1",
+    "NumberOfRecoveryPoints=1","NumberOfTaxiPaths=3","[RecoveryPoint1]","AllowedType=Plane,Helicopter","AssociatedElevators=1","Position=0,3,8",
+    "[TaxiPoint1]","Position=0,3,6","[Elevator1]","Mesh=lift","MoveDownAnimation=Lower","RidePosition=1,1,2",
+    "HelicopterRecoveryPosition=2,1,2","SpawnPosition=0,1,0","DespawnPosition=-1,1,0",
+    "[TaxiPath1]","From=RecoveryPoint1","To=TaxiPoint1","[TaxiPath2]","From=TaxiPoint1","To=Elevator1",
+    "[TaxiPath3]","From=Elevator1","To=TaxiPoint1"].join("\n");
+  const step=(time:number,y:number)=>({time,position:[0,y,0] as Vector,rotation:[0,0,0] as Vector});
+  const lift={name:"Elevator1",part:"lift",raise:[],lower:[step(0,0),step(2,-0.5),step(5,-2)]};
+  function routes(text:string,lower=lift.lower) {
+    const doc=parse(text), parts=entityParts(doc,new Set()).map(r=>r.part);
+    return entityObjects(doc,parts,[{...lift,lower}]).filter(o=>o.route?.kind==="taxiPaths");
+  }
+  const [approach,plane,heli,outbound]=routes(ini);
+  assert.equal(approach.route.points.length,2);
+  assert.equal(outbound.route.points.length,2);
+  assert.deepEqual(plane.route.points,[[0,3,6],[1,3,2],[1,2.5,2],[1,1,2],[-1,1,0]]);
+  assert.deepEqual(heli.route.points,[[0,3,6],[2,3,2],[2,2.5,2],[2,1,2],[-1,1,0]]);
+  assert.match(plane.placement,/DespawnPosition=/);
+  assert.deepEqual(routes(ini.replace("DespawnPosition=-1,1,0",""))[1].route.points.at(-1),[0,1,0]);
+  assert.deepEqual(routes(ini,[])[1].route.points,[[0,3,6],[1,3,2]]);
+  assert.equal(routes(ini.replace("AssociatedElevators=1","AssociatedElevators=2"))[1].route.points.length,2);
+  const turn={...step(5,-2),rotation:[0,90,0] as Vector};
+  const arc=routes(ini,[step(0,0),turn])[1].route.points;
+  const disembark=new Vector3(...arc.at(-2));
+  assert.ok(disembark.distanceTo(new Vector3(2,1,-1))<1e-9);
+  assert.ok(arc.length>5);
 });
 
 test("launch and recovery markers follow mirrored INI headings through live edits",()=>{

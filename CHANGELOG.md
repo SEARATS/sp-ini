@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Recovery taxi paths continue down the elevator to `DespawnPosition`, or `SpawnPosition` when omitted. The descent follows the platform’s configured lowering animation.
+
 - Toggle individual taxi, holding and approach paths in the hierarchy. Routes are visible from either side of the hull. Hover highlights flight points and paths ahead of the deck underneath. Clicking selects the first item in the tooltip.
 - Expand **Elevators** to set each platform independently. Lifts with timed animations cycle by default and appear in blue. Choose a pose to park a lift or inspect a keyframe. Preview notes identify broken animation references.
 - Launch and recovery squares rotate with the point’s `Rotation`. A tapered pointer marks the forward edge.

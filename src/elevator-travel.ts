@@ -1,10 +1,9 @@
-import { Euler, MathUtils, Matrix4, Quaternion, Vector3 } from "three";
+import { elevatorRidePath } from "./elevator-motion";
 import type { Catalog } from "./catalog";
 import { field, point, type ElevatorPose, type EntityElevator, type EntityPart, type Vector } from "./entity-model";
 import { readEntityDefinition } from "./entity-selection";
 import type { IniSection, parse } from "./ini";
 import type { Materials } from "./materials";
-
 const sectionsByName = (doc:ReturnType<typeof parse>) => new Map(doc.sections.map(s=>[s.name.toLowerCase(),s]));
 const value = (s:IniSection, key:string) => field(s,key)?.value;
 const finite = (v:string | undefined) => v?.trim() && Number.isFinite(Number(v)) ? Number(v) : undefined;
@@ -49,27 +48,6 @@ function poses(sequence:IniSection, part:EntityPart, warn:(message:string)=>void
   }
   return steps;
 }
-
-function matrix(pose:Pick<ElevatorPose,"position"|"rotation">, scale:Vector) {
-  const [x,y,z]=pose.rotation.map(MathUtils.degToRad);
-  return new Matrix4().compose(new Vector3(...pose.position),
-    new Quaternion().setFromEuler(new Euler(x,y,z,"YXZ")),new Vector3(...scale));
-}
-
-// The embarked aircraft keeps its world pose when parented to the platform.
-function raisedRide(ride:Vector, part:EntityPart, parts:Map<string,EntityPart>, steps:ElevatorPose[]) {
-  let parent=parts.get(part.parent);
-  const ancestors=new Matrix4();
-  while (parent && parent.id!=="models") {
-    ancestors.premultiply(matrix(parent,parent.scale));
-    parent=parts.get(parent.parent);
-  }
-  const start=ancestors.clone().multiply(matrix(steps[0],part.scale));
-  if (!start.determinant()) return;
-  const end=ancestors.multiply(matrix(steps.at(-1),part.scale));
-  return new Vector3(...ride).applyMatrix4(start.invert()).applyMatrix4(end).toArray() as Vector;
-}
-
 export async function elevatorTravel(doc:ReturnType<typeof parse>, parts:EntityPart[], catalog:Catalog, materials:Materials, warnings:Set<string>) {
   const sections=sectionsByName(doc), partById=new Map(parts.map(p=>[p.id,p]));
   const count=Number(value(sections.get("flightdeck"),"numberofelevators") ?? 0);
@@ -118,7 +96,7 @@ export async function elevatorTravel(doc:ReturnType<typeof parse>, parts:EntityP
     const raise=track("MoveUpAnimation"), lower=track("MoveDownAnimation");
     const ride=point((field(elevator,"rideposition") ?? field(elevator,"spawnposition"))?.value ?? "0,0,0");
     result.push({name:elevator.name,part:part.id,raise,lower,
-      raisedRide:ride && raise.length ? raisedRide(ride,part,partById,raise) : undefined});
+      raisedRide:ride && elevatorRidePath(ride,part,partById,raise,"endpoint")?.at(-1)});
   }
   return result;
 }
