@@ -15,5 +15,5 @@ export function fbxGeometry(bytes: Buffer) {
     }
     for (const name of aliases[index]) objects.push({name, meshName:mesh.name, line:0, start:0, firstVertex, vertexCount:mesh.positions.length/3, faces});
   }
-  return {vertices, uvs, objects, libraries:[]};
+  return {vertices, normals:[], uvs, objects, libraries:[]};
 }

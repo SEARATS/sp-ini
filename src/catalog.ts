@@ -5,6 +5,7 @@ import { parse, sectionGroup } from "./ini";
 import { children, type ContentRoot } from "./roots";
 import { scalarType } from "./values";
 import { MaterialFolders } from "./material-folders";
+import { modelResourcePath } from "./model-resource-path";
 
 const unitFolders = { aircraft: ["aircraft", "helicopter"], vessels: ["vessel", "submarine"], land_units: ["landunit"], biologic: ["biologic"] };
 const excluded = new Set(["node_modules", "bin", "obj", "dist", "decompiled", "artifacts", "Library", "Packages"]);
@@ -95,8 +96,8 @@ class Catalog {
     const group = family(file.rel, doc);
     const ref = (name, line, start = 0) => ({ name, line, start, file });
     const names = submodelNames(doc);
-    const models = doc.entries.filter(e => /^(resourcesroot|rootmesh)$/i.test(e.name) && /\.obj$/i.test(e.value));
-    for (const name of new Set(models.map(k => path.posix.basename(normalize(k.value))))) {
+    const models = doc.entries.filter(e=>/^(resourcesroot|rootmesh)$/i.test(e.name)).map(e=>modelResourcePath(e.value).file);
+    for (const name of new Set(models.filter(file=>/\.obj$/i.test(file)).map(file=>path.posix.basename(normalize(file))))) {
       getOrCreate(this.objOwners, name, () => []).push(file);
     }
     if (names.size) getOrCreate(this.modelParts, normalize(file.rel), () => []).push(

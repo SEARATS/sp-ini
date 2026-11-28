@@ -1,4 +1,5 @@
-import { Box3, BufferGeometry, DirectionalLight, Float32BufferAttribute, Group, HemisphereLight, LineBasicMaterial,
+import { previewDaylight, renderDaylight } from "./preview-lighting";
+import { Box3, BufferGeometry, Float32BufferAttribute, Group, LineBasicMaterial,
   LineSegments, LoadingManager, Mesh, PerspectiveCamera, Points, PointsMaterial, Scene, Sphere, Vector3, WebGLRenderer } from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { exportRigScene } from "./entity-model";
@@ -14,9 +15,7 @@ export function createRigViewer(canvas: HTMLCanvasElement, assets: RigAssets) {
   const camera = new PerspectiveCamera(40, 1, 0.01, 10000);
   const controls = new OrbitControls(camera, canvas);
   const scene = new Scene(), guides = new Scene();
-  const light = new DirectionalLight(0xffffff, 2);
-  light.position.set(1, 2, 3);
-  scene.add(light, new HemisphereLight(0xffffff, 0x999999, 2));
+  previewDaylight(scene);
   const names = new Map(assets.names), geometry = assets.geometry.map(entityGeometry);
   const shared = new Set(geometry), manager = new LoadingManager(), bounds = new Sphere();
   let model: Group, framed = false, links = true;
@@ -25,7 +24,7 @@ export function createRigViewer(canvas: HTMLCanvasElement, assets: RigAssets) {
     if (!canvas.clientWidth || !canvas.clientHeight) return;
     renderer.clear();
     camera.layers.set(previewLayer.mesh);
-    renderer.render(scene, camera);
+    renderDaylight(renderer,scene,camera);
     renderer.clearDepth();
     camera.layers.set(previewLayer.collider);
     renderer.render(scene, camera);

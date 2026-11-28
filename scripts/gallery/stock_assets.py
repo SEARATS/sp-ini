@@ -45,7 +45,8 @@ def main():
     vessels = args.workspace / "vessels"
     vessels.mkdir()
     ini = (data / "StreamingAssets/original/vessels/usn_dd_spruance_vls.ini").read_text(encoding="utf-8-sig")
-    ini = re.sub(r"(?im)^(ResourcesRoot=usn_dd_spruance_vls)[ \t]*$", r"\1.obj", ini)
+    # UnityPy reflects the stock mesh's X coordinates when exporting OBJ.
+    ini = re.sub(r"(?im)^(ResourcesRoot=usn_dd_spruance_vls)[ \t]*$", r"\1.obj, CORRECT_OBJ_ORIENTATION", ini)
     ini = re.sub(r"(?im)^((?:ResourcesMaterial|Material)=usn_dd_spruance_vls_deck_mat)[ \t]*$", r"\1.ini", ini)
     (vessels / "usn_dd_spruance_vls.ini").write_text(ini, encoding="utf-8")
 

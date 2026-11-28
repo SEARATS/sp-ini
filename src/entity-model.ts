@@ -13,13 +13,14 @@ export interface EntityPart {
   position: Vector; rotation: Vector; scale: Vector;
   source?: IniSource; meshName?: string;
   missingDiffuse?: boolean;
+  castShadows?:boolean;
   referencedBy?: string[];
   hullCollider?: boolean;
 }
 export interface EntityScene {
   parts: EntityPart[];
   objects?: EntityObject[];
-  geometry: {positions: string; uvs: string}[];
+  geometry: {positions: string; uvs: string; normals?:string}[];
   textures: {png:string; alpha:"opaque"|"cutout"|"blend"}[];
   warnings: string[];
 }
@@ -96,6 +97,7 @@ export function entityParts(doc: ReturnType<typeof parse>, warnings: Set<string>
       position: vector("position",[0,0,0]), rotation: vector("rotation",[0,0,0]), scale: vector("scale",[1,1,1]),
       visible: !/^false$/i.test(field(section,"isvisible")?.value || "")
     };
+    if (/^false$/i.test(field(section,"castshadows")?.value || "")) part.castShadows = false;
     if (collider) part.hullCollider = [section.name,mesh?.value].some(name => name &&
       (hullColliders.has(name.toLowerCase()) || /(?:^|[^a-z]|collider|coll|col)hull(?:$|[^a-z]|col)/i.test(name)));
     return {part, mesh, material:field(section,root ? "resourcesmaterial" : "material") || (root && field(section,"assetbundlematerial")) || undefined};

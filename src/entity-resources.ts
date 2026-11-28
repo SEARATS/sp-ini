@@ -5,6 +5,7 @@ import { Catalog, normalize, uriKey } from "./catalog";
 import { findBlender } from "./blend-export";
 import { entityParts, field } from "./entity-model";
 import type { IniSection, parse } from "./ini";
+import { modelResourcePath } from "./model-resource-path";
 
 const formats = [".fbx",".obj",".blend"];
 interface SourceFile {uri:string; rel:string; full:string; source:string}
@@ -14,7 +15,7 @@ export function modelResource(section: IniSection, models: IniSection) {
   const folder = field(section,"resourcesmeshfolder")?.value || field(models,"resourcesmeshfolder")?.value || field(models,"resourcesfolder")?.value || "";
   const root = field(section,"rootmesh")?.value || field(models,"resourcesroot")?.value || field(models,"resourcesmesh")?.value;
   if (!root) return;
-  const stem = normalize(root).replace(/\.(fbx|obj|blend|prefab)$/i,"");
+  const stem = normalize(modelResourcePath(root).file).replace(/\.(fbx|obj|blend|prefab)$/i,"");
   return {key:path.join(normalize(folder),stem), folder:normalize(folder), stem};
 }
 
