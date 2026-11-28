@@ -16,8 +16,13 @@ const submodels: IndexedList = {count:"NumberOfSubModels", item:"SubModel", keys
 const animations: IndexedList = {count:"NumberOfAnimations", item:"Animation", keys:/^animation([1-9]\d*)$/i};
 const sequences: IndexedList = {count:"NumberOfSequencesToPlay", item:"Sequence", keys:/^sequence([1-9]\d*)$/i, defaultCount:1};
 const steps: IndexedList = {count:"NumberOfSteps", item:"step ", keys:/^(?:step|time|position[xyz]?|rotation[xyz]?|smoothness)([1-9]\d*)$/i, defaultCount:1};
+const deckLists:IndexedList[] = ["Elevator","LaunchPoint","RecoveryPoint","TaxiPoint","TaxiPath","DeckZone"].map(item=>({
+  count:"NumberOf"+item+"s",item,keys:new RegExp("^"+item+"([1-9]\\d*)$","i"),defaultCount:0
+}));
+const zonePoints:IndexedList={count:"NumberOfPoints",item:"Point",keys:/^point([1-9]\d*)$/i,defaultCount:0};
 
-function compareList(keys: IniEntry[], list: IndexedList, partial: boolean): Diagnostic[] {
+type CountField=Pick<IniEntry,"name"|"line"|"valueStart"|"value">;
+function compareList(keys: IniEntry[], list: IndexedList, partial: boolean, items:CountField[]=keys): Diagnostic[] {
   const countKeys = keys.filter(k => k.name.toLowerCase() === list.count.toLowerCase());
   if (countKeys.length > 1 || (partial && !countKeys.length)) return [];
   const key = countKeys[0];
@@ -25,14 +30,14 @@ function compareList(keys: IniEntry[], list: IndexedList, partial: boolean): Dia
   const count = key ? Number(key.value) : list.defaultCount;
   if (count === undefined || count < 0 || count > 2147483647) return [];
 
-  const indexed = new Map<number, IniEntry>();
-  for (const entry of keys) {
+  const indexed = new Map<number, CountField>();
+  for (const entry of items) {
     const match = list.keys.exec(entry.name);
     if (match && entry.value) indexed.set(Number(match[1]), entry);
   }
   const indices = [...indexed.keys()].sort((a,b) => a-b);
   const issues: Diagnostic[] = [];
-  function warn(entry: IniEntry, code: string, message: string) {
+  function warn(entry: CountField, code: string, message: string) {
     issues.push({range:Range.create(entry.line, entry.valueStart, entry.line, entry.valueStart + entry.value.length),
       severity:DiagnosticSeverity.Warning, source:"Sea Power INI", code, message});
   }
@@ -64,7 +69,14 @@ export function countDiagnostics(doc: ReturnType<typeof parse>, group: string): 
   const issues: Diagnostic[] = [];
   for (const [name, keys] of sections) {
     if (keys.some(k => k.repeated || k.name.includes("{"))) continue;
-    if (name === "colliders") {
+    if (name === "flightdeck") {
+      const headers=doc.sections.map(s=>({name:s.name,value:s.name,line:s.line,valueStart:s.start}));
+      for (const list of deckLists) {
+        if (headers.some(h=>h.name.includes("{") && h.name.toLowerCase().startsWith(list.item.toLowerCase()))) continue;
+        issues.push(...compareList(keys,list,partial,headers));
+      }
+    } else if (/^deckzone\d+$/.test(name)) issues.push(...compareList(keys,zonePoints,partial));
+    else if (name === "colliders") {
       for (const list of colliders) issues.push(...compareList(keys, list, partial));
     } else if (name === "models" && (group === "ammunition" || !sections.has("submodels"))) {
       const list = group === "biologic" ? {...submodels, defaultCount:1} : submodels;

@@ -12,7 +12,8 @@ for (const [family, sections] of Object.entries(fields))
 
 register("shared", "General", "number", ["Length", "Beam", "CompartmentsHeight", "FrontalArea", "SideArea", "BottomArea", "Volume"]);
 register("shared", "SensorData", "count", ["BladesCount"]);
-register("shared", "FlightDeck", "count", ["NumberOfDeckZones", "NumberOfElevators", "NumberOfRecoveryPoints", "NumberOfTaxiPaths", "NumberOfTaxiPoints"]);
+register("shared", "FlightDeck", "count", ["NumberOfDeckZones", "NumberOfElevators", "NumberOfLaunchPoints", "NumberOfRecoveryPoints", "NumberOfTaxiPaths", "NumberOfTaxiPoints"]);
+register("shared", "DeckZone1", "count", ["NumberOfPoints"]);
 register("shared", "PropulsionSystems", "count", ["NumberOfPropulsionSystems"]);
 register("shared", "RudderSystems", "count", ["NumberOfRudderSystems"]);
 register("shared", "DepthRudderSystems", "count", ["NumberOfDepthRudderSystems"]);
