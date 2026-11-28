@@ -1,7 +1,7 @@
-import { Box3, BoxGeometry, BufferAttribute, BufferGeometry, ConeGeometry, Group, MathUtils, Mesh, MeshBasicMaterial, MeshPhongMaterial, OctahedronGeometry, Quaternion, RepeatWrapping, SRGBColorSpace, TextureLoader, Vector3, type LoadingManager } from "three";
+import { Box3, BoxGeometry, BufferAttribute, BufferGeometry, ConeGeometry, DoubleSide, Float32BufferAttribute, Group, MathUtils, Mesh, MeshBasicMaterial, MeshPhongMaterial, OctahedronGeometry, PlaneGeometry, Quaternion, RepeatWrapping, SRGBColorSpace, TextureLoader, Vector3, type LoadingManager } from "three";
 import type { EntityPart, EntityScene, EntitySpin, Vector } from "./entity-model";
 import type { OutlineNode } from "./model-outline";
-import { objectColor, previewColors, type PreviewColor } from "./preview-colors";
+import { deckPointColor, objectColor, previewColors, type PreviewColor } from "./preview-colors";
 
 function floats(encoded: string) {
   return new Float32Array(Uint8Array.from(atob(encoded), char=>char.charCodeAt(0)).buffer);
@@ -38,6 +38,24 @@ export function bindEntitySpins(nodes:Map<string,Group>, spins:EntitySpin[] = []
   };
 }
 
+// Give each taxi segment a narrow, pickable surface in the deck plane.
+function taxiGeometry(points:Vector[], width:number) {
+  const geometry = new BufferGeometry(), vertices:number[] = [], indices:number[] = [];
+  const [x,y,z] = points[0];
+  for (let i=1;i<points.length;i++) {
+    const a = points[i-1], b = points[i];
+    const dx = a[0]-b[0], dz = b[2]-a[2], length = Math.hypot(dx,dz);
+    const sideX = length ? dz/length * width/2 : width/2, sideZ = length ? -dx/length * width/2 : 0;
+    const start = vertices.length/3;
+    for (const p of [a,b]) for (const sign of [-1,1])
+      vertices.push(x-p[0]+sign*sideX,p[1]-y,p[2]-z+sign*sideZ);
+    indices.push(start,start+1,start+2,start+1,start+3,start+2);
+  }
+  geometry.setAttribute("position",new Float32BufferAttribute(vertices,3));
+  geometry.setIndex(indices);
+  return geometry;
+}
+
 export function assembledEntity(scene: EntityScene, manager: LoadingManager, meshes = scene.geometry.map(entityGeometry)) {
   const model = new Group();
   const tree = (name: string): OutlineNode => ({name, tree:true, children:[], parts:[]});
@@ -54,6 +72,7 @@ export function assembledEntity(scene: EntityScene, manager: LoadingManager, mes
     if (part.hullCollider) return "hull";
     if (groups.includes("Magazines")) return "magazine";
     if (groups.includes("Sensors")) return "sensor";
+    if (groups.includes("Flight deck")) return "flight";
     if (owners.length) return "object";
     const magazineName = /(?:^|[^a-z])mag(?:azine)?(?:$|[^a-z])/i;
     if ([part.name,part.meshName].some(name=>name && magazineName.test(name))) return "magazine";
@@ -129,20 +148,24 @@ export function assembledEntity(scene: EntityScene, manager: LoadingManager, mes
     groups.get(obj.group).children.push(row);
     const parent = nodes.get(obj.anchor);
     if (!obj.position || !parent) continue;
-    const sensor = obj.group === "Sensors", weapon = obj.group === "Weapons";
-    const shape = sensor ? new OctahedronGeometry(1) : weapon ? new ConeGeometry(1,2,4) : new BoxGeometry(1.5,1.5,1.5);
-    const widget = new Mesh(shape,new MeshBasicMaterial({color:previewColors[objectColor(obj.group)],
-      depthTest:false,depthWrite:false}));
+    const role = objectColor(obj.group);
+    const deckPoint = /^(LaunchPoint|RecoveryPoint|TaxiPoint|Elevator)\d+$/i.test(obj.name);
+    const size = diameter*0.009/(parent.matrixWorld.getMaxScaleOnAxis() || 1);
+    const shape = obj.taxiPath ? taxiGeometry(obj.taxiPath,size*0.26) :
+      deckPoint ? new PlaneGeometry(1.7,1.7).rotateX(-Math.PI/2) :
+      role==="sensor" ? new OctahedronGeometry(1) : role==="weapon" ? new ConeGeometry(1,2,4) : new BoxGeometry(1.5,1.5,1.5);
+    const widget = new Mesh(shape,new MeshBasicMaterial({color:deckPoint ? deckPointColor : previewColors[role],
+      depthTest:false,depthWrite:false,...(deckPoint || obj.taxiPath ? {side:DoubleSide} : {})}));
     const [x,y,z] = obj.position;
     widget.position.set(-x,y,z);
-    const scale = parent.matrixWorld.getMaxScaleOnAxis();
-    widget.scale.setScalar(diameter*0.009/(scale || 1));
+    if (obj.taxiPath) widget.userData.pathWidth = size*0.26;
+    else widget.scale.setScalar(size);
     widget.userData.partId=obj.id;
     widget.userData.widget=true;
-    widget.userData.previewRole=objectColor(obj.group);
-    widget.userData.colliderIds=objectColliders.get(obj.name.toLowerCase());
+    widget.userData.previewRole=role;
+    if (!deckPoint && !obj.taxiPath) widget.userData.colliderIds=objectColliders.get(obj.name.toLowerCase());
     widget.userData.color=widget.material.color.getHex();
-    widget.renderOrder=10;
+    widget.renderOrder=obj.taxiPath ? 9 : 10;
     parent.add(widget);
     widgets.set(obj.id,widget);
     row.parts.push({id:obj.id,collider:false,widget:true});
@@ -153,15 +176,21 @@ export function assembledEntity(scene: EntityScene, manager: LoadingManager, mes
 // Most INI edits only move parts, toggle visibility or change source lines. Keep their GPU assets.
 export function patchEntity(view:ReturnType<typeof assembledEntity>, before:EntityScene, after:EntityScene) {
   const partShape = ({source,position,rotation,visible,...rest}:EntityPart)=>rest;
-  const objectShape = ({source,position,placement,firingArcs,elevationArc,...rest}:NonNullable<EntityScene["objects"]>[number])=>({...rest,placed:!!position});
+  const objectShape = ({source,position,placement,firingArcs,elevationArc,taxiPath,...rest}:NonNullable<EntityScene["objects"]>[number])=>({...rest,placed:!!position,route:!!taxiPath});
   if (before.geometry.length!==after.geometry.length || before.textures.length!==after.textures.length ||
     before.geometry.some((g,i)=>g.positions!==after.geometry[i].positions || g.uvs!==after.geometry[i].uvs || g.normals!==after.geometry[i].normals) ||
     before.textures.some((t,i)=>t.png!==after.textures[i].png || t.alpha!==after.textures[i].alpha) ||
     JSON.stringify(before.parts.map(partShape))!==JSON.stringify(after.parts.map(partShape)) ||
     JSON.stringify(before.objects?.map(objectShape))!==JSON.stringify(after.objects?.map(objectShape))) return false;
   for (const part of after.parts) transform(view.nodes.get(part.id),part.position,part.rotation);
-  for (const obj of after.objects || []) {
-    if (obj.position) view.widgets.get(obj.id)?.position.set(-obj.position[0],obj.position[1],obj.position[2]);
+  for (const [i,obj] of (after.objects || []).entries()) {
+    const widget = view.widgets.get(obj.id);
+    if (!widget || !obj.position) continue;
+    widget.position.set(-obj.position[0],obj.position[1],obj.position[2]);
+    if (obj.taxiPath && JSON.stringify(obj.taxiPath)!==JSON.stringify(before.objects[i].taxiPath)) {
+      widget.geometry.dispose();
+      widget.geometry = taxiGeometry(obj.taxiPath,widget.userData.pathWidth);
+    }
   }
   return true;
 }

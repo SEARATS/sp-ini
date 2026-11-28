@@ -7,6 +7,7 @@ export interface EntityObject {
   id: string; name: string; group: ObjectGroup; system?: string; source?: IniSource;
   anchor?: string; position?: Vector; placement: string;
   firingArcs?: string; elevationArc?: string;
+  taxiPath?: Vector[];
 }
 export interface EntityPart {
   id: string; name: string; parent?: string; geometry?: number; texture?: number;
@@ -27,6 +28,27 @@ export interface EntityScene {
   warnings: string[];
 }
 export const field = (section: IniSection | undefined, name: string) => section?.keys.find(k => k.name.toLowerCase() === name);
+
+function point(text:string | undefined):Vector | undefined {
+  const coords = text?.split(",").map(v=>v.trim() ? Number(v) : NaN);
+  if (coords?.length===3 && coords.every(Number.isFinite)) return coords as Vector;
+}
+
+function taxiRoute(section:IniSection, sections:Map<string,IniSection>) {
+  function endpoint(key:"from" | "to") {
+    const name = field(section,key)?.value.toLowerCase();
+    const target = sections.get(name);
+    if (!target) return;
+    if (/^elevator\d+$/i.test(name)) {
+      const recovery = key==="to" && field(target,"recoveryposition");
+      return point((recovery || field(target,"rideposition") || field(target,"spawnposition"))?.value);
+    }
+    if (/^(launchpoint|recoverypoint|taxipoint)\d+$/i.test(name)) return point(field(target,"position")?.value);
+  }
+  const via = field(section,"waypoints")?.value;
+  const points = [endpoint("from"),...(via ? via.split("|").map(point) : []),endpoint("to")];
+  if (points.every(p=>p!==undefined)) return points as Vector[];
+}
 
 export function expandEntityIni(text: string, uri?: string) {
   const doc = parse(text), output: string[] = [];
@@ -157,6 +179,8 @@ export function entityObjects(doc: ReturnType<typeof parse>, parts: EntityPart[]
     [/^Magazine\d+$/i,"Magazines"]
   ];
   const objects: EntityObject[] = [];
+  const sections = new Map(doc.sections.map(s=>[s.name.toLowerCase(),s]));
+  const taxiPaths = Number(field(sections.get("flightdeck"),"numberoftaxipaths")?.value ?? 0);
   for (const section of doc.sections) {
     const magazine = magazines.has(section.name.toLowerCase()) || /magazine$/i.test(field(section,"moduletype")?.value || "");
     const group = magazine ? "Magazines" : groups.find(([pattern]) => pattern.test(section.name))?.[1];
@@ -166,6 +190,23 @@ export function entityObjects(doc: ReturnType<typeof parse>, parts: EntityPart[]
       elevationArc:group==="Weapons" ? field(section,"elevationarc")?.value : undefined,
       system:field(section,"systemname")?.value || field(section,"type")?.value,placement:"No spatial reference"};
     objects.push(obj);
+    const taxi = /^taxipath([1-9]\d*)$/i.exec(section.name);
+    if (taxi) {
+      const from = field(section,"from")?.value, to = field(section,"to")?.value;
+      if (Number(taxi[1])<=taxiPaths) obj.taxiPath = taxiRoute(section,sections);
+      obj.placement = [from,to].filter(Boolean).join(" → ");
+      obj.position = obj.taxiPath?.[0];
+      obj.anchor = root?.id;
+      continue;
+    }
+    if (/^(elevator|launchpoint|recoverypoint|taxipoint)\d+$/i.test(section.name)) {
+      const key = /^elevator/i.test(section.name) ? "SpawnPosition" : "Position";
+      const value = field(section,key.toLowerCase())?.value;
+      obj.anchor = root?.id;
+      obj.position = point(value);
+      obj.placement = obj.position ? key+"="+value : "Missing or invalid "+key;
+      continue;
+    }
     const mount = field(section,"mount")?.value;
     const namedMount = mount && !/^dummy$/i.test(mount);
     const offset = !namedMount && (field(section,"mountposition") || field(section,"attachmentpointposition") ||
@@ -175,9 +216,8 @@ export function entityObjects(doc: ReturnType<typeof parse>, parts: EntityPart[]
     if (!namedMount && !collider && !offset) continue;
     obj.anchor = anchors.get(anchor.toLowerCase());
     if (!obj.anchor) { obj.placement = "Unresolved anchor: "+anchor; continue; }
-    const coords = offset ? offset.value.split(",").map(v=>v.trim() ? Number(v) : NaN) : [0,0,0];
-    if (coords.length !== 3 || !coords.every(Number.isFinite)) { obj.placement = "Invalid "+offset.name; continue; }
-    obj.position = coords as Vector;
+    obj.position = offset ? point(offset.value) : [0,0,0];
+    if (!obj.position) { obj.placement = "Invalid "+offset.name; continue; }
     obj.placement = namedMount ? "Mount="+mount : collider ? "Collider="+collider : offset.name+"="+offset.value;
   }
   return objects;

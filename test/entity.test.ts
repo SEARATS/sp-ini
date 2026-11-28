@@ -72,11 +72,39 @@ test("preview modes keep the model and match shared colliders to each owning sys
   ]);
 });
 
+test("deck squares and taxi ribbons use authored positions and update when a waypoint moves",()=>{
+  const ini = ["[Models]","Mesh=hull","[FlightDeck]","NumberOfTaxiPaths=4",
+    "[Elevator1]","SpawnPosition=0,1,0","RidePosition=0,2,1","RecoveryPosition=0,2,2",
+    "[LaunchPoint1]","Position=1,2,3","[TaxiPath1]","From=Elevator1","To=LaunchPoint1","Waypoints=1,2,1|1,2,2",
+    "[TaxiPath2]","From=LaunchPoint1","To=Elevator1","[TaxiPath3]","From=Missing","To=Elevator1",
+    "[TaxiPath4]","From=Elevator1","To=LaunchPoint1","Waypoints=1,,3","[TaxiPath5]","From=Elevator1","To=LaunchPoint1"].join("\n");
+  function scene(text:string) {
+    const doc=parse(text), parts=entityParts(doc,new Set()).map(p=>p.part);
+    return {parts,objects:entityObjects(doc,parts),geometry:[],textures:[],warnings:[]};
+  }
+  const before = scene(ini), view=assembledEntity(before,new LoadingManager());
+  const route = before.objects.find(o=>o.name==="TaxiPath1"), id=route.id;
+  assert.deepEqual(route.taxiPath,[[0,2,1],[1,2,1],[1,2,2],[1,2,3]]);
+  assert.deepEqual(before.objects.find(o=>o.name==="TaxiPath2").taxiPath,[[1,2,3],[0,2,2]]);
+  const lift = view.widgets.get("object:elevator1");
+  assert.ok(lift.position.equals(new Vector3(0,1,0)));
+  lift.geometry.computeBoundingBox();
+  assert.ok(lift.geometry.boundingBox.getSize(new Vector3()).y < 1e-6);
+  const path = view.widgets.get(id), previous = path.geometry;
+  assert.equal(previous.index.count,18);
+  for (const index of [3,4,5]) assert.ok(!view.widgets.has("object:taxipath"+index));
+  assert.ok(patchEntity(view,before,scene(ini.replace("1,2,1|","2,2,1|"))));
+  assert.notEqual(path.geometry,previous);
+  assert.equal(view.widgets.get(id),path);
+  assert.ok(!excludedOverlays(before,"Flight").has(id) && excludedOverlays(before,"Sensors").has(id));
+});
+
 test("system arc guides preserve separate firing sectors, wrap past 180 and show elevation",()=>{
   const doc=expandEntityIni("[Models]\nMesh=hull\n[WeaponSystem1]\nMountPosition=0,0,0\nFiringArcs=150,-150|-30,30\nElevationArc=-15,85");
   const [obj]=entityObjects(doc,entityParts(doc,new Set()).map(p=>p.part));
   assert.equal(obj.elevationArc,"-15,85");
   const guides=systemArcs(obj);
+  assert.deepEqual(guides.map(g=>g.color),[0xff8c32,0xffb368]);
   const vertices=(line:typeof guides[number]["line"])=>{
     const points=line.geometry.getAttribute("position");
     return Array.from({length:points.count},(_,i)=>new Vector3().fromBufferAttribute(points,i));
@@ -185,7 +213,7 @@ test("referenced colliders use their owners' colors and replace markers only whi
   const {model,outline}=assembledEntity({parts,objects:entityObjects(doc,parts),geometry:[],textures:[],warnings:[]},new LoadingManager());
   assert.deepEqual(parts.find(p=>p.id==="b").referencedBy,["SensorSystem1","WeaponSystem1","Locker"]);
   assert.deepEqual(outline[1].children.map(r=>r.colliderStyle),["sensor","weapon","unassigned","hull","magazine","hull"]);
-  for (const [name,color] of [["A",0x53c8fa],["B",0xff4444],["C",0xc0c0c0],["coll_hull1a",0xffffff],["LockerBox",0xff833d]] as const) {
+  for (const [name,color] of [["A",0xffdc52],["B",0xff4444],["C",0xc0c0c0],["coll_hull1a",0xffffff],["LockerBox",0xff833d]] as const) {
     const mesh=model.getObjectByName(name).children[0];
     assert.ok(mesh instanceof Mesh && mesh.material instanceof MeshBasicMaterial);
     assert.equal(mesh.material.color.getHex(),color);

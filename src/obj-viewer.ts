@@ -11,7 +11,7 @@ import { applyDisplay, previewLayer, type DisplaySettings } from "./preview-disp
 import { assembledEntity, bindEntitySpins, patchEntity } from "./entity-viewer";
 import type { EntityScene } from "./entity-model";
 import { entityModes, excludedOverlays, type EntityMode } from "./entity-mode";
-import { previewColors } from "./preview-colors";
+import { previewColors, weaponArcColors } from "./preview-colors";
 import { inspectEntity } from "./entity-inspect";
 import {placeSystemArcs,systemArcs} from "./system-arcs";
 import { Texture, Box3, Color, LoadingManager, PerspectiveCamera, Scene, Sphere, WebGLRenderer } from "three";
@@ -70,10 +70,10 @@ function showArcValues() {
   const obj=active?.scene.objects?.find(obj=>obj.id===pickedObject);
   arcValues.replaceChildren();
   if (!obj) return;
-  for (const [label,value,color] of [["FiringArcs",obj.firingArcs,"#ffdf72"],["ElevationArc",obj.elevationArc,"#71dfff"]]) {
+  for (const [label,value,color] of [["FiringArcs",obj.firingArcs,weaponArcColors.bearing],["ElevationArc",obj.elevationArc,weaponArcColors.elevation]] as const) {
     if (!value) continue;
     const span=document.createElement("span");
-    span.style.color=color; span.textContent=label+"="+value; arcValues.append(span,"  ");
+    span.style.color="#"+color.toString(16); span.textContent=label+"="+value; arcValues.append(span,"  ");
   }
 }
 const white=new Color(0xffffff);
@@ -107,7 +107,7 @@ function selectObject(id: string | undefined, reveal: boolean) {
     if (!node.userData.widget) return;
     const active = node.userData.partId === id;
     node.material.color.set(active ? 0xffff77 : node.userData.color);
-    node.renderOrder = active ? 11 : 10;
+    node.renderOrder = active ? 11 : node.userData.pathWidth ? 9 : 10;
   });
   if (renderer) draw();
 }
