@@ -84,13 +84,19 @@ function drawTraffic(dt:number) {
 function focusTraffic() {
   if (!network || (pickedObject && !network.links.has(pickedObject) && !network.deck.spots.some(s=>"object:"+s.name===pickedObject))) traffic=undefined;
   else if (traffic?.focus!==pickedObject || traffic?.network!==network) traffic=new DeckPlayback(network,pickedObject);
-  connectedObjects=network?.related(pickedObject);
-  for (const label of elevatorPanel.querySelectorAll<HTMLElement>("[data-elevator]"))
-    label.classList.toggle("connected-object",!!connectedObjects?.has(label.dataset.elevator));
-  for (const [id,label] of objectLabels) label.classList.toggle("connected-object",!!connectedObjects?.has(id));
-  active?.view.widgets.forEach(styleWidget);
+  refreshConnections(true);
   drawTraffic(0);
   syncPlayback();
+}
+function refreshConnections(force=false) {
+  const anchor=network?.links.has(hoveredWidget) ? hoveredWidget : pickedObject;
+  const related=network?.related(anchor);
+  if (!force && related===connectedObjects) return;
+  connectedObjects=related;
+  for (const label of elevatorPanel.querySelectorAll<HTMLElement>("[data-elevator]"))
+    label.classList.toggle("connected-object",!!related?.has(label.dataset.elevator));
+  for (const [id,label] of objectLabels) label.classList.toggle("connected-object",!!related?.has(id));
+  active?.view.widgets.forEach(styleWidget);
 }
 let active: {id:string; scene:EntityScene; view:ReturnType<typeof assembledEntity>};
 let bright:string[] = [], pickedObject:string;
@@ -149,10 +155,11 @@ function styleWidget(node) {
 function highlight(ids:string[]) {
   const next=ids.filter(id=>active?.view.surfaces.get(id)?.layers.isEnabled(previewLayer.collider));
   const widget=active?.view.widgets.get(ids[0]);
-  const nextWidget=widget?.layers.mask ? ids[0] : undefined;
+  const nextWidget=widget?.layers.mask || network?.links.has(ids[0]) ? ids[0] : undefined;
   if (nextWidget===hoveredWidget && next.length===bright.length && next.every((id,i)=>id===bright[i])) return;
   const previous=active?.view.widgets.get(hoveredWidget);
   hoveredWidget=nextWidget;
+  refreshConnections();
   if (previous) styleWidget(previous);
   if (widget) styleWidget(widget);
   for (const id of new Set([...bright,...next])) {
@@ -276,6 +283,8 @@ function showElevators(next:EntityScene,same:boolean) {
     };
     const row=document.createElement("li"), label=document.createElement("label");
     label.dataset.elevator="object:"+lift.name.toLowerCase();
+    label.onpointerenter=()=>highlight([label.dataset.elevator]);
+    label.onpointerleave=()=>highlight([]);
     label.append(lift.name,select);
     row.append(label);
     return row;

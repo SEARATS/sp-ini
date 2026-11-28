@@ -166,7 +166,7 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
       #outline li { line-height:1.55; white-space:nowrap; }
       #outline li > span { padding-left:1em; }
       .selected-object { background:var(--vscode-list-activeSelectionBackground); color:var(--vscode-list-activeSelectionForeground); }
-      .connected-object { background:color-mix(in srgb,var(--vscode-focusBorder) 17%,transparent); }
+      .connected-object:not(.selected-object) { background:color-mix(in srgb,var(--vscode-focusBorder) 17%,transparent); }
       #outline p { margin:4px 0; color:var(--vscode-descriptionForeground); }
       .row .edit-tags { padding:0 3px; background:transparent; color:inherit; opacity:0; }
       .row:hover .edit-tags, .row:focus-within .edit-tags { opacity:1; }
