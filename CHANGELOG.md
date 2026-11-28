@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Toggle individual taxi, holding and approach paths in the hierarchy. Routes are visible from either side of the hull. Clicking selects the first item in the hover tooltip.
+- Toggle individual taxi, holding and approach paths in the hierarchy. Routes are visible from either side of the hull. Hover highlights flight points and paths ahead of the deck underneath. Clicking selects the first item in the tooltip.
 - **Elevator pose** outlines the platform and shows its authored raise and lower steps. Preview notes identify broken animation references. Taxi paths use the lift animation for outbound height.
 - The INI preview draws deck points as dark blue squares and connects taxi paths through their waypoints. Flight systems are blue, sensors yellow, and weapon arcs orange.
 - Search radars and helicopter rotors turn in the INI hierarchy preview. Use **Animations** to pause them.

@@ -1,4 +1,4 @@
-import { Raycaster, Vector2, type Object3D, type PerspectiveCamera } from "three";
+import { Matrix4, Raycaster, Vector2, Vector3, type Object3D, type PerspectiveCamera } from "three";
 import { previewLayer } from "./preview-display";
 import type { EntityPart, EntityObject } from "./entity-model";
 import {objectColor,type PreviewColor} from "./preview-colors";
@@ -29,14 +29,54 @@ export function hoverStack(hits: readonly {object:Object3D}[], parts: ReadonlyMa
     const part = parts.get(object.userData.partId);
     if (!part || ranked.has(part)) continue;
     const role: PreviewColor = object.userData.previewRole;
-    if (role) ranked.set(part,object.userData.deckPoint ? 1 : hoverPriority[role]);
+    if (role) {
+      // Flight overlays are drawn over the deck, including its system colliders.
+      const priority=object.userData.deckPoint ? -2 : object.userData.routeKind ? -1 : hoverPriority[role];
+      ranked.set(part,priority);
+    }
     else mesh ??= part;
   }
   if (!ranked.size) return mesh ? [mesh] : [];
   return [...ranked.entries()].sort((a,b)=>a[1]-b[1]).map(([part])=>part);
 }
 
-export function inspectEntity(canvas: HTMLCanvasElement, camera: PerspectiveCamera, model: () => Object3D, open: (id: string) => void,
+// Flight paths can render a single pixel wide. Measure pointer distance in CSS
+// pixels so the target stays usable when orbiting below deck or fitting a circuit.
+export function nearbyFlightWidgets(widgets:Iterable<Object3D>, parts:ReadonlyMap<string,Inspectable>, camera:PerspectiveCamera,
+  pointer:Vector2, width:number, height:number) {
+  const hits:{object:Object3D; pixels:number; depth:number}[]=[];
+  const view=new Matrix4(), a=new Vector3(), b=new Vector3(), start=new Vector3(), end=new Vector3();
+  const clip=(z:number)=>Math.max(-camera.far,Math.min(-camera.near,z));
+  for (const object of widgets) {
+    const {deckPoint,routeKind,partId}=object.userData;
+    if (!(deckPoint || routeKind) || !object.layers.isEnabled(routeKind ? previewLayer.route : previewLayer.widget)) continue;
+    const obj=parts.get(partId);
+    if (!obj || !("group" in obj)) continue;
+    view.multiplyMatrices(camera.matrixWorldInverse,object.parent.matrixWorld);
+    const points=obj.route?.points ?? [obj.position];
+    let pixels=Infinity, depth=Infinity;
+    for (let i=0;i<points.length;i++) {
+      const [x,y,z]=points[i];
+      b.set(-x,y,z).applyMatrix4(view);
+      if (i===0) a.copy(b);
+      if (Math.min(a.z,b.z)<=-camera.near && Math.max(a.z,b.z)>=-camera.far) {
+        const dz=b.z-a.z;
+        start.lerpVectors(a,b,dz ? (clip(a.z)-a.z)/dz : 0).applyMatrix4(camera.projectionMatrix);
+        end.lerpVectors(a,b,dz ? (clip(b.z)-a.z)/dz : 1).applyMatrix4(camera.projectionMatrix);
+        const ax=(start.x-pointer.x)*width/2, ay=(start.y-pointer.y)*height/2;
+        const dx=(end.x-start.x)*width/2, dy=(end.y-start.y)*height/2;
+        const t=Math.max(0,Math.min(1,-(ax*dx+ay*dy)/(dx*dx+dy*dy || 1)));
+        const distance=Math.hypot(ax+t*dx,ay+t*dy);
+        if (distance<pixels) { pixels=distance; depth=-Math.max(a.z,b.z); }
+      }
+      a.copy(b);
+    }
+    if (pixels<=5) hits.push({object,pixels,depth});
+  }
+  return hits.sort((a,b)=>a.pixels-b.pixels || a.depth-b.depth);
+}
+
+export function inspectEntity(canvas: HTMLCanvasElement, camera: PerspectiveCamera, model: () => Object3D, widgets:()=>Iterable<Object3D>, open: (id: string) => void,
   select: (id: string) => void, highlight: (ids:string[])=>void, inMode: (id:string)=>boolean) {
   const tip = document.querySelector<HTMLElement>("#part-tip");
   const parts = new Map<string,Inspectable>();
@@ -84,8 +124,10 @@ export function inspectEntity(canvas: HTMLCanvasElement, camera: PerspectiveCame
     const rect = canvas.getBoundingClientRect();
     pointer.set((event.clientX-rect.left)/rect.width*2-1, 1-(event.clientY-rect.top)/rect.height*2);
     ray.setFromCamera(pointer,camera);
-    ray.params.Line.threshold = Math.max(camera.near, camera.position.length()*0.002);
-    return hoverStack(ray.intersectObject(model(),true),parts);
+    ray.params.Line.threshold = 0;
+    const exact=ray.intersectObject(model(),true);
+    if (exact.some(({object})=>object.userData.deckPoint || object.userData.routeKind)) return hoverStack(exact,parts);
+    return hoverStack([...nearbyFlightWidgets(widgets(),parts,camera,pointer,rect.width,rect.height),...exact],parts);
   }
   function hide() {
     cancelAnimationFrame(scheduled);
@@ -99,7 +141,7 @@ export function inspectEntity(canvas: HTMLCanvasElement, camera: PerspectiveCame
     scheduled = requestAnimationFrame(()=>{
       const hits = hitsAt(event);
       if (!hits.length) { hide(); return; }
-      highlight("collider" in hits[0] && hits[0].collider ? hits.filter(part=>"collider" in part && part.collider).map(part=>part.id) : []);
+      highlight("collider" in hits[0] && hits[0].collider ? hits.filter(part=>"collider" in part && part.collider).map(part=>part.id) : [hits[0].id]);
       tip.textContent = hits.map(description).join("\n\n")+"\n"+hint(hits);
       tip.scrollTop = 0;
       tip.hidden = false;
@@ -124,8 +166,9 @@ export function inspectEntity(canvas: HTMLCanvasElement, camera: PerspectiveCame
   },true);
   canvas.addEventListener("click",event=>{
     if (event.button !== 0 || !press || Math.hypot(press.clientX-event.clientX,press.clientY-event.clientY)>4) return;
+    // The click event can round CSS coordinates that pointerdown preserved.
+    const hits=hitsAt(press), part=hits[0];
     press=undefined;
-    const hits=hitsAt(event), part=hits[0];
     if (event.ctrlKey || event.metaKey || event.shiftKey) {
       const id=targetId(hits,event.shiftKey);
       if (id) { select(event.shiftKey ? id : part.id); open(id); }
@@ -144,7 +187,7 @@ export function inspectEntity(canvas: HTMLCanvasElement, camera: PerspectiveCame
       label.tabIndex=0;
       label.dataset.partId=id;
       label.title=description(part)+"\n"+hint([part]);
-      if ("collider" in part && part.collider) {
+      if (("collider" in part && part.collider) || "group" in part) {
         label.addEventListener("pointerenter",()=>highlight([id]));
         label.addEventListener("pointerleave",()=>highlight([]));
         label.addEventListener("focus",()=>highlight([id]));

@@ -37,6 +37,7 @@ let renderer, controls, model;
 const objectLabels = new Map<string,HTMLElement>();
 let active: {id:string; scene:EntityScene; view:ReturnType<typeof assembledEntity>};
 let bright:string[] = [], pickedObject:string;
+let hoveredWidget:string;
 const arcGuides=new Map<string,{guides:ReturnType<typeof systemArcs>;firingArcs?:string;elevationArc?:string}>();
 const arcValues=document.querySelector<HTMLElement>("#arc-values");
 function syncArcs() {
@@ -77,9 +78,22 @@ function showArcValues() {
   }
 }
 const white=new Color(0xffffff);
+function styleWidget(node) {
+  const {partId,deckPoint,pathWidth,color}=node.userData;
+  const selected=partId===pickedObject, hovered=partId===hoveredWidget;
+  node.material.color.set(selected ? 0xffff77 : color);
+  if (hovered) node.material.color.lerp(white,0.55);
+  node.renderOrder=(deckPoint ? 14 : pathWidth ? 9 : 10)+(selected || hovered ? 1 : 0);
+}
 function highlight(ids:string[]) {
   const next=ids.filter(id=>active?.view.surfaces.get(id)?.layers.isEnabled(previewLayer.collider));
-  if (next.length===bright.length && next.every((id,i)=>id===bright[i])) return;
+  const widget=active?.view.widgets.get(ids[0]);
+  const nextWidget=widget?.layers.mask ? ids[0] : undefined;
+  if (nextWidget===hoveredWidget && next.length===bright.length && next.every((id,i)=>id===bright[i])) return;
+  const previous=active?.view.widgets.get(hoveredWidget);
+  hoveredWidget=nextWidget;
+  if (previous) styleWidget(previous);
+  if (widget) styleWidget(widget);
   for (const id of new Set([...bright,...next])) {
     const surface=active?.view.surfaces.get(id);
     if (!surface) continue;
@@ -91,7 +105,7 @@ function highlight(ids:string[]) {
   bright=next;
   if (renderer) render();
 }
-const inspector = inspectEntity(canvas,camera,()=>model,id=>vscode.postMessage({type:"openEntityPart",id}),id=>selectObject(id,true),highlight,
+const inspector = inspectEntity(canvas,camera,()=>model,()=>active?.view.widgets.values() ?? [],id=>vscode.postMessage({type:"openEntityPart",id}),id=>selectObject(id,true),highlight,
   id=>!excluded.has(id));
 function selectObject(id: string | undefined, reveal: boolean) {
   const selected = objectLabels.get(id);
@@ -103,12 +117,7 @@ function selectObject(id: string | undefined, reveal: boolean) {
     for (let el: HTMLElement = selected; el; el=el.parentElement) if (el instanceof HTMLDetailsElement) el.open=true;
     selected.scrollIntoView({block:"nearest"});
   }
-  model?.traverse(node=>{
-    if (!node.userData.widget) return;
-    const active = node.userData.partId === id;
-    node.material.color.set(active ? 0xffff77 : node.userData.color);
-    node.renderOrder = node.userData.deckPoint ? (active ? 15 : 14) : active ? 11 : node.userData.pathWidth ? 9 : 10;
-  });
+  active?.view.widgets.forEach(styleWidget);
   if (renderer) draw();
 }
 const saved = vscode.getState();

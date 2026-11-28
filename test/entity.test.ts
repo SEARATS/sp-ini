@@ -8,10 +8,10 @@ import { selectEntity, paintTexture, entityDocument } from "../src/entity-select
 import { assembledEntity, bindEntitySpins, entityBounds, patchEntity, poseElevator } from "../src/entity-viewer";
 import { entitySpins } from "../src/entity-spins";
 import { elevatorTravel } from "../src/elevator-travel";
-import { Box3, Group, LoadingManager, Mesh, MeshBasicMaterial, Vector3 } from "three";
+import { Box3, Group, LoadingManager, Mesh, MeshBasicMaterial, PerspectiveCamera, Vector2, Vector3 } from "three";
 import type { EntityPart, Vector } from "../src/entity-model";
 import { applyDisplay, previewLayer } from "../src/preview-display";
-import { hoverStack, sourceLocation } from "../src/entity-inspect";
+import { hoverStack, nearbyFlightWidgets, sourceLocation } from "../src/entity-inspect";
 import {unitCard} from "../src/unit-card";
 import {CardReferences} from "../src/card-references";
 import {StockAssets} from "../src/stock-assets";
@@ -141,14 +141,45 @@ test("flight paths use raised elevators, deck-relative air coordinates and indep
   const missing=await elevatorTravel(doc,parts,new Catalog(),new Materials(()=>undefined),warnings);
   assert.ok([...warnings].some(w=>w.includes("MoveUpAnimation=Lift")));
   assert.deepEqual(entityObjects(doc,parts,missing).find(o=>o.name==="TaxiPath1").position,[0,0,1]);
-  const hits = [hold,get("TaxiPath1"),get("RecoveryPoint1")].map(obj=>({object:view.widgets.get(obj.id)}));
-  assert.equal(hoverStack(hits,new Map(objects.map(obj=>[obj.id,obj])))[0].id,get("RecoveryPoint1").id);
+  const deck=new Group();
+  deck.userData={partId:"deck",previewRole:"flight"};
+  const hits = [deck,...[hold,get("TaxiPath1"),get("RecoveryPoint1")].map(obj=>view.widgets.get(obj.id))].map(object=>({object}));
+  const lookup=new Map([...objects,{...parts[0],id:"deck",collider:true}].map(p=>[p.id,p]));
+  for (const role of ["flight","hull","weapon"]) {
+    deck.userData.previewRole=role;
+    assert.deepEqual(hoverStack(hits,lookup).map(p=>p.id),[get("RecoveryPoint1").id,hold.id,get("TaxiPath1").id,"deck"]);
+  }
   const settings={meshes:true,colliders:true,objects:false,meshWireframe:false,colliderWireframe:true};
   for (const airPaths of [false,true]) for (const taxiPaths of [false,true]) {
     applyDisplay(view.model,new Map(),new Set(),{...settings,airPaths,taxiPaths});
     assert.equal(view.widgets.get(hold.id).layers.isEnabled(previewLayer.route),airPaths);
     assert.equal(view.widgets.get(get("TaxiPath1").id).layers.isEnabled(previewLayer.route),taxiPaths);
     assert.equal(entityBounds(view.model,true).radius>entityBounds(view.model).radius,airPaths);
+  }
+});
+
+test("deck point and route hover tolerance follows screen pixels and visibility",()=>{
+  const doc=parse("[Models]\n[FlightDeck]\nNumberOfTaxiPaths=1\nHoldWaypoints=0,0,0|1,0,0\n[LaunchPoint1]\nPosition=0,0,0\n[TaxiPoint1]\nPosition=3,0,0\n[TaxiPath1]\nFrom=LaunchPoint1\nTo=TaxiPoint1");
+  const parts=entityParts(doc,new Set()).map(r=>r.part), objects=entityObjects(doc,parts);
+  const view=assembledEntity({parts,objects,geometry:[],textures:[],warnings:[]},new LoadingManager());
+  applyDisplay(view.model,new Map(),new Set(),{meshes:true,colliders:true,objects:true,taxiPaths:true,airPaths:true,meshWireframe:false,colliderWireframe:false});
+  view.model.position.set(5,1,2);
+  view.model.updateMatrixWorld(true);
+  const camera=new PerspectiveCamera(42,2,0.1,400), lookup=new Map(objects.map(obj=>[obj.id,obj]));
+  for (const height of [8,-80]) {
+    camera.position.set(5,height,6);
+    camera.lookAt(5,1,2);
+    camera.updateMatrixWorld();
+    for (const [id,x] of [["object:launchpoint1",5],["object:taxipath1",3.5],["object:flightdeck/holdwaypoints",1]] as const) {
+      const widget=view.widgets.get(id), projected=new Vector3(x,1,2).project(camera);
+      const hit=(offset:number)=>nearbyFlightWidgets([widget],lookup,camera,new Vector2(projected.x,projected.y+offset*2/400),800,400).length;
+      assert.equal(hit(4),1,id);
+      assert.equal(hit(6),0,id);
+      const mask=widget.layers.mask;
+      widget.layers.disableAll();
+      assert.equal(hit(0),0,id);
+      widget.layers.mask=mask;
+    }
   }
 });
 
