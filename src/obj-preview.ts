@@ -8,6 +8,7 @@ import { modelTags } from "./model-tags";
 import { fbxOutline } from "./model-outline";
 import type { IniSource } from "./ini";
 import type { EntityScene } from "./entity-model";
+import { entityModes } from "./entity-mode";
 import { previewColors } from "./preview-colors";
 import { meshFlagMatcher, meshFlagSetting } from "./mesh-flags";
 import { isMissingTextureColor, type MissingTextureColor } from "./missing-textures";
@@ -169,7 +170,11 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
       .row:hover .edit-tags, .row:focus-within .edit-tags { opacity:1; }
       .edit-tags[hidden] { display:none; }
       .moves{display:inline-flex;opacity:0}.row:hover .moves,.row:focus-within .moves{opacity:1}.moves button{padding:0 3px}
-      #entity-pickers label { display:grid; gap:2px; margin:4px 0; }
+      #entity-pickers:not([hidden]) { display:grid; grid-template-columns:auto minmax(0,1fr); align-items:center; gap:4px 8px; margin:4px 0; }
+      #entity-pickers select { min-width:0; max-width:100%; }
+      #model-sources { grid-column:1 / -1; min-width:0; }
+      #model-sources li { margin:4px 0; white-space:normal; overflow-wrap:anywhere; }
+      #model-sources label { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:8px; align-items:center; }
       #entity-warnings { max-width:28rem; white-space:normal; }
       #filters { display:grid; grid-template-columns:auto auto; align-items:center; gap:4px 8px; margin:6px 0; }
       #filters label, .row { display:inline-flex; align-items:center; gap:4px; }
@@ -181,7 +186,11 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
       <canvas aria-label="3D model"></canvas><aside><div id="arc-values" hidden></div><button hidden>Fit model</button> <span role="status">${loading}</span></aside>
       <div id="part-tip" role="tooltip" hidden></div>
       <details id="outline" open><summary>Model hierarchy</summary>
-      <div id="entity-pickers" hidden><label>Entity<select id="entity"></select></label><div hidden><label><span id="appearance-label">Appearance</span><select id="appearance"></select></label></div><div id="model-sources"></div></div>
+      <div id="entity-pickers" hidden>
+      <label for="entity">Entity</label><select id="entity"></select>
+      <label for="appearance" id="appearance-label" hidden>Appearance</label><select id="appearance" hidden></select>
+      <label for="entity-mode">Mode</label><select id="entity-mode">${entityModes.map(mode => `<option>${mode}</option>`).join("")}</select>
+      <details id="model-sources" hidden><summary>Model sources</summary><ul></ul></details></div>
       <div id="filters"><label><input id="meshes" type="checkbox" checked>Meshes</label>
       <select id="meshWireframe" aria-label="Mesh render mode"><option value="shaded">Shaded</option><option value="wireframe">Wireframe</option></select>
       <label><input id="colliders" type="checkbox" checked>Colliders</label>

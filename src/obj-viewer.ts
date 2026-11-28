@@ -10,6 +10,7 @@ import { colliderType, type MeshTags } from "./mesh-names";
 import { applyDisplay, previewLayer, type DisplaySettings } from "./preview-display";
 import { assembledEntity, patchEntity } from "./entity-viewer";
 import type { EntityScene } from "./entity-model";
+import { entityModes, excludedOverlays, type EntityMode } from "./entity-mode";
 import { previewColors } from "./preview-colors";
 import { inspectEntity } from "./entity-inspect";
 import {placeSystemArcs,systemArcs} from "./system-arcs";
@@ -18,7 +19,7 @@ import { previewDaylight, fitEntityShadows, renderDaylight } from "./preview-lig
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
-type SavedDisplay = Partial<DisplaySettings> & {hidden?: string[]; wireframe?: boolean; entity?: string; appearance?: string; modelSources?:Record<string,string>};
+type SavedDisplay = Partial<DisplaySettings> & {mode?: EntityMode; hidden?: string[]; wireframe?: boolean; entity?: string; appearance?: string; modelSources?:Record<string,string>};
 declare function acquireVsCodeApi(): { postMessage(message: unknown): void; getState(): SavedDisplay | undefined; setState(value: SavedDisplay): void };
 const vscode = acquireVsCodeApi();
 const status = document.querySelector("[role=status]");
@@ -90,14 +91,15 @@ function highlight(ids:string[]) {
   bright=next;
   if (renderer) render();
 }
-const inspector = inspectEntity(canvas,camera,()=>model,ids=>vscode.postMessage({type:"openEntityPart",ids}),id=>selectObject(id,true),highlight);
-function selectObject(id: string, reveal: boolean) {
+const inspector = inspectEntity(canvas,camera,()=>model,ids=>vscode.postMessage({type:"openEntityPart",ids}),id=>selectObject(id,true),highlight,
+  id=>!excluded.has(id));
+function selectObject(id: string | undefined, reveal: boolean) {
   const selected = objectLabels.get(id);
-  if (!selected) return;
+  if (id && !selected) return;
   pickedObject=id;
   showArcValues();
   for (const label of objectLabels.values()) label.classList.toggle("selected-object",label === selected);
-  if (reveal) {
+  if (reveal && selected) {
     for (let el: HTMLElement = selected; el; el=el.parentElement) if (el instanceof HTMLDetailsElement) el.open=true;
     selected.scrollIntoView({block:"nearest"});
   }
@@ -110,6 +112,19 @@ function selectObject(id: string, reveal: boolean) {
   if (renderer) draw();
 }
 const saved = vscode.getState();
+let mode: EntityMode = entityModes.includes(saved?.mode) ? saved.mode : "Everything";
+let excluded = new Set<string>();
+const modeSelect = document.querySelector<HTMLSelectElement>("#entity-mode");
+modeSelect.value = mode;
+modeSelect.onchange = () => {
+  mode = modeSelect.value as EntityMode;
+  if (active) {
+    excluded = excludedOverlays(active.scene, mode);
+    if (excluded.has(pickedObject)) selectObject(undefined,false);
+    inspector.refreshLinks(outline);
+  }
+  changed();
+};
 let selectedEntity = saved?.entity, selectedAppearance = saved?.appearance;
 let selectedSources:Record<string,string> = saved?.modelSources ?? {};
 let initializedEntity = saved?.entity;
@@ -128,32 +143,36 @@ let meshTags: MeshTags = new Map();
 let canEditTags = false;
 let meshOrder:string[] = [], redrawOrder:() => void;
 let updateFlagRows: (() => void)[] = [];
-const inCategory = (part: PreviewPart) => part.widget ? settings.objects || (settings.arcs && arcGuides.has(part.id)) : part.collider ? settings.colliders : settings.meshes;
+function inCategory(part: PreviewPart) {
+  if (excluded.has(part.id)) return false;
+  if (part.widget) return settings.objects || (settings.arcs && arcGuides.has(part.id));
+  return part.collider ? settings.colliders : settings.meshes;
+}
 function updateDisplay() {
   updateRows.forEach(update => update());
   if (model) {
-    applyDisplay(model, categories, hidden, {...settings, missingTextureColor});
+    applyDisplay(model, categories, excluded.size ? new Set([...hidden,...excluded]) : hidden, {...settings, missingTextureColor});
     if (sun.castShadow) renderer.shadowMap.needsUpdate = true;
     draw();
   }
 }
 function changed() {
   updateDisplay();
-  vscode.setState({...settings, hidden: [...hidden], entity:selectedEntity, appearance:selectedAppearance, modelSources:selectedSources});
+  vscode.setState({...settings, mode, hidden: [...hidden], entity:selectedEntity, appearance:selectedAppearance, modelSources:selectedSources});
 }
 entitySelect.onchange = () => vscode.postMessage({type:"selectEntity",entity:entitySelect.value});
 appearanceSelect.onchange = () => vscode.postMessage({type:"selectEntity",entity:entitySelect.value,appearance:appearanceSelect.value,modelSources:selectedSources});
 function showModelSources(choices: ModelSourceChoice[]) {
   selectedSources = Object.fromEntries(choices.filter(c=>c.selected).map(c=>[c.key,c.selected]));
-  document.getElementById("model-sources").replaceChildren(...choices.map(choice=>{
-    const label = document.createElement("label");
-    label.append(choices.length === 1 ? "Model source" : "Model source · " + choice.key);
-    label.title = choice.key;
+  const sources = document.querySelector<HTMLDetailsElement>("#model-sources");
+  sources.hidden = !choices.length;
+  sources.querySelector("ul").replaceChildren(...choices.map(choice=>{
+    const item = document.createElement("li");
     if (choice.files.length === 1) {
-      const value = document.createElement("span");
-      value.textContent = choice.files[0].label;
-      label.append(value);
+      item.textContent = choice.key + " · " + choice.files[0].label;
     } else {
+      const label = document.createElement("label");
+      label.append(choice.key);
       const select = document.createElement("select");
       select.add(new Option("Auto (" + choice.files[0].label + " first)", ""));
       for (const file of choice.files) select.add(new Option(file.label,file.id));
@@ -165,8 +184,9 @@ function showModelSources(choices: ModelSourceChoice[]) {
         vscode.postMessage({type:"selectEntity",entity:selectedEntity,appearance:selectedAppearance,modelSources:selectedSources});
       };
       label.append(select);
+      item.append(label);
     }
-    return label;
+    return item;
   }));
 }
 for (const category of ["meshes","colliders","objects","arcs"] as const) {
@@ -282,7 +302,12 @@ function showOutline(nodes: OutlineNode[], note = "", uri?: string, preserve=fal
       check.checked = visible > 0 && visible === active.length;
       check.indeterminate = visible > 0 && visible < active.length;
       check.disabled = !active.length;
-      item.hidden = !entityTrees && !subtree.some(inCategory) && !(subtree.length === 0 && settings.meshes && settings.colliders);
+      if (entityTrees) {
+        const matches = node.entityId && !excluded.has(node.entityId);
+        item.hidden = mode !== "Everything" && !matches && children.every(child=>child.item.hidden);
+      } else {
+        item.hidden = !subtree.some(inCategory) && !(subtree.length === 0 && settings.meshes && settings.colliders);
+      }
     });
     if (node.children.length || node.tree) {
       const branch = document.createElement("details");
@@ -298,7 +323,7 @@ function showOutline(nodes: OutlineNode[], note = "", uri?: string, preserve=fal
     }
     return {item, subtree};
   }
-  outline.querySelector("ul").replaceChildren(...rows(nodes,"",0).map(row => row.item));
+  outline.querySelector(":scope > ul").replaceChildren(...rows(nodes,"",0).map(row => row.item));
   if (preserve) outline.scrollTop=scroll;
   updateDisplay();
 }
@@ -335,7 +360,7 @@ function render() {
       camera.layers.enable(previewLayer.arc);
       for (const [id,{guides}] of arcGuides) {
         for (const {line,color} of guides) {
-          line.visible=!hidden.has(id);
+          line.visible=!hidden.has(id) && !excluded.has(id);
           line.material.color.setHex(color).multiplyScalar(arcGuides.has(pickedObject) && pickedObject!==id ? 0.45 : 1);
           line.renderOrder=pickedObject===id ? 13 : 12;
         }
@@ -414,6 +439,8 @@ async function loadEntity(id:string, next:EntityScene, documentUri:string) {
     fitEntityShadows(sun,model);
     initializedEntity=id;
     active={id,scene:next,view};
+    excluded=excludedOverlays(next,mode);
+    if (excluded.has(pickedObject)) pickedObject=undefined;
     syncArcs();
     inspector.setParts([...next.parts,...(next.objects || [])],documentUri);
     if (staged) {
@@ -556,8 +583,9 @@ window.addEventListener("message", ({ data }) => {
     showModelSources(data.modelSources ?? []);
     picker.hidden = false;
     entitySelect.disabled = data.entities.length === 1;
-    picker.querySelector("#appearance-label").textContent = data.appearances.some(c=>/^squadron/i.test(c.id)) ? "Squadron" : "Variant";
-    appearanceSelect.parentElement.parentElement.hidden = !data.appearances.length;
+    const appearanceLabel = picker.querySelector<HTMLLabelElement>("#appearance-label");
+    appearanceLabel.textContent = data.appearances.some(c=>/^squadron/i.test(c.id)) ? "Squadron" : "Variant";
+    appearanceLabel.hidden = appearanceSelect.hidden = !data.appearances.length;
     return;
   }
   if (data.type === "entityScene") {

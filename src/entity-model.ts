@@ -151,7 +151,7 @@ export function entityObjects(doc: ReturnType<typeof parse>, parts: EntityPart[]
   const groups: [RegExp, ObjectGroup][] = [
     [/^SensorSystem\d+$/i,"Sensors"], [/^WeaponSystem\d+$/i,"Weapons"], [/^CombatSystem\d+$/i,"Combat systems"],
     [/^(?:ControlSystem|MainPowerSystem|(?:PropulsionSystem|RudderSystem)\d+)$/i,"Ship systems"],
-    [/^DecoySystem\d+$/i,"Decoys"], [/^(?:LaunchPoint|RecoveryPoint|Elevator)\d+$/i,"Flight deck"],
+    [/^DecoySystem\d+$/i,"Decoys"], [/^(?:FlightDeck|(?:LaunchPoint|RecoveryPoint|Elevator|TaxiPoint|TaxiPath)\d+)$/i,"Flight deck"],
     [/^Magazine\d+$/i,"Magazines"]
   ];
   const objects: EntityObject[] = [];
