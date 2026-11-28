@@ -11,9 +11,10 @@ import { StockAssets, resolvedDiffuse } from "./stock-assets";
 import { field, entityParts, entityObjects, type EntityScene, type EntityChunk } from "./entity-model";
 import { entityResourceSources, modelResource } from "./entity-resources";
 import { type parse } from "./ini";
-import { paintTexture, type Appearance } from "./entity-selection";
+import { readEntityDefinition, paintTexture, type Appearance } from "./entity-selection";
 import { entitySpins } from "./entity-spins";
 import { elevatorTravel } from "./elevator-travel";
+import { airGroupPerformance } from "./flight-speeds";
 import { flightDeckLayout } from "./flight-traffic";
 
 async function previewTexture(image: PNG, opaque: boolean): Promise<EntityScene["textures"][number]> {
@@ -42,6 +43,21 @@ export function reusePreviewAsset(chunk:EntityChunk, known:Set<string>):EntityCh
   } else hash.update(chunk.data.alpha).update(chunk.data.png);
   const digest=hash.digest("hex");
   return {...chunk,digest,...(known.has(digest) ? {data:undefined} : {})};
+}
+
+export async function carrierAircraft(doc:ReturnType<typeof parse>,paint:Appearance,catalog:Catalog,materials:Materials,signal:AbortSignal) {
+  const variant=paint?.selected ?? paint?.defaults;
+  const group=/^true$/i.test(field(variant,"customairgroup")?.value) ? variant : doc.sections.find(s=>/^airgroup$/i.test(s.name));
+  const profiles=[];
+  for (const key of group?.keys ?? []) {
+    if (!key.value.split("|").some(s=>Number(s.split(",")[1])>0)) continue;
+    const file=catalog.ordered(catalog.paths.get("aircraft/"+key.name.toLowerCase()+".ini") ?? [])[0]?.file;
+    if (!file) continue;
+    signal.throwIfAborted();
+    const profile=airGroupPerformance(key.name,await readEntityDefinition(file,catalog,materials));
+    if (profile) profiles.push(profile);
+  }
+  return profiles;
 }
 
 export async function entityAssets(doc: ReturnType<typeof parse>, uri: string, catalog: Catalog, meshes: MeshFiles, materials: Materials, stock: StockAssets, paint: Appearance, resources: Awaited<ReturnType<typeof entityResourceSources>>, signal:AbortSignal, emit?: (chunk:EntityChunk)=>Promise<void>, watch?:(uri:string)=>void) {
@@ -152,6 +168,7 @@ export async function entityAssets(doc: ReturnType<typeof parse>, uri: string, c
     scene.elevators = await elevatorTravel(doc,scene.parts,catalog,materials,warnings);
     scene.objects = entityObjects(doc,scene.parts,scene.elevators);
     scene.flightDeck = flightDeckLayout(doc,scene);
+    if (scene.flightDeck) scene.flightDeck.aircraft=await carrierAircraft(doc,paint,catalog,materials,signal);
     scene.spins = await entitySpins(doc,scene.parts,catalog,materials);
     await textureWork;
     if (textureFailure) throw textureFailure;

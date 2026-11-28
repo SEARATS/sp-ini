@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Select a flight path or deck point to highlight its connections in the hierarchy and follow one aircraft cube. Clear the selection with Escape to see concurrent operations. **Animations** pauses playback.
+- Select a flight path or deck point to highlight its full route in the hierarchy and follow one aircraft cube. Selecting an elevator path highlights every connected launch and recovery branch. Clear the selection with Escape to see concurrent operations. Toggle the cubes with **Aircraft**. Each elevator set to **Animate** carries its aircraft during launch and recovery. Cubes use the carrier’s taxi speeds and the embarked aircraft’s performance when available.
 - Unit hints abbreviate Unity units as `uu`.
 
 - Flight-deck values show unit hints. Ctrl-click an elevator’s launch-point numbers to open their definitions. Static analysis checks flight-deck counts against numbered sections and deck-zone points.

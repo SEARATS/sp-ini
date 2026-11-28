@@ -202,7 +202,8 @@ function registerObjPreview(context, entityRequest, onIndexChanged: vscode.Event
       <div id="arc-filter" hidden><label><input id="arcs" type="checkbox" checked>System arcs</label></div>
       <div id="taxiPaths-filter" hidden><label><input id="taxiPaths" type="checkbox" checked>Deck taxi paths</label></div>
       <div id="airPaths-filter" hidden><label><input id="airPaths" type="checkbox">Airborne paths</label></div>
-      <div id="animation-filter" hidden><label><input id="animations" type="checkbox">Animations</label></div></div>
+      <div id="animation-filter" hidden><label><input id="animations" type="checkbox">Animations</label></div>
+      <div id="aircraft-filter" hidden><label><input id="aircraft" type="checkbox">Aircraft</label></div></div>
       <p></p><p id="sidecar-error" role="status" hidden></p><details id="entity-warnings" hidden><summary></summary><div></div></details><ul></ul>
       <details id="elevators" hidden><summary>Elevators</summary><ul></ul></details></details>
       <script nonce="${nonce}" src="${script}"></script></body></html>`;

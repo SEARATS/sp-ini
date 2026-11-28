@@ -1,3 +1,4 @@
+import { visibleRoutePoints } from "./entity-model";
 import { Matrix4, Raycaster, Vector2, Vector3, type Object3D, type PerspectiveCamera } from "three";
 import { previewLayer } from "./preview-display";
 import type { EntityPart, EntityObject } from "./entity-model";
@@ -53,7 +54,7 @@ export function nearbyFlightWidgets(widgets:Iterable<Object3D>, parts:ReadonlyMa
     const obj=parts.get(partId);
     if (!obj || !("group" in obj)) continue;
     view.multiplyMatrices(camera.matrixWorldInverse,object.parent.matrixWorld);
-    const points=obj.route?.points ?? [obj.position];
+    const points=visibleRoutePoints(obj.route) ?? [obj.position];
     let pixels=Infinity, depth=Infinity;
     for (let i=0;i<points.length;i++) {
       const [x,y,z]=points[i];
