@@ -2,6 +2,7 @@ import { readBlendPreview } from "./blend-export";
 import { fbxGeometry } from "./fbx-geometry";
 import * as fs from "node:fs/promises";
 import { modelResourcePath } from "./model-resource-path";
+import { PreviewCache } from "./preview-cache";
 import { reference, referenceContext, isMesh } from "./references";
 
 const objectHeader = /^\s*o\s+([^#]+?)(?:\s*#.*)?$/;
@@ -77,12 +78,42 @@ export function triangles(model: ReturnType<typeof parseObj>, object: ReturnType
 class MeshFiles {
   constructor(private readonly openDocument: (uri: string) => Pick<import('vscode-languageserver-textdocument').TextDocument, 'getText' | 'version'> = () => undefined) {}
   cache = new Map();
+  previewCache = new PreviewCache();
+  private buffers = new WeakMap<object,Map<boolean,ReturnType<typeof triangles>>>();
+
+  previewTriangles(model:ReturnType<typeof parseObj>, object:ReturnType<typeof parseObj>["objects"][number], mirror:boolean) {
+    let sides = this.buffers.get(object);
+    if (!sides) this.buffers.set(object,sides=new Map());
+    if (!sides.has(mirror)) sides.set(mirror,triangles(model,object,mirror));
+    return sides.get(mirror);
+  }
+
+  async previewSource(file, blend?: {blender:string;signal:AbortSignal}) {
+    // A Blender file can link external assets. Open documents can contain unsaved geometry.
+    const persistent = this.previewCache.directory && !blend && !this.openDocument(file.uri);
+    const stat = persistent && await fs.stat(file.full).catch(()=>undefined);
+    const key = stat && [file.uri,stat.size,stat.mtimeMs,stat.ctimeMs];
+    let loading:Promise<ReturnType<typeof parseObj>>;
+    const model = () => loading ??= this.model(file,blend);
+    const names = async () => (await model())?.objects.filter(o=>o.faces.length).map(o=>o.name);
+    const drawable = key ? await this.previewCache.get(["objects",...key],names) : await names();
+    if (!drawable?.length) return;
+    const objects = new Set(drawable);
+    return async (name:string, mirror:boolean) => {
+      if (!objects.has(name)) return;
+      const build = async () => {
+        const source = await model(), object = source?.objects.find(o=>o.name===name && o.faces.length);
+        if (object) return this.previewTriangles(source,object,mirror);
+      };
+      return key ? this.previewCache.get(["triangles",...key,name,mirror],build) : build();
+    };
+  }
 
   async model(file, blend?: {blender:string;signal:AbortSignal}) {
     const doc = this.openDocument(file.uri);
     const stamp = doc ? undefined : await fs.stat(file.full).catch(() => null);
     if (!stamp && !doc) return;
-    const version = doc ? "open:" + doc.version : stamp.mtimeMs + ":" + stamp.size + ":" + (blend?.blender || "");
+    const version = doc ? "open:" + doc.version : [stamp.mtimeMs,stamp.ctimeMs,stamp.size,blend?.blender].join(":");
     const cached = this.cache.get(file.uri);
     if (cached?.version === version && cached.doc === doc) return cached.model;
     let model;

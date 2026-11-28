@@ -9,6 +9,7 @@ import { reference, referenceContext } from "./references";
 import { materialProperties, unityPropertyDiagnostics } from "./material-properties";
 import { unityMaterial } from "./unity-material";
 import { materialSwatch } from "./material-swatch";
+import type { PreviewCache } from "./preview-cache";
 
 const escape = text => text.replace(/[^\p{L}\p{N} _-]/gu, ch => "\\" + ch);
 function imageUri(image, budget = 42000) {
@@ -65,35 +66,62 @@ function diffusePreview(image, doc) {
 }
 
 class Materials {
-  cache = new Map();
-  constructor(private readonly openIni: (uri: string) => ReturnType<typeof parse>) {}
+  constructor(private readonly openIni: (uri: string) => ReturnType<typeof parse>,
+    private readonly cache=new Map(), private readonly documents=new Map(), private readonly onRead?:(uri:string)=>void,
+    private readonly derived?:PreviewCache) {}
+
+  forPreview(onRead:(uri:string)=>void, derived:PreviewCache) {
+    return new Materials(this.openIni,this.cache,this.documents,onRead,derived);
+  }
+
+  private async readDocument<T>(file,decode:(text:string)=>T) {
+    this.onRead?.(file.uri);
+    const stat=await fs.stat(file.full).catch(()=>undefined);
+    if (!stat) return;
+    const stamp=[stat.size,stat.mtimeMs,stat.ctimeMs].join("/");
+    const hit=this.documents.get(file.uri);
+    if (hit?.stamp===stamp) return hit.value as T;
+    const value=await fs.readFile(file.full,"utf8").then(decode,()=>undefined);
+    if (this.documents.size>=96) this.documents.delete(this.documents.keys().next().value);
+    this.documents.set(file.uri,{stamp,value});
+    return value;
+  }
 
   async readIni(file) {
-    return this.openIni(file.uri) || await fs.readFile(file.full, "utf8").then(parse, () => null);
+    this.onRead?.(file.uri);
+    return this.openIni(file.uri) || await this.readDocument(file,parse);
   }
 
   async texture(file, maxSize=384) {
     if (!file || !/\.(png|jpe?g|tga)$/i.test(file.rel)) return;
+    this.onRead?.(file.uri);
     const stat = await fs.stat(file.full).catch(() => null);
     if (!stat || stat.size > 96 * 1024 * 1024) return;
     const key = file.uri+"#"+maxSize, old = this.cache.get(key);
-    if (old?.stamp === stat.mtimeMs && old.size === stat.size) return old.image;
-    let image;
-    try {
+    const stamp=[stat.size,stat.mtimeMs,stat.ctimeMs].join("/");
+    if (old?.stamp === stamp) return old.image;
+    const decode = async () => {
       const bytes = await fs.readFile(file.full);
       const png = /\.png$/i.test(file.rel);
       if (png && bytes.readUInt32BE(16) * bytes.readUInt32BE(20) > 32 * 1024 * 1024) return;
       if (/\.tga$/i.test(file.rel)) {
         if (bytes.length < 18 || bytes.readUInt16LE(12)*bytes.readUInt16LE(14) > 32*1024*1024 || ![8,16,24,32].includes(bytes[16])) return;
         const decoded = new TGALoader().parse(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer) as unknown as {width:number; height:number; data:Uint8Array};
-        image = resize({...decoded, data:Buffer.from(decoded.data)},maxSize);
+        return resize({...decoded, data:Buffer.from(decoded.data)},maxSize);
       } else {
-        const source = png ? PNG.sync.read(bytes) : jpeg.decode(bytes, {maxResolutionInMP:32, maxMemoryUsageInMB:256});
-        image = resize(source,maxSize);
+        const source = png ? await new Promise<PNG>((resolve,reject)=>new PNG().parse(bytes,(err,img)=>err ? reject(err) : resolve(img)))
+          : jpeg.decode(bytes, {maxResolutionInMP:32, maxMemoryUsageInMB:256});
+        return resize(source,maxSize);
       }
-    } catch { return; }
+    };
+    // Store just the resized RGBA image, without the PNG parser and its event listeners.
+    const pixels=async()=>{
+      const image=await decode();
+      if (image) return {width:image.width,height:image.height,data:image.data};
+    };
+    const image=await (this.derived ? this.derived.get(["pixels",key,stamp],pixels) : pixels()).catch(()=>undefined);
     if (this.cache.size >= 24) this.cache.delete(this.cache.keys().next().value);
-    this.cache.set(key, { stamp: stat.mtimeMs, size: stat.size, image });
+    this.cache.set(key, {stamp,image});
     return image;
   }
 
@@ -119,8 +147,7 @@ class Materials {
       const doc = await this.readIni(file);
       return {doc,maps:this.maps(file,catalog,doc),issues:check && doc ? materialProperties(doc) : []};
     }
-    const text = await fs.readFile(file.full,"utf8").catch(() => "");
-    const asset = unityMaterial(text);
+    const {text,asset} = await this.readDocument(file,text=>({text,asset:unityMaterial(text)})) ?? {text:"",asset:undefined};
     const maps = (asset?.maps ?? []).map(({name,guid}) => {
       const texture = catalog.textureByGuid(guid,file.full);
       return {key:{name,value:texture?.rel ?? guid},file:texture};

@@ -8,13 +8,14 @@ import { orderedSiblings } from "./mesh-order";
 import { meshMoveButtons } from "./mesh-move-buttons";
 import { colliderType, type MeshTags } from "./mesh-names";
 import { applyDisplay, previewLayer, type DisplaySettings } from "./preview-display";
-import { assembledEntity, bindEntitySpins, elevatorClips, entityBounds, patchEntity, poseElevator } from "./entity-viewer";
+import { assembledEntity, bindEntitySpins, elevatorClips, entityBounds, entityGeometry, entityTexture, patchEntity, poseElevator } from "./entity-viewer";
 import type { EntityScene } from "./entity-model";
+import { EntityStream } from "./entity-stream";
 import { entityModes, excludedOverlays, type EntityMode } from "./entity-mode";
 import { previewColors, weaponArcColors } from "./preview-colors";
 import { inspectEntity } from "./entity-inspect";
 import {placeSystemArcs,systemArcs} from "./system-arcs";
-import { Texture, Box3, Color, LoadingManager, PerspectiveCamera, Scene, Sphere, WebGLRenderer } from "three";
+import { Texture, TextureLoader, Box3, Color, LoadingManager, PerspectiveCamera, Scene, Sphere, WebGLRenderer } from "three";
 import { previewDaylight, fitEntityShadows, renderDaylight } from "./preview-lighting";
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
@@ -489,29 +490,45 @@ function resize() {
   draw();
 }
 
-function dispose(group) {
+function dispose(group, keep=new Set<unknown>()) {
   group.traverse(child => {
-    child.geometry?.dispose();
+    if (!keep.has(child.geometry)) child.geometry?.dispose();
     if (child.material) [child.material].flat().forEach(material => {
-      for (const value of Object.values(material)) if (value instanceof Texture) value.dispose();
+      for (const value of Object.values(material)) if (value instanceof Texture && !keep.has(value)) value.dispose();
       material.dispose();
     });
   });
 }
 
 let revision = 0;
-async function loadEntity(id:string, next:EntityScene, documentUri:string) {
+let streamVersion:number, stream:EntityStream, streamFramed=false, streamMoved=false, paintFrame=0;
+let retained:Pick<EntityStream,"cachedGeometry"|"cachedTextures">;
+function paintStream() {
+  if (!paintFrame) paintFrame=requestAnimationFrame(()=>{ paintFrame=0; if (controls) render(); });
+}
+function clearStream() {
+  stream?.dispose();
+  stream=undefined;
+  if (model) model.visible=true;
+  streamFramed=false;
+  streamMoved=false;
+}
+async function loadEntity(id:string, next:EntityScene, documentUri:string, incoming?:EntityStream) {
   const current=++revision, same=active?.id===id;
   let staged:ReturnType<typeof assembledEntity>;
   try {
-    const patched=same && patchEntity(active.view,active.scene,next);
+    const manager=incoming?.display ? incoming.manager : new LoadingManager();
+    const loader=new TextureLoader(manager);
+    manager.onProgress=paintStream;
+    manager.onLoad=()=>{if (model) { markMissingMaps(model); updateDisplay(); }};
+    const patched=same && patchEntity(active.view,active.scene,next,loader);
     if (!patched) {
-      const manager=new LoadingManager();
-      const loaded=new Promise<void>(resolve=>{manager.onLoad=resolve;});
-      staged=assembledEntity(next,manager);
-      if (next.textures.length) await loaded;
-      if (current!==revision) { dispose(staged.model); return; }
-      markMissingMaps(staged.model);
+      const priorBuffers=new Map(active?.scene.geometry.map((g,i)=>[g,active.view.meshes[i]]));
+      const priorTextures=new Map(active?.scene.textures.map((t,i)=>[t,active.view.textures[i]]));
+      const buffers=incoming?.display ? incoming.buffers : next.geometry.map(g=>priorBuffers.get(g) ?? entityGeometry(g));
+      const maps=incoming?.display ? incoming.maps : next.textures.map(t=>priorTextures.get(t) ?? entityTexture(loader,t));
+      staged=assembledEntity(next,manager,buffers,maps);
+      if (incoming?.texturesSettled) markMissingMaps(staged.model);
     }
     const view=staged || active.view;
     const extent=entityBounds(view.model);
@@ -521,7 +538,7 @@ async function loadEntity(id:string, next:EntityScene, documentUri:string) {
       if (same) staged.model.position.copy(model.position);
       else staged.model.position.sub(extent.center);
       extent.center.add(staged.model.position);
-      if (model) { scene.remove(model); dispose(model); }
+      if (model) { scene.remove(model); dispose(model,new Set<unknown>([...staged.meshes,...staged.textures])); }
       model=staged.model;
       scene.add(model);
     }
@@ -536,6 +553,7 @@ async function loadEntity(id:string, next:EntityScene, documentUri:string) {
     fitEntityShadows(sun,model);
     initializedEntity=id;
     active={id,scene:next,view};
+    retained=incoming && {cachedGeometry:incoming.cachedGeometry,cachedTextures:incoming.cachedTextures};
     if (!same) animationSeconds = 0;
     showElevators(next,same);
     for (const kind of ["taxiPaths","airPaths"] as const)
@@ -556,7 +574,11 @@ async function loadEntity(id:string, next:EntityScene, documentUri:string) {
     }
     showArcValues();
     changed();
-    if (!same) frame();
+    if (!same && streamMoved && staged) {
+      camera.position.add(staged.model.position);
+      controls.target.add(staged.model.position);
+      controls.update();
+    } else if (!same) frame();
     canvas.setAttribute("aria-label",[id,selectedAppearance].filter(Boolean).join(" · ")+" 3D preview");
     fit.hidden=false;
     status.textContent="Drag to orbit · Scroll to zoom";
@@ -564,6 +586,13 @@ async function loadEntity(id:string, next:EntityScene, documentUri:string) {
   } catch (error) {
     if (staged && staged.model!==model) dispose(staged.model);
     if (current===revision) status.textContent=error.message;
+  } finally {
+    if (incoming) {
+      incoming.dispose(!!staged && staged.model===model);
+      stream=undefined;
+      if (model) model.visible=true;
+      paintStream();
+    }
   }
 }
 
@@ -640,6 +669,7 @@ try {
     }));
   });
   controls = new OrbitControls(camera, canvas);
+  controls.addEventListener("start",()=>{if (streamFramed) streamMoved=true;});
   controls.addEventListener("change", draw);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.autoUpdate = false;
@@ -673,8 +703,34 @@ window.addEventListener("message", ({ data }) => {
     return;
   }
   if (data.type === "entityLoading" || data.type === "entityError") {
+    if (data.type==="entityError" && data.version!==streamVersion) return;
+    streamVersion=data.version;
+    clearStream();
+    if (data.type==="entityLoading" && retained) vscode.postMessage({type:"entityCachedAssets",version:data.version,
+      digests:[...retained.cachedGeometry.keys(),...retained.cachedTextures.keys()]});
+    if (controls) paintStream();
     revision++;
     if (data.message || !model) status.textContent = data.message || "Assembling entity…";
+    return;
+  }
+  if (data.type==="entityChunk") {
+    if (data.version!==streamVersion || !controls) return;
+    const chunk=data.chunk;
+    if (chunk.kind==="parts") {
+      const manager=new LoadingManager();
+      const batch=stream=new EntityStream(chunk.parts,active?.id!==data.entity,manager);
+      manager.onProgress=()=>{if (stream===batch && streamFramed) paintStream();};
+    } else if (stream) {
+      const visible=stream.append(chunk,settings,hidden,retained);
+      if (visible && !streamFramed) {
+        streamFramed=true;
+        if (model) model.visible=false;
+        scene.add(stream.group);
+        bounds.copy(entityBounds(stream.group));
+        bounds.radius ||= 1;
+        frame();
+      } else if (streamFramed) paintStream();
+    }
     return;
   }
   if (data.type === "entityChoices") {
@@ -696,12 +752,14 @@ window.addEventListener("message", ({ data }) => {
     return;
   }
   if (data.type === "entityScene") {
+    if (data.version!==undefined && streamVersion!==undefined && data.version!==streamVersion) return;
+    if (stream) Object.assign(data.scene,{geometry:stream.geometry,textures:stream.textures});
     const notes: string[] = data.scene.warnings;
     warnings.hidden = !notes.length;
     warnings.querySelector("summary").textContent = "Preview notes ("+notes.length+")";
     warnings.querySelector("div").replaceChildren(...notes.map(note=>{const p=document.createElement("p");p.textContent=note;return p;}));
     const report=(applied:boolean)=>vscode.postMessage({type:"entityRendered",version:data.version,applied});
-    if (controls) void loadEntity(data.entity,data.scene,data.documentUri).then(applied=>report(!!applied));
+    if (controls) void loadEntity(data.entity,data.scene,data.documentUri,stream).then(applied=>report(!!applied));
     else { status.textContent = "The entity preview needs WebGL 2."; report(false); }
     return;
   }

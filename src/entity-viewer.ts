@@ -2,7 +2,7 @@ import { Box3, BoxGeometry, BufferAttribute, BufferGeometry, ConeGeometry, Doubl
 import { deckPointSection, type EntityElevator, type EntityObject, type EntityPart, type EntityScene, type EntitySpin, type Vector } from "./entity-model";
 import { sampleElevatorPose } from "./elevator-motion";
 import type { OutlineNode } from "./model-outline";
-import { deckPointColor, objectColor, previewColors, type PreviewColor } from "./preview-colors";
+import { deckPointColor, flightPathColor, objectColor, previewColors, type PreviewColor } from "./preview-colors";
 
 function floats(encoded: string) {
   return new Float32Array(Uint8Array.from(atob(encoded), char=>char.charCodeAt(0)).buffer);
@@ -132,7 +132,45 @@ export function entityBounds(model:Group, includeAir = false) {
   return box.getBoundingSphere(new Sphere());
 }
 
-export function assembledEntity(scene: EntityScene, manager: LoadingManager, meshes = scene.geometry.map(entityGeometry)) {
+const decoding = new WeakMap<ReturnType<TextureLoader["load"]>,Promise<boolean>>();
+export function entityTexture(loader:TextureLoader, data:EntityScene["textures"][number]) {
+  let finish:(ok:boolean)=>void;
+  const ready=new Promise<boolean>(resolve=>{finish=resolve;});
+  const texture = loader.load("data:image/png;base64,"+data.png,()=>finish(true),undefined,()=>finish(false));
+  decoding.set(texture,ready);
+  texture.colorSpace = SRGBColorSpace;
+  texture.wrapS = texture.wrapT = RepeatWrapping;
+  return texture;
+}
+
+export function applyEntityTexture(material:MeshPhongMaterial, texture:ReturnType<typeof entityTexture>,
+    data:EntityScene["textures"][number]) {
+  const apply=(ok:boolean)=>{
+    if (material.userData.pendingMap!==texture) return;
+    delete material.userData.pendingMap;
+    material.map=ok ? texture : null;
+    material.color.setHex(ok ? 0xffffff : 0xaaaaaa);
+    material.userData.missingDiffuse=!ok;
+    material.alphaTest=ok && data.alpha==="cutout" ? 0.5 : 0;
+    material.transparent=ok && data.alpha==="blend";
+    material.depthWrite=!material.transparent;
+    material.needsUpdate=true;
+  };
+  material.userData.pendingMap=texture;
+  if (texture.image) apply(true);
+  else void decoding.get(texture)?.then(apply);
+}
+
+export function partNode(part:EntityPart) {
+  const node = new Group();
+  node.name = part.name;
+  transform(node,part.position,part.rotation);
+  node.scale.fromArray(part.scale);
+  return node;
+}
+
+export function assembledEntity(scene: EntityScene, manager: LoadingManager, meshes = scene.geometry.map(entityGeometry),
+    textures = scene.textures.map(t=>entityTexture(new TextureLoader(manager),t))) {
   const model = new Group();
   const tree = (name: string): OutlineNode => ({name, tree:true, children:[], parts:[]});
   const meshTree = tree("Meshes"), colliderTree = tree("Colliders"), objectTree = tree("Objects");
@@ -156,19 +194,8 @@ export function assembledEntity(scene: EntityScene, manager: LoadingManager, mes
     if ([part.name,part.meshName].some(name=>name && magazineName.test(name))) return "magazine";
     return "unassigned";
   }
-  const loader = new TextureLoader(manager);
-  const textures = scene.textures.map(({png})=>{
-    const texture = loader.load("data:image/png;base64,"+png);
-    texture.colorSpace = SRGBColorSpace;
-    texture.wrapS = texture.wrapT = RepeatWrapping;
-    return texture;
-  });
   for (const part of scene.parts) {
-    const node = new Group();
-    node.name = part.name;
-    transform(node,part.position,part.rotation);
-    node.scale.fromArray(part.scale);
-    nodes.set(part.id,node);
+    nodes.set(part.id,partNode(part));
     rows.set(part.id,{name:part.name,meshName:part.meshName,entityId:part.id,children:[],parts:[],
       colliderStyle:part.collider ? colliderColor(part) : undefined});
   }
@@ -194,11 +221,10 @@ export function assembledEntity(scene: EntityScene, manager: LoadingManager, mes
     }
     if (!shape) continue;
     const map = textures[part.texture];
-    const alpha = scene.textures[part.texture]?.alpha;
     const surface = new Mesh(shape,part.collider
       ? new MeshBasicMaterial({color:previewColors[rows.get(part.id).colliderStyle]})
-      : new MeshPhongMaterial({color:map ? 0xffffff : 0xaaaaaa, map:map || null, alphaTest:alpha === "cutout" ? 0.5 : 0,
-        transparent:alpha === "blend", depthWrite:alpha !== "blend"}));
+      : new MeshPhongMaterial({color:0xaaaaaa}));
+    if (map && surface.material instanceof MeshPhongMaterial) applyEntityTexture(surface.material,map,scene.textures[part.texture]);
     if (part.missingDiffuse && !part.collider) surface.material.userData.missingDiffuse = true;
     for (const name of part.referencedBy || []) {
       const key = name.toLowerCase();
@@ -244,7 +270,7 @@ export function assembledEntity(scene: EntityScene, manager: LoadingManager, mes
     const shape = obj.route ? routeGeometry(obj.route,size*0.26) :
       deckPoint ? deckMarker(obj.heading) :
       role==="sensor" ? new OctahedronGeometry(1) : role==="weapon" ? new ConeGeometry(1,2,4) : new BoxGeometry(1.5,1.5,1.5);
-    const style = {color:deckPoint || obj.route ? deckPointColor : previewColors[role],depthTest:false,depthWrite:false};
+    const style = {color:obj.route ? flightPathColor : deckPoint ? deckPointColor : previewColors[role],depthTest:false,depthWrite:false};
     const widget = obj.route?.kind==="airPaths" && obj.route.points.length>1
       ? new Line(shape,new LineBasicMaterial(style))
       : new Mesh(shape,new MeshBasicMaterial({...style,
@@ -268,19 +294,39 @@ export function assembledEntity(scene: EntityScene, manager: LoadingManager, mes
     widgets.set(obj.id,widget);
     row.parts.push({id:obj.id,collider:false,widget:true,routeKind:obj.route?.kind});
   }
-  return {model,outline:[meshTree,colliderTree,objectTree],surfaces,nodes,widgets,platforms};
+  return {model,outline:[meshTree,colliderTree,objectTree],surfaces,nodes,widgets,platforms,meshes,textures};
 }
 
 // Most INI edits only move parts, toggle visibility or change source lines. Keep their GPU assets.
-export function patchEntity(view:ReturnType<typeof assembledEntity>, before:EntityScene, after:EntityScene) {
-  const partShape = ({source,position,rotation,visible,...rest}:EntityPart)=>rest;
+export function patchEntity(view:ReturnType<typeof assembledEntity>, before:EntityScene, after:EntityScene, loader?:TextureLoader) {
+  const partShape = ({source,position,rotation,visible,texture,missingDiffuse,...rest}:EntityPart)=>loader ? rest : {...rest,texture,missingDiffuse};
   const objectShape = ({source,position,heading,placement,firingArcs,elevationArc,route,...rest}:EntityObject)=>({...rest,placed:!!position,directed:heading!==undefined,kind:route?.kind,single:route?.points.length===1});
-  if (before.geometry.length!==after.geometry.length || before.textures.length!==after.textures.length ||
+  if (before.geometry.length!==after.geometry.length || (!loader && before.textures.length!==after.textures.length) ||
     JSON.stringify(before.elevators?.map(e=>e.part))!==JSON.stringify(after.elevators?.map(e=>e.part)) ||
     before.geometry.some((g,i)=>g.positions!==after.geometry[i].positions || g.uvs!==after.geometry[i].uvs || g.normals!==after.geometry[i].normals) ||
-    before.textures.some((t,i)=>t.png!==after.textures[i].png || t.alpha!==after.textures[i].alpha) ||
+    (!loader && before.textures.some((t,i)=>t.png!==after.textures[i].png || t.alpha!==after.textures[i].alpha)) ||
     JSON.stringify(before.parts.map(partShape))!==JSON.stringify(after.parts.map(partShape)) ||
     JSON.stringify(before.objects?.map(objectShape))!==JSON.stringify(after.objects?.map(objectShape))) return false;
+  if (loader) {
+    const old=new Map(before.textures.map((t,i)=>[t,view.textures[i]]));
+    const maps=after.textures.map((t,i)=>old.get(t) ?? (t.png===before.textures[i]?.png && t.alpha===before.textures[i]?.alpha
+      ? view.textures[i] : entityTexture(loader,t)));
+    for (const [i,part] of after.parts.entries()) {
+      if (part.collider || (view.textures[before.parts[i].texture]===maps[part.texture] && part.missingDiffuse===before.parts[i].missingDiffuse)) continue;
+      const surface=view.nodes.get(part.id).children.find(c=>c instanceof Mesh && c.material instanceof MeshPhongMaterial) as Mesh<BufferGeometry,MeshPhongMaterial>;
+      if (!surface) continue;
+      const mat=surface.material;
+      if (maps[part.texture]) applyEntityTexture(mat,maps[part.texture],after.textures[part.texture]);
+      else {
+        delete mat.userData.pendingMap;
+        mat.map=null; mat.color.setHex(0xaaaaaa); mat.alphaTest=0; mat.transparent=false; mat.depthWrite=true;
+        mat.userData.missingDiffuse=part.missingDiffuse; mat.needsUpdate=true;
+      }
+    }
+    const keep=new Set(maps);
+    for (const t of view.textures) if (!keep.has(t)) t.dispose();
+    view.textures=maps;
+  }
   for (const part of after.parts) transform(view.nodes.get(part.id),part.position,part.rotation);
   for (const [i,obj] of (after.objects || []).entries()) {
     const widget = view.widgets.get(obj.id);
