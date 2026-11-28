@@ -113,7 +113,7 @@ function selectObject(id: string | undefined, reveal: boolean) {
 }
 const saved = vscode.getState();
 const animationToggle = document.querySelector<HTMLInputElement>("#animations");
-animationToggle.checked = saved?.animations ?? !matchMedia("(prefers-reduced-motion: reduce)").matches;
+animationToggle.checked = saved?.animations ?? true;
 let sampleSpins:ReturnType<typeof bindEntitySpins>, animationFrame:number, previousFrame:number;
 let animationSeconds = 0;
 function animate(now:number) {
