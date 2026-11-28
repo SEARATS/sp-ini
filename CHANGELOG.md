@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The INI preview draws deck points as dark blue squares and connects taxi paths through their waypoints. Flight systems are blue, sensors yellow, and weapon arcs orange.
 - Search radars and helicopter rotors turn in the INI hierarchy preview. Use **Animations** to pause them.
 - The INI preview can filter system markers, colliders and arcs by weapons, flight, sensors or propulsion.
 

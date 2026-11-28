@@ -1,6 +1,7 @@
 import {BufferGeometry,Float32BufferAttribute,LineBasicMaterial,LineSegments,MathUtils,type Object3D} from "three";
 import type {EntityObject} from "./entity-model";
 import {previewLayer} from "./preview-display";
+import {weaponArcColors} from "./preview-colors";
 
 type Range = [number,number];
 
@@ -54,7 +55,7 @@ export function systemArcs(system:EntityObject) {
     }
     const geometry=new BufferGeometry();
     geometry.setAttribute("position",new Float32BufferAttribute(points,3));
-    const color=vertical ? 0x71dfff : 0xffdf72;
+    const color=vertical ? weaponArcColors.elevation : weaponArcColors.bearing;
     const line=new LineSegments(geometry,new LineBasicMaterial({color,depthTest:false,depthWrite:false}));
     line.layers.set(previewLayer.arc);
     return {frame,line,color};

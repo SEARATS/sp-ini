@@ -19,7 +19,7 @@ function geometryLabel(part: EntityPart) {
   return part.meshName ? "Mesh · "+part.meshName : "Mesh";
 }
 
-const hoverPriority: Record<PreviewColor,number> = { weapon:0, sensor:1, magazine:1, object:1, hull:2, unassigned:3, collider:3 };
+const hoverPriority: Record<PreviewColor,number> = { weapon:0, sensor:1, flight:1, magazine:1, object:1, hull:2, unassigned:3, collider:3 };
 
 // Three returns triangles nearest first. A stable sort keeps that order within a priority.
 export function hoverStack(hits: readonly {object:Object3D}[], parts: ReadonlyMap<string,Inspectable>): Inspectable[] {
