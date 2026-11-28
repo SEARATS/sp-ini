@@ -163,8 +163,8 @@ meshes:
 
 ## Release
 
-Bump `version` in `package.json` and push to `main`. CI builds and tests each push immediately. The `release-quiet-period` GitHub environment has a 60-minute wait timer. Every push to `main` restarts it. After an hour without another push and a successful build, CI publishes the latest unreleased version to GitHub Releases and, when `PUBLISH_MARKETPLACE=true`, the VS Code Marketplace.
+Merges to `main` never publish. Each one adds its notes under `## Unreleased` in `CHANGELOG.md` and leaves `version` in `package.json` alone. Pull requests are built and tested by **Build editor releases**.
 
-Pushing an explicit `v*` tag matching the package version starts a release as soon as its build passes.
+A release is a deliberate snapshot, described step by step in [release-process.md](release-process.md). In short: one PR "Release x.y.z" turns `## Unreleased` into `## x.y.z - <date>` and sets `version` in `package.json`; after it is merged, push the tag `vx.y.z` on that commit. The tag starts **Publish editor releases**: it builds, checks that the tag matches `package.json`, creates the GitHub release with that CHANGELOG section as its notes and, when `PUBLISH_MARKETPLACE=true`, publishes to the VS Code Marketplace. A tag without a matching CHANGELOG section fails before anything is published.
 
 Run **Publish editor releases** manually on `main` to check Marketplace authentication without releasing a version. The Trusted Publishing policy names `SEARATS/sp-ini` and `marketplace.yml`. [Microsoft's publishing guide](https://code.visualstudio.com/api/working-with-extensions/publishing-extension#publish-with-github-actions-and-trusted-publishing)
